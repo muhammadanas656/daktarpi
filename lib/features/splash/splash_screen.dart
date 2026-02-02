@@ -17,7 +17,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _redirect() async {
-    // 1. Simulate a short delay for splash animation (optional)
+    // 1. Keep the splash screen visible for 2 seconds
     await Future.delayed(const Duration(seconds: 2));
 
     // 2. Check Supabase Auth Session
@@ -25,25 +25,54 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (!mounted) return;
 
-    // 3. Navigation 2.0 Redirect
+    // 3. Navigate based on auth state
     if (session != null) {
-      context.go('/home'); // User is logged in
+      context.go('/home');
     } else {
-      context.go('/login'); // User needs to login
+      context.go('/login');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 20),
-            Text("Loading App..."),
-          ],
+    return Scaffold(
+      // The gradient background matching the design
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFE0F7FA), // Light Blue/White at top
+              Color(0xFFE0F2F1), // Soft Teal middle
+              Color(0xFFB2DFDB), // Darker Teal at bottom
+            ],
+            stops: [0.0, 0.5, 1.0],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // --- LOGO SECTION ---
+              // If you have your logo asset, uncomment the lines below and remove the Icon:
+              Image.asset('assets/images/logo.png', width: 100, height: 100),
+
+              const SizedBox(height: 24),
+
+              // --- BRAND NAME ---
+              const Text(
+                'DaktarPai',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A2338), // Dark Navy/Black text
+                  letterSpacing: -0.5,
+                  fontFamily: 'Nunito', // Default, or add your specific font
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
