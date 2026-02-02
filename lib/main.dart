@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     // 3. Use .router constructor for Nav 2.0
     return MaterialApp.router(
-      title: 'Supabase Flutter App',
+      title: 'Daktarpi',
       theme: ThemeData(primarySwatch: Colors.blue),
       routerConfig: appRouter, // Connects GoRouter
     );
