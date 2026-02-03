@@ -23,7 +23,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // --- 1. MANUAL VALIDATION (Triggers the Bubble) ---
+    // --- 1. MANUAL VALIDATION ---
     if (name.isEmpty) {
       _showErrorBubble("Please enter your name");
       return;
@@ -58,17 +58,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final AuthResponse res = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
-        data: {'full_name': name}, // Saving name to user metadata
+        data: {'full_name': name},
       );
 
       if (mounted) {
-        // If email confirmation is off, log them in immediately
         if (res.session != null) {
           context.go('/home');
         } else {
-          // If email confirmation is on, show a success message or dialog
           _showErrorBubble("Account created! Please check your email.");
-          // Optionally navigate to login after a delay
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) context.go('/login');
           });
@@ -87,7 +84,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  // --- CUSTOM BUBBLE ERROR ---
   void _showErrorBubble(String message) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -113,7 +109,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFFE53935), // Soft Red
+        backgroundColor: const Color(0xFFE53935),
         behavior: SnackBarBehavior.floating,
         elevation: 6,
         margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
@@ -134,7 +130,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Colors from Design
     const primaryGreen = Color(0xFF00C689);
     const primaryText = Color(0xFF1A1A1A);
     const secondaryText = Color(0xFF858585);
@@ -145,20 +140,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         height: double.infinity,
         width: double.infinity,
         decoration: const BoxDecoration(
-          // --- BACKGROUND GRADIENT ---
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             stops: [0.0, 0.5, 1.0],
-            colors: [
-              Color(0xFFE0F4FF), // Light Blue
-              Color(0xFFFFFFFF), // White
-              Color(0xFFE0F8F1), // Light Mint
-            ],
+            colors: [Color(0xFFE0F4FF), Color(0xFFFFFFFF), Color(0xFFE0F8F1)],
           ),
         ),
         child: SafeArea(
-          // LayoutBuilder keeps footer at the bottom
           child: LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
@@ -172,15 +161,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   child: IntrinsicHeight(
                     child: Column(
                       children: [
-                        const SizedBox(height: 60),
+                        // --- 1. PUSH CONTENT DOWN ---
+                        // Increased from 60 to 110 to match the image spacing
+                        const SizedBox(height: 110),
 
                         // --- TITLE ---
                         const Text(
                           'Join us to start searching',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize:
-                                24, // Slightly smaller than "Welcome back" to fit
+                            fontSize: 24,
                             fontWeight: FontWeight.w700,
                             color: primaryText,
                             letterSpacing: -0.5,
@@ -197,7 +187,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 35),
 
                         // --- SOCIAL BUTTONS ---
                         Row(
@@ -222,7 +212,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ],
                         ),
 
-                        const SizedBox(height: 30),
+                        // --- SPACING BEFORE FORM ---
+                        // Matched to image: roughly same distance as title-to-social
+                        const SizedBox(height: 35),
 
                         // --- NAME INPUT ---
                         _FloatingInput(
@@ -263,8 +255,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               child: Checkbox(
                                 value: _agreedToTerms,
                                 activeColor: primaryGreen,
-                                shape:
-                                    const CircleBorder(), // Rounded/Circular check
+                                shape: const CircleBorder(),
+                                side: const BorderSide(
+                                  color: Color(0xFFC4C4C4),
+                                  width: 1.5,
+                                ),
                                 onChanged: (value) {
                                   setState(() {
                                     _agreedToTerms = value ?? false;
@@ -319,6 +314,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
 
                         // --- SPACER ---
+                        // Pushes the footer to the very bottom
                         const Spacer(),
 
                         // --- FOOTER ---
@@ -327,11 +323,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              // Made this Green as per your request
                               const Text(
                                 "Have an account? ",
                                 style: TextStyle(
-                                  color:
-                                      secondaryText, // Using the correct light green/teal
+                                  color: primaryGreen,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -341,9 +337,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 child: const Text(
                                   'Log in',
                                   style: TextStyle(
-                                    color:
-                                        primaryGreen, // Or the darker green if preferred
-                                    fontWeight: FontWeight.w600,
+                                    color: primaryGreen,
+                                    fontWeight:
+                                        FontWeight
+                                            .w700, // Bolder to distinguish
                                     fontSize: 14,
                                   ),
                                 ),

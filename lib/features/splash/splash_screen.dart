@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart'; // Import this
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,15 +18,11 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _redirect() async {
-    // 1. Keep the splash screen visible for 2 seconds
     await Future.delayed(const Duration(seconds: 2));
-
-    // 2. Check Supabase Auth Session
     final session = Supabase.instance.client.auth.currentSession;
 
     if (!mounted) return;
 
-    // 3. Navigate based on auth state
     if (session != null) {
       context.go('/home');
     } else {
@@ -36,39 +33,46 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // The gradient background matching the design
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFE0F7FA), // Light Blue/White at top
-              Color(0xFFE0F2F1), // Soft Teal middle
-              Color(0xFFB2DFDB), // Darker Teal at bottom
-            ],
             stops: [0.0, 0.5, 1.0],
+            colors: [Color(0xFFE0F4FF), Color(0xFFFFFFFF), Color(0xFFE0F8F1)],
           ),
         ),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // --- LOGO SECTION ---
-              // If you have your logo asset, uncomment the lines below and remove the Icon:
-              Image.asset('assets/images/logo.png', width: 100, height: 100),
+              // Logo
+              Image.asset(
+                'assets/images/logo.png',
+                width: 120,
+                height: 120,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(
+                    Icons.medical_services_rounded,
+                    size: 100,
+                    color: Color(0xFF00C689),
+                  );
+                },
+              ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // --- BRAND NAME ---
-              const Text(
+              // --- BRAND NAME WITH NUNITO FONT ---
+              Text(
                 'DaktarPai',
-                style: TextStyle(
-                  fontSize: 32,
+                style: GoogleFonts.nunito(
+                  // Changed to Nunito
+                  fontSize: 34,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A2338), // Dark Navy/Black text
+                  color: const Color(0xFF1A1A1A),
                   letterSpacing: -0.5,
-                  fontFamily: 'Nunito', // Default, or add your specific font
                 ),
               ),
             ],

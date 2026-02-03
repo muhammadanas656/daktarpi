@@ -13,9 +13,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // We don't use a FormKey anymore because we validate manually for the "Bubble" effect
-  // final _formKey = GlobalKey<FormState>();
-
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
@@ -23,7 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // --- 1. MANUAL VALIDATION (Triggers the Bubble) ---
+    // --- 1. MANUAL VALIDATION ---
     if (email.isEmpty) {
       _showErrorBubble("Please enter your email address");
       return;
@@ -68,7 +65,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- CUSTOM BUBBLE ERROR ---
   void _showErrorBubble(String message) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -85,7 +81,6 @@ class _LoginScreenState extends State<LoginScreen> {
             Flexible(
               child: Text(
                 message,
-                // Automatically uses Poppins from your AppTheme
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -95,14 +90,12 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFFE53935), // Soft Red
+        backgroundColor: const Color(0xFFE53935),
         behavior: SnackBarBehavior.floating,
         elevation: 6,
         margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(50), // Pill shape
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -117,7 +110,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Exact colors from your design
     const primaryGreen = Color(0xFF00C689);
     const primaryText = Color(0xFF1A1A1A);
     const secondaryText = Color(0xFF858585);
@@ -129,20 +121,14 @@ class _LoginScreenState extends State<LoginScreen> {
         height: double.infinity,
         width: double.infinity,
         decoration: const BoxDecoration(
-          // --- BACKGROUND GRADIENT ---
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             stops: [0.0, 0.5, 1.0],
-            colors: [
-              Color(0xFFE0F4FF), // Light Blue
-              Color(0xFFFFFFFF), // White
-              Color(0xFFE0F8F1), // Light Mint
-            ],
+            colors: [Color(0xFFE0F4FF), Color(0xFFFFFFFF), Color(0xFFE0F8F1)],
           ),
         ),
         child: SafeArea(
-          // LayoutBuilder keeps footer at the bottom
           child: LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
@@ -156,7 +142,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: IntrinsicHeight(
                     child: Column(
                       children: [
-                        const SizedBox(height: 60),
+                        // --- 1. TOP SPACING ---
+                        const SizedBox(height: 110),
 
                         // --- TITLE ---
                         const Text(
@@ -164,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 28,
-                            fontWeight: FontWeight.w700, // Bold
+                            fontWeight: FontWeight.w700,
                             color: primaryText,
                             letterSpacing: -0.5,
                           ),
@@ -180,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 35),
 
                         // --- SOCIAL BUTTONS ---
                         Row(
@@ -205,7 +192,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
 
-                        const SizedBox(height: 30),
+                        // --- SPACING BEFORE FORM ---
+                        const SizedBox(height: 35),
 
                         // --- EMAIL INPUT ---
                         _FloatingInput(
@@ -246,7 +234,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               backgroundColor: primaryGreen,
                               foregroundColor: Colors.white,
                               elevation: 10,
-                              // Using withValues for modern Flutter
                               shadowColor: primaryGreen.withValues(alpha: 0.4),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -282,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        // --- SPACER (Pushes footer down) ---
+                        // --- SPACER ---
                         const Spacer(),
 
                         // --- FOOTER ---
@@ -291,11 +278,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              // UPDATED: Now primaryGreen instead of secondaryText
                               const Text(
                                 "Don't have an account? ",
                                 style: TextStyle(
-                                  color: secondaryText,
+                                  color: primaryGreen,
                                   fontSize: 14,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                               GestureDetector(
@@ -304,7 +293,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   'Join us',
                                   style: TextStyle(
                                     color: primaryGreen,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight:
+                                        FontWeight.w700, // Slightly bolder
                                     fontSize: 14,
                                   ),
                                 ),
@@ -368,7 +358,6 @@ class _FloatingInput extends StatelessWidget {
           color: Color(0xFF1A1A1A),
           fontWeight: FontWeight.w500,
           fontSize: 15,
-          // Extra spacing for bullets if it's a password
           letterSpacing: 0.0,
         ),
         decoration: InputDecoration(
