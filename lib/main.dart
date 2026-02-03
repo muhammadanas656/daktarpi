@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+// Import your new theme file
+import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 1. Load Env
   await dotenv.load(fileName: ".env");
 
-  // 2. Init Supabase
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
@@ -23,11 +23,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 3. Use .router constructor for Nav 2.0
     return MaterialApp.router(
-      title: 'Daktarpi',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      routerConfig: appRouter, // Connects GoRouter
+      title: 'DaktarPai',
+      debugShowCheckedModeBanner: false,
+
+      // USE YOUR NEW THEME HERE
+      theme: AppTheme.lightTheme,
+
+      routerConfig: appRouter,
     );
   }
 }

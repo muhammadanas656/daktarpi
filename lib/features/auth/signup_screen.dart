@@ -2,28 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignUpScreenState extends State<SignUpScreen> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // We don't use a FormKey anymore because we validate manually for the "Bubble" effect
-  // final _formKey = GlobalKey<FormState>();
-
   bool _isLoading = false;
   bool _isPasswordVisible = false;
+  bool _agreedToTerms = false;
 
-  Future<void> _signIn() async {
+  Future<void> _signUp() async {
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     // --- 1. MANUAL VALIDATION (Triggers the Bubble) ---
+    if (name.isEmpty) {
+      _showErrorBubble("Please enter your name");
+      return;
+    }
     if (email.isEmpty) {
       _showErrorBubble("Please enter your email address");
       return;
@@ -40,20 +44,35 @@ class _LoginScreenState extends State<LoginScreen> {
       _showErrorBubble("Password must be at least 6 characters");
       return;
     }
+    if (!_agreedToTerms) {
+      _showErrorBubble("Please agree to the Terms & Privacy Policy");
+      return;
+    }
 
-    // --- 2. SIGN IN LOGIC ---
+    // --- 2. SIGN UP LOGIC ---
     setState(() {
       _isLoading = true;
     });
 
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
+      final AuthResponse res = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
+        data: {'full_name': name}, // Saving name to user metadata
       );
 
       if (mounted) {
-        context.go('/home');
+        // If email confirmation is off, log them in immediately
+        if (res.session != null) {
+          context.go('/home');
+        } else {
+          // If email confirmation is on, show a success message or dialog
+          _showErrorBubble("Account created! Please check your email.");
+          // Optionally navigate to login after a delay
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) context.go('/login');
+          });
+        }
       }
     } on AuthException catch (e) {
       if (mounted) _showErrorBubble(e.message);
@@ -85,7 +104,6 @@ class _LoginScreenState extends State<LoginScreen> {
             Flexible(
               child: Text(
                 message,
-                // Automatically uses Poppins from your AppTheme
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -100,9 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
         elevation: 6,
         margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(50), // Pill shape
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -110,6 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -117,11 +134,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Exact colors from your design
+    // Colors from Design
     const primaryGreen = Color(0xFF00C689);
     const primaryText = Color(0xFF1A1A1A);
     const secondaryText = Color(0xFF858585);
-    const checkColor = Color(0xFF00C689);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -160,11 +176,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         // --- TITLE ---
                         const Text(
-                          'Welcome back',
+                          'Join us to start searching',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700, // Bold
+                            fontSize:
+                                24, // Slightly smaller than "Welcome back" to fit
+                            fontWeight: FontWeight.w700,
                             color: primaryText,
                             letterSpacing: -0.5,
                           ),
@@ -207,24 +224,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         const SizedBox(height: 30),
 
+                        // --- NAME INPUT ---
+                        _FloatingInput(
+                          controller: _nameController,
+                          hintText: "Name",
+                        ),
+                        const SizedBox(height: 16),
+
                         // --- EMAIL INPUT ---
                         _FloatingInput(
                           controller: _emailController,
-                          hintText: "itsmemamun1@gmail.com",
+                          hintText: "Email",
                           isEmail: true,
-                          suffixIcon: const Icon(
-                            Icons.check,
-                            color: checkColor,
-                            size: 20,
-                          ),
                         ),
-
                         const SizedBox(height: 16),
 
                         // --- PASSWORD INPUT ---
                         _FloatingInput(
                           controller: _passwordController,
-                          hintText: "●●●●●●●●",
+                          hintText: "Password",
                           isPassword: true,
                           isPasswordVisible: _isPasswordVisible,
                           onVisibilityToggle: () {
@@ -234,19 +252,52 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
 
+                        const SizedBox(height: 20),
+
+                        // --- CHECKBOX TERMS ---
+                        Row(
+                          children: [
+                            SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: Checkbox(
+                                value: _agreedToTerms,
+                                activeColor: primaryGreen,
+                                shape:
+                                    const CircleBorder(), // Rounded/Circular check
+                                onChanged: (value) {
+                                  setState(() {
+                                    _agreedToTerms = value ?? false;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'I agree with the Terms of Service & Privacy Policy',
+                                style: TextStyle(
+                                  color: secondaryText,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
                         const SizedBox(height: 30),
 
-                        // --- LOGIN BUTTON ---
+                        // --- SIGN UP BUTTON ---
                         SizedBox(
                           width: double.infinity,
                           height: 56,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _signIn,
+                            onPressed: _isLoading ? null : _signUp,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryGreen,
                               foregroundColor: Colors.white,
                               elevation: 10,
-                              // Using withValues for modern Flutter
                               shadowColor: primaryGreen.withValues(alpha: 0.4),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -258,7 +309,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: Colors.white,
                                     )
                                     : const Text(
-                                      'Login',
+                                      'Sign up',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
@@ -267,22 +318,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 24),
-
-                        // --- FORGOT PASSWORD ---
-                        GestureDetector(
-                          onTap: () {},
-                          child: const Text(
-                            'Forgot password',
-                            style: TextStyle(
-                              color: primaryGreen,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-
-                        // --- SPACER (Pushes footer down) ---
+                        // --- SPACER ---
                         const Spacer(),
 
                         // --- FOOTER ---
@@ -292,18 +328,21 @@ class _LoginScreenState extends State<LoginScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Text(
-                                "Don't have an account? ",
+                                "Have an account? ",
                                 style: TextStyle(
-                                  color: secondaryText,
+                                  color:
+                                      secondaryText, // Using the correct light green/teal
                                   fontSize: 14,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                               GestureDetector(
-                                onTap: () => context.go('/signup'),
+                                onTap: () => context.go('/login'),
                                 child: const Text(
-                                  'Join us',
+                                  'Log in',
                                   style: TextStyle(
-                                    color: primaryGreen,
+                                    color:
+                                        primaryGreen, // Or the darker green if preferred
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,
                                   ),
@@ -334,7 +373,6 @@ class _FloatingInput extends StatelessWidget {
   final bool isEmail;
   final bool isPasswordVisible;
   final VoidCallback? onVisibilityToggle;
-  final Widget? suffixIcon;
 
   const _FloatingInput({
     required this.controller,
@@ -343,7 +381,6 @@ class _FloatingInput extends StatelessWidget {
     this.isEmail = false,
     this.isPasswordVisible = false,
     this.onVisibilityToggle,
-    this.suffixIcon,
   });
 
   @override
@@ -368,7 +405,6 @@ class _FloatingInput extends StatelessWidget {
           color: Color(0xFF1A1A1A),
           fontWeight: FontWeight.w500,
           fontSize: 15,
-          // Extra spacing for bullets if it's a password
           letterSpacing: 0.0,
         ),
         decoration: InputDecoration(
@@ -394,7 +430,7 @@ class _FloatingInput extends StatelessWidget {
                     ),
                     onPressed: onVisibilityToggle,
                   )
-                  : suffixIcon,
+                  : null,
         ),
       ),
     );
