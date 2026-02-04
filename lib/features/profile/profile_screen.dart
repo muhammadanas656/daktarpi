@@ -18,6 +18,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = false;
   bool _isInitialLoad = true;
 
+  // Logic: If true, user has already set up profile -> Show "Edit" UI.
+  // If false, user is new -> Show "Set up" UI (Original).
+  bool _isEditing = false;
+
   // Form Controllers
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -140,6 +144,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _phoneController.text = fullPhone;
               }
             }
+
+            // --- LOGIC CHECK ---
+            // If the name is present, we assume they have "Entered" their details previously.
+            if (_nameController.text.trim().isNotEmpty) {
+              _isEditing = true;
+            }
           });
         }
       }
@@ -195,16 +205,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _deleteOldProfilePic(String userId) async {
+    if (_avatarUrl != null && _avatarUrl!.contains('profile_pictures')) {
+      try {
+        Uri uri = Uri.parse(_avatarUrl!);
+        int bucketIndex = uri.pathSegments.indexOf('profile_pictures');
+
+        if (bucketIndex != -1 && bucketIndex + 2 < uri.pathSegments.length) {
+          String pathToDelete = uri.pathSegments
+              .sublist(bucketIndex + 1)
+              .join('/');
+          await Supabase.instance.client.storage
+              .from('profile_pictures')
+              .remove([pathToDelete]);
+          return;
+        }
+      } catch (e) {
+        debugPrint("Error parsing old URL: $e");
+      }
+    }
+
+    try {
+      final List<FileObject> objects = await Supabase.instance.client.storage
+          .from('profile_pictures')
+          .list(path: userId);
+
+      if (objects.isNotEmpty) {
+        final List<String> paths =
+            objects.map((e) => '$userId/${e.name}').toList();
+        await Supabase.instance.client.storage
+            .from('profile_pictures')
+            .remove(paths);
+      }
+    } catch (e) {
+      debugPrint("Error cleaning folder: $e");
+    }
+  }
+
   Future<void> _saveProfile() async {
-    if (_nameController.text.trim().isEmpty) {
+    if (_nameController.text.trim().isEmpty)
       return _showTopError("Name is required.");
-    }
-    if (_phoneController.text.trim().isEmpty) {
+    if (_phoneController.text.trim().isEmpty)
       return _showTopError("Contact Number is required.");
-    }
-    if (_selectedDate == null) {
+    if (_selectedDate == null)
       return _showTopError("Date of Birth is required.");
-    }
 
     setState(() => _isLoading = true);
 
@@ -216,6 +260,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       String? finalAvatarUrl = _avatarUrl;
 
       if (_imageFile != null) {
+        await _deleteOldProfilePic(userId);
+
         final fileExt = _imageFile!.path.split('.').last;
         final fileName = '$userId/avatar.$fileExt';
 
@@ -271,6 +317,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       if (mounted) {
+        setState(
+          () => _isEditing = true,
+        ); // Update state immediately to reflect "Entered" status
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -282,10 +332,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   size: 22,
                 ),
                 const SizedBox(width: 12),
-                const Flexible(
+                Flexible(
                   child: Text(
-                    "Profile saved!",
-                    style: TextStyle(
+                    _isEditing ? "Changes saved!" : "Profile created!",
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -309,15 +359,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (mounted) context.go('/home');
       }
     } catch (e) {
-      if (mounted) {
-        _showTopError(e.toString().replaceAll("Exception: ", ""));
-      }
+      if (mounted) _showTopError(e.toString().replaceAll("Exception: ", ""));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _onBackPress() async {
+    // Logic: If _isEditing is true, they are safe to just go back.
+    if (_isEditing) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/home');
+      }
+      return;
+    }
+
+    // If _isEditing is false (Unentered state), they must fill it or they get logged out.
     final isNameMissing = _nameController.text.trim().isEmpty;
     final isPhoneMissing = _phoneController.text.trim().isEmpty;
     final isDobMissing = _selectedDate == null;
@@ -326,9 +385,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isLoading = true);
       try {
         await Supabase.instance.client.auth.signOut();
-        if (mounted) {
-          context.go('/login');
-        }
+        if (mounted) context.go('/login');
       } catch (e) {
         if (mounted) context.go('/login');
       }
@@ -364,7 +421,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         body: SingleChildScrollView(
           child: Column(
             children: [
-              // Header
+              // --- HEADER ---
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.only(
@@ -382,10 +439,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Column(
                   children: [
+                    // --- APP BAR ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Left Button (Back)
                         InkWell(
                           onTap: _onBackPress,
                           borderRadius: BorderRadius.circular(12),
@@ -402,31 +459,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                         ),
-                        // Center Title
-                        const Text(
-                          "Profile",
-                          style: TextStyle(
+                        // CONDITION 1: App Bar Title
+                        Text(
+                          _isEditing ? "Edit Profile" : "Profile",
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        // Right Spacer (Invisible) to balance the layout
                         const SizedBox(width: 40),
                       ],
                     ),
                     const SizedBox(height: 30),
-                    const Text(
-                      "Set up your profile",
-                      style: TextStyle(
+
+                    // CONDITION 2: Header Title
+                    Text(
+                      _isEditing ? "Edit Profile" : "Set up your profile",
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 8),
+
+                    // CONDITION 3: Subtitle
                     Text(
-                      "Update your profile to connect your doctor with\nbetter impression.",
+                      _isEditing
+                          ? "Make changes to your personal information below."
+                          : "Update your profile to connect your doctor with\nbetter impression.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -435,33 +497,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 30),
+
+                    // Avatar
                     Stack(
                       children: [
                         Container(
+                          width: 120,
+                          height: 120,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 4),
+                            color: Colors.white,
                           ),
-                          child: CircleAvatar(
-                            radius: 60,
-                            backgroundColor: Colors.white,
-                            backgroundImage:
+                          child: ClipOval(
+                            child:
                                 _imageFile != null
-                                    ? FileImage(_imageFile!) as ImageProvider
+                                    ? Image.file(
+                                      _imageFile!,
+                                      fit: BoxFit.cover,
+                                      width: 120,
+                                      height: 120,
+                                    )
                                     : (_avatarUrl != null &&
                                             _avatarUrl!.isNotEmpty
-                                        ? NetworkImage(_avatarUrl!)
-                                        : null),
-                            child:
-                                (_imageFile == null &&
-                                        (_avatarUrl == null ||
-                                            _avatarUrl!.isEmpty))
-                                    ? const Icon(
-                                      Icons.person,
-                                      size: 60,
-                                      color: Colors.grey,
-                                    )
-                                    : null,
+                                        ? Image.network(
+                                          _avatarUrl!,
+                                          fit: BoxFit.cover,
+                                          width: 120,
+                                          height: 120,
+                                          key: ValueKey(_avatarUrl),
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  const Icon(
+                                                    Icons.person,
+                                                    size: 60,
+                                                    color: Colors.grey,
+                                                  ),
+                                        )
+                                        : const Icon(
+                                          Icons.person,
+                                          size: 60,
+                                          color: Colors.grey,
+                                        )),
                           ),
                         ),
                         Positioned(
@@ -488,10 +565,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 25),
-
-              // Inputs
+              // Inputs...
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
@@ -506,8 +581,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // Name
                     _ProfileInputCard(
                       label: "Name *",
                       child: TextField(
@@ -526,8 +599,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Contact
                     _ProfileInputCard(
                       label: "Contact Number *",
                       child: Row(
@@ -581,8 +652,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // DOB
                     GestureDetector(
                       onTap: _selectDate,
                       child: _ProfileInputCard(
@@ -615,8 +684,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Location
                     _ProfileInputCard(
                       label: "Location",
                       child: TextField(
@@ -634,9 +701,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 40),
 
+                    // CONDITION 4: Button Text
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -660,9 +727,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                                : const Text(
-                                  "Continue",
-                                  style: TextStyle(
+                                : Text(
+                                  _isEditing ? "Save Changes" : "Continue",
+                                  style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),

@@ -23,68 +23,58 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // --- 1. MANUAL VALIDATION ---
+    // --- 1. VALIDATION ---
     if (name.isEmpty) {
-      _showErrorBubble("Please enter your name");
-      return;
+      return _showBottomError("Please enter your name");
     }
     if (email.isEmpty) {
-      _showErrorBubble("Please enter your email address");
-      return;
+      return _showBottomError("Please enter your email address");
     }
     if (!email.contains('@') || !email.contains('.')) {
-      _showErrorBubble("Please enter a valid email address");
-      return;
+      return _showBottomError("Please enter a valid email address");
     }
     if (password.isEmpty) {
-      _showErrorBubble("Please enter your password");
-      return;
+      return _showBottomError("Please enter your password");
     }
     if (password.length < 6) {
-      _showErrorBubble("Password must be at least 6 characters");
-      return;
+      return _showBottomError("Password must be at least 6 characters");
     }
     if (!_agreedToTerms) {
-      _showErrorBubble("Please agree to the Terms & Privacy Policy");
-      return;
+      return _showBottomError("Please agree to the Terms & Privacy Policy");
     }
 
-    // --- 2. SIGN UP LOGIC ---
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
+      // --- 2. SIGN UP LOGIC ---
       final AuthResponse res = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
-        data: {'full_name': name},
+        data: {'full_name': name}, // Save name to metadata initially
       );
 
       if (mounted) {
         if (res.session != null) {
-          context.go('/profile');
+          // SUCCESS: New users ALWAYS go to /profile/edit to complete setup (Phone, DOB, Location)
+          context.go('/profile/edit');
         } else {
-          _showErrorBubble("Account created! Please check your email.");
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) context.go('/login');
-          });
+          // Email confirmation required flow
+          _showBottomError("Account created! Please check your email.");
+          await Future.delayed(const Duration(seconds: 2));
+          if (mounted) context.go('/login');
         }
       }
     } on AuthException catch (e) {
-      if (mounted) _showErrorBubble(e.message);
+      if (mounted) _showBottomError(e.message);
     } catch (e) {
-      if (mounted) _showErrorBubble('Something went wrong. Please try again.');
+      if (mounted) _showBottomError('Something went wrong. Please try again.');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showErrorBubble(String message) {
+  // --- REUSABLE ERROR SNACKBAR (Matches Login Style) ---
+  void _showBottomError(String message) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -115,7 +105,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -161,11 +150,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   child: IntrinsicHeight(
                     child: Column(
                       children: [
-                        // --- 1. PUSH CONTENT DOWN ---
-                        // Increased from 60 to 110 to match the image spacing
-                        const SizedBox(height: 110),
+                        const SizedBox(height: 80),
 
-                        // --- TITLE ---
                         const Text(
                           'Join us to start searching',
                           textAlign: TextAlign.center,
@@ -205,25 +191,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               child: _SocialCard(
                                 label: "Facebook",
                                 icon: Icons.facebook,
-                                iconColor: const Color(0xFF1877F2),
+                                iconColor: Color(0xFF1877F2),
                                 onTap: () {},
                               ),
                             ),
                           ],
                         ),
 
-                        // --- SPACING BEFORE FORM ---
-                        // Matched to image: roughly same distance as title-to-social
                         const SizedBox(height: 35),
 
-                        // --- NAME INPUT ---
+                        // --- NAME ---
                         _FloatingInput(
                           controller: _nameController,
                           hintText: "Name",
                         ),
                         const SizedBox(height: 16),
 
-                        // --- EMAIL INPUT ---
+                        // --- EMAIL ---
                         _FloatingInput(
                           controller: _emailController,
                           hintText: "Email",
@@ -231,7 +215,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // --- PASSWORD INPUT ---
+                        // --- PASSWORD ---
                         _FloatingInput(
                           controller: _passwordController,
                           hintText: "Password",
@@ -246,7 +230,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                         const SizedBox(height: 20),
 
-                        // --- CHECKBOX TERMS ---
+                        // --- TERMS CHECKBOX ---
                         Row(
                           children: [
                             SizedBox(
@@ -313,8 +297,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
 
-                        // --- SPACER ---
-                        // Pushes the footer to the very bottom
                         const Spacer(),
 
                         // --- FOOTER ---
@@ -323,7 +305,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Made this Green as per your request
                               const Text(
                                 "Have an account? ",
                                 style: TextStyle(
@@ -338,9 +319,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                   'Log in',
                                   style: TextStyle(
                                     color: primaryGreen,
-                                    fontWeight:
-                                        FontWeight
-                                            .w700, // Bolder to distinguish
+                                    fontWeight: FontWeight.w700,
                                     fontSize: 14,
                                   ),
                                 ),
@@ -361,7 +340,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// --- REUSABLE COMPONENTS ---
+// --- REUSABLE WIDGETS (Same as LoginScreen for consistency) ---
 
 class _FloatingInput extends StatelessWidget {
   final TextEditingController controller;
@@ -402,7 +381,6 @@ class _FloatingInput extends StatelessWidget {
           color: Color(0xFF1A1A1A),
           fontWeight: FontWeight.w500,
           fontSize: 15,
-          letterSpacing: 0.0,
         ),
         decoration: InputDecoration(
           border: OutlineInputBorder(

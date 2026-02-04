@@ -100,18 +100,19 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (mounted) {
-        // Use the logic to check user data before deciding where to go
         final user = Supabase.instance.client.auth.currentUser;
         final metadata = user?.userMetadata;
 
-        // Check specifically for Date of Birth as requested
+        // Check if profile is complete (using DOB as the flag)
         final hasDob =
             metadata?['dob'] != null && metadata!['dob'].toString().isNotEmpty;
 
         if (!hasDob) {
-          context.go('/profile'); // Redirect if DOB is missing
+          // UPDATED: Go directly to the Edit/Setup Form, not the Read-Only View
+          context.go('/profile/edit');
         } else {
-          context.go('/home'); // Redirect if complete
+          // Go to Home if profile is complete
+          context.go('/home');
         }
       }
     } on AuthException catch (e) {
@@ -230,7 +231,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: _SocialCard(
                                 label: "Facebook",
                                 icon: Icons.facebook,
-                                iconColor: const Color(0xFF1877F2),
+                                iconColor: Color(0xFF1877F2),
                                 onTap: () {},
                               ),
                             ),
@@ -412,7 +413,6 @@ class _ForgotPasswordSheetContentState
     super.dispose();
   }
 
-  // --- TOP ERROR OVERLAY (Sheet Only) ---
   void _showTopError(String message) {
     _errorOverlay?.remove();
     _errorOverlay = OverlayEntry(
@@ -566,24 +566,19 @@ class _ForgotPasswordSheetContentState
 
     setState(() => _isLoading = true);
 
-    // --- CHECK FOR SAME PASSWORD ---
-    // We attempt to sign in with the NEW password.
-    // If it SUCCEEDS, it means the user is trying to use their old password.
     try {
       await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: newPass,
       );
 
-      // If we reach here, sign in worked -> OLD PASSWORD == NEW PASSWORD
       if (mounted) {
         setState(() => _isLoading = false);
         _showTopError("You cannot use your previous password.");
       }
       return;
     } catch (e) {
-      // If sign in fails, it means the password IS new (or some other error).
-      // We proceed to update.
+      // Continue if password is new
     }
 
     try {
@@ -592,9 +587,8 @@ class _ForgotPasswordSheetContentState
       );
 
       if (mounted) {
-        Navigator.pop(context); // Close sheet
+        Navigator.pop(context);
 
-        // --- SHOW SUCCESS MESSAGE (MATCHING BUBBLE SHAPE) ---
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -618,7 +612,7 @@ class _ForgotPasswordSheetContentState
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF00C689), // Success Green
+            backgroundColor: const Color(0xFF00C689),
             behavior: SnackBarBehavior.floating,
             elevation: 6,
             margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
@@ -713,7 +707,6 @@ class _ForgotPasswordSheetContentState
 
     return Column(
       children: [
-        // --- HEADER WITH PASTE BUTTON ---
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -752,7 +745,6 @@ class _ForgotPasswordSheetContentState
             ),
           ],
         ),
-
         const SizedBox(height: 12),
         const Text(
           'Enter the 8-digit code sent to your email.',
@@ -760,8 +752,6 @@ class _ForgotPasswordSheetContentState
           style: TextStyle(fontSize: 14, color: Color(0xFF858585), height: 1.5),
         ),
         const SizedBox(height: 30),
-
-        // ROW 1
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List.generate(
@@ -784,10 +774,7 @@ class _ForgotPasswordSheetContentState
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // ROW 2
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -818,7 +805,6 @@ class _ForgotPasswordSheetContentState
             ),
           ],
         ),
-
         const SizedBox(height: 30),
         _GreenButton(
           label: "Verify Code",
@@ -869,7 +855,6 @@ class _ForgotPasswordSheetContentState
   }
 }
 
-// --- OTP BOX: PIXEL PERFECT CENTERED ---
 class _OtpDigitBox extends StatelessWidget {
   final int index;
   final TextEditingController controller;
@@ -948,7 +933,6 @@ class _OtpDigitBox extends StatelessWidget {
   }
 }
 
-// --- FLOATING INPUT: PERFECTLY CENTERED ---
 class _FloatingInput extends StatefulWidget {
   final TextEditingController controller;
   final String hintText;
