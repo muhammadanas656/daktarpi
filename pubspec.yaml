@@ -37,7 +37,9 @@ dependencies:
   supabase_flutter: ^2.12.0
   go_router: ^17.0.0
   flutter_dotenv: ^6.0.0
-
+  image_picker: ^1.0.4  
+  country_code_picker: ^3.0.0
+  intl: ^0.18.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -63,7 +63,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (mounted) {
         if (res.session != null) {
-          context.go('/home');
+          context.go('/profile');
         } else {
           _showErrorBubble("Account created! Please check your email.");
           Future.delayed(const Duration(seconds: 2), () {

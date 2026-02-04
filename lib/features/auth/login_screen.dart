@@ -99,7 +99,21 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
 
-      if (mounted) context.go('/home');
+      if (mounted) {
+        // Use the logic to check user data before deciding where to go
+        final user = Supabase.instance.client.auth.currentUser;
+        final metadata = user?.userMetadata;
+
+        // Check specifically for Date of Birth as requested
+        final hasDob =
+            metadata?['dob'] != null && metadata!['dob'].toString().isNotEmpty;
+
+        if (!hasDob) {
+          context.go('/profile'); // Redirect if DOB is missing
+        } else {
+          context.go('/home'); // Redirect if complete
+        }
+      }
     } on AuthException catch (e) {
       if (mounted) _showBottomError(e.message);
     } catch (e) {
