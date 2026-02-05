@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:country_code_picker/country_code_picker.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -19,7 +21,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isInitialLoad = true;
 
   // Logic: If true, user has already set up profile -> Show "Edit" UI.
-  // If false, user is new -> Show "Set up" UI (Original).
   bool _isEditing = false;
 
   // Form Controllers
@@ -35,6 +36,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   final _picker = ImagePicker();
   OverlayEntry? _errorOverlay;
+
+  // Define colors to match your theme
+  final Color primaryGreen = const Color(0xFF00C689);
+  final Color hintTextColor = const Color(0xFFC4C4C4);
 
   @override
   void initState() {
@@ -113,6 +118,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  // --- GPS LOCATION LOGIC ---
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // 1. Check Service
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw 'Location services are disabled. Please enable them.';
+      }
+
+      // 2. Check Permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw 'Location permissions are denied';
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        throw 'Location permissions are permanently denied.';
+      }
+
+      // 3. Get Position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // 4. Reverse Geocode (Get Address)
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        String formattedAddress = [
+          place.locality,
+          place.country,
+        ].where((e) => e != null && e.isNotEmpty).join(', ');
+
+        setState(() {
+          _locationController.text = formattedAddress;
+        });
+
+        // Optional: Show success snackbar
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Location updated to $formattedAddress"),
+              backgroundColor: primaryGreen,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              margin: const EdgeInsets.all(20),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      _showTopError(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _loadUserProfile() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -127,7 +200,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (response != null) {
           setState(() {
             _nameController.text = response['full_name'] ?? '';
-            _locationController.text = response['location'] ?? '';
+            _locationController.text =
+                response['location'] ?? ''; // Load Location
             _avatarUrl = response['profile_picture_url'];
 
             if (response['date_of_birth'] != null) {
@@ -145,8 +219,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
             }
 
-            // --- LOGIC CHECK ---
-            // If the name is present, we assume they have "Entered" their details previously.
             if (_nameController.text.trim().isNotEmpty) {
               _isEditing = true;
             }
@@ -188,8 +260,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF00C689),
+            colorScheme: ColorScheme.light(
+              primary: primaryGreen,
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
@@ -299,7 +371,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'full_name': _nameController.text.trim(),
           'phone_number': fullPhoneNumber,
           'date_of_birth': _selectedDate?.toIso8601String(),
-          'location': _locationController.text.trim(),
+          'location': _locationController.text.trim(), // Save location
           'profile_picture_url': finalAvatarUrl,
           'updated_at': DateTime.now().toIso8601String(),
         });
@@ -317,9 +389,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       if (mounted) {
-        setState(
-          () => _isEditing = true,
-        ); // Update state immediately to reflect "Entered" status
+        setState(() => _isEditing = true);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -344,7 +414,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF00C689),
+            backgroundColor: primaryGreen,
             behavior: SnackBarBehavior.floating,
             elevation: 6,
             margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
@@ -356,7 +426,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
 
         await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) context.go('/home');
+
+        if (mounted) {
+          if (_isEditing && context.canPop()) {
+            context.pop(true); // Return to Profile View and Trigger Refresh
+          } else {
+            context.go('/home');
+          }
+        }
       }
     } catch (e) {
       if (mounted) _showTopError(e.toString().replaceAll("Exception: ", ""));
@@ -366,7 +443,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _onBackPress() async {
-    // Logic: If _isEditing is true, they are safe to just go back.
     if (_isEditing) {
       if (context.canPop()) {
         context.pop();
@@ -376,7 +452,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    // If _isEditing is false (Unentered state), they must fill it or they get logged out.
     final isNameMissing = _nameController.text.trim().isEmpty;
     final isPhoneMissing = _phoneController.text.trim().isEmpty;
     final isDobMissing = _selectedDate == null;
@@ -400,12 +475,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryGreen = Color(0xFF00C689);
-    const hintTextColor = Color(0xFFC4C4C4);
-
     if (_isInitialLoad) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFFBFBFB),
+      return Scaffold(
+        backgroundColor: const Color(0xFFFBFBFB),
         body: Center(child: CircularProgressIndicator(color: primaryGreen)),
       );
     }
@@ -430,9 +502,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   right: 20,
                   top: 60,
                 ),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: primaryGreen,
-                  borderRadius: BorderRadius.only(
+                  borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(30),
                     bottomRight: Radius.circular(30),
                   ),
@@ -452,14 +524,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.arrow_back_ios_new,
                               size: 18,
                               color: primaryGreen,
                             ),
                           ),
                         ),
-                        // CONDITION 1: App Bar Title
                         Text(
                           _isEditing ? "Edit Profile" : "Profile",
                           style: const TextStyle(
@@ -473,7 +544,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // CONDITION 2: Header Title
                     Text(
                       _isEditing ? "Edit Profile" : "Set up your profile",
                       style: const TextStyle(
@@ -484,7 +554,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // CONDITION 3: Subtitle
                     Text(
                       _isEditing
                           ? "Make changes to your personal information below."
@@ -498,7 +567,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Avatar
+                    // --- AVATAR ---
                     Stack(
                       children: [
                         Container(
@@ -507,7 +576,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 4),
-                            color: Colors.white,
+                            color: Colors.grey[200], // Default Background
                           ),
                           child: ClipOval(
                             child:
@@ -525,7 +594,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           fit: BoxFit.cover,
                                           width: 120,
                                           height: 120,
-                                          key: ValueKey(_avatarUrl),
                                           errorBuilder:
                                               (context, error, stackTrace) =>
                                                   const Icon(
@@ -534,6 +602,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                     color: Colors.grey,
                                                   ),
                                         )
+                                        // Default Icon if no image
                                         : const Icon(
                                           Icons.person,
                                           size: 60,
@@ -589,7 +658,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontSize: 16,
                           color: Color(0xFF555555),
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           border: InputBorder.none,
                           hintText: "Enter your name",
                           hintStyle: TextStyle(color: hintTextColor),
@@ -639,7 +708,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 fontSize: 16,
                                 color: Color(0xFF555555),
                               ),
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 border: InputBorder.none,
                                 hintText: "1712345678",
                                 hintStyle: TextStyle(color: hintTextColor),
@@ -684,26 +753,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // --- UPDATED LOCATION CARD (Read Only + GPS) ---
                     _ProfileInputCard(
                       label: "Location",
-                      child: TextField(
-                        controller: _locationController,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF555555),
-                        ),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          hintText: "Add Details",
-                          hintStyle: TextStyle(color: hintTextColor),
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _locationController,
+                              readOnly: true, // Prevent manual typing
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Color(0xFF555555),
+                              ),
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                hintText: "Use GPS to set location",
+                                hintStyle: TextStyle(color: hintTextColor),
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                          // Aligned GPS Button
+                          InkWell(
+                            onTap: _isLoading ? null : _getCurrentLocation,
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child:
+                                  _isLoading
+                                      ? SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: primaryGreen,
+                                        ),
+                                      )
+                                      : Icon(
+                                        Icons.my_location,
+                                        color: primaryGreen,
+                                        size: 20,
+                                      ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 40),
 
-                    // CONDITION 4: Button Text
+                    // ------------------------------------------------
+                    const SizedBox(height: 40),
                     SizedBox(
                       width: double.infinity,
                       height: 56,

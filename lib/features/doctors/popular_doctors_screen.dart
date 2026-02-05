@@ -18,7 +18,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   List<Map<String, dynamic>> _doctors = [];
   Set<int> _favoriteDoctorIds = {};
   bool _isLoading = true;
-  bool _showClearIcon = false; // Controls visibility of the 'X' icon
+  bool _showClearIcon = false;
 
   @override
   void initState() {
@@ -54,8 +54,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   // --- CLEAR SEARCH ---
   void _clearSearch() {
     _searchController.clear();
-    FocusScope.of(context).unfocus(); // Dismiss keyboard
-    // _onSearchChanged will trigger automatically
+    FocusScope.of(context).unfocus();
   }
 
   Future<void> _fetchData({String? query}) async {
@@ -67,7 +66,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
       var dbQuery = client
           .from('doctors')
           .select('*, specialties(name)')
-          .eq('is_popular', true); // Base filter
+          .eq('is_popular', true);
 
       // 2. Apply Search
       if (query != null && query.isNotEmpty) {
@@ -77,7 +76,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
       // 3. Execute
       final doctorsData = await dbQuery.order('rating', ascending: false);
 
-      // 4. Fetch Favorites (only if user logged in)
+      // 4. Fetch Favorites
       if (userId != null) {
         final favoritesData = await client
             .from('favorite_doctors')
@@ -194,7 +193,6 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                   hintText: "Search",
                   hintStyle: const TextStyle(color: Colors.grey),
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  // --- CLEAR BUTTON ---
                   suffixIcon:
                       _showClearIcon
                           ? IconButton(
@@ -267,6 +265,11 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
     required bool isFavorite,
     required VoidCallback onFavoriteTap,
   }) {
+    // 1. Calculate star values
+    final double ratingVal = double.tryParse(rating) ?? 0.0;
+    final int fullStars = ratingVal.floor();
+    final bool hasHalfStar = (ratingVal - fullStars) >= 0.5;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -361,14 +364,33 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
+
+                // --- DYNAMIC STAR ROW (Updated) ---
                 Row(
                   children: [
                     ...List.generate(5, (index) {
-                      return const Icon(
-                        Icons.star,
-                        color: Colors.amber,
-                        size: 14,
-                      );
+                      if (index < fullStars) {
+                        // Full Amber Star
+                        return const Icon(
+                          Icons.star,
+                          color: Colors.amber,
+                          size: 14,
+                        );
+                      } else if (index == fullStars && hasHalfStar) {
+                        // Half Amber Star (No grey background)
+                        return const Icon(
+                          Icons.star_half,
+                          color: Colors.amber,
+                          size: 14,
+                        );
+                      } else {
+                        // Empty Star (Border only)
+                        return Icon(
+                          Icons.star_border,
+                          color: Colors.grey[300],
+                          size: 14,
+                        );
+                      }
                     }),
                     const SizedBox(width: 8),
                     Flexible(
@@ -397,6 +419,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                     ),
                   ],
                 ),
+                // ----------------------------------
               ],
             ),
           ),

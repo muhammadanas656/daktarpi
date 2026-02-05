@@ -10,9 +10,10 @@ import '../../features/profile/profile_screen.dart';
 import '../../features/profile/profileview_screen.dart';
 import '../../core/main_wrapper/main_wrapper.dart';
 
-// --- MAKE SURE THESE FILES EXIST AND ARE IMPORTED ---
+// --- DOCTOR SCREENS ---
 import '../../features/doctors/popular_doctors_screen.dart';
 import '../../features/doctors/feature_doctors_screen.dart';
+import '../../features/doctors/doctor_details_screen.dart'; // <--- NEW IMPORT
 
 // --- NAVIGATOR KEYS ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -38,7 +39,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
     GoRoute(path: '/signup', builder: (context, state) => const SignUpScreen()),
 
-    // 2. "SEE ALL" ROUTES (These must exist here to fix your error)
+    // 2. DOCTOR & DETAILS ROUTES (Cover Bottom Bar)
     GoRoute(
       path: '/popular_doctors',
       parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
@@ -48,6 +49,15 @@ final appRouter = GoRouter(
       path: '/feature_doctors',
       parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
       builder: (context, state) => const FeatureDoctorsScreen(),
+    ),
+    // --- NEW: Dynamic Doctor Details Route ---
+    GoRoute(
+      path: '/doctor_details/:id', // :id is a dynamic parameter
+      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      builder: (context, state) {
+        final doctorId = state.pathParameters['id']!;
+        return DoctorDetailsScreen(doctorId: doctorId);
+      },
     ),
 
     // 3. SHELL ROUTE (Bottom Navigation)
