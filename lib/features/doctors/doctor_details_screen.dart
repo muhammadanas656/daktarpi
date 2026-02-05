@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 
 class DoctorDetailsScreen extends StatefulWidget {
   final String doctorId;
@@ -470,7 +470,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          // FIX: withOpacity -> withValues(alpha: 0.05)
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 15,
@@ -598,7 +597,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          // FIX: withOpacity -> withValues(alpha: 0.1)
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
@@ -642,7 +640,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        // FIX: withOpacity -> withValues(alpha: 0.05)
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -701,7 +698,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                     Expanded(
                       child: Text(
                         clinicAddress,
-                        // FIX: withOpacity -> withValues(alpha: 0.8)
                         style: TextStyle(
                           color: primaryGreen.withValues(alpha: 0.8),
                           fontSize: 12,
@@ -836,7 +832,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                       isBooked
                                           ? Colors.grey[200]
                                           : isSelected
-                                          // FIX: withOpacity -> withValues(alpha: 0.15)
                                           ? primaryGreen.withValues(alpha: 0.15)
                                           : cyanHeader,
                                   borderRadius: BorderRadius.circular(20),
@@ -857,7 +852,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                             : const Color(0xFF00695C),
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    // REMOVED STRIKE-THROUGH
                                     decoration: null,
                                   ),
                                 ),
@@ -948,7 +942,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                       color: isSelected ? primaryGreen : Colors.grey.shade200,
                       width: isSelected ? 1.5 : 1,
                     ),
-                    // FIX: withOpacity -> withValues(alpha: 0.05)
                     boxShadow:
                         isSelected
                             ? [
@@ -990,6 +983,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     );
   }
 
+  // --- UPDATED MAP WIDGET WITH CARTODB & CUSTOM MARKER ---
   Widget _buildMap() {
     if (_selectedClinic == null) {
       return Container(
@@ -1021,26 +1015,58 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           key: ValueKey("$lat-$lng"),
           options: MapOptions(
             initialCenter: LatLng(lat, lng),
-            initialZoom: 14.0,
+            initialZoom: 15.0,
             interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all,
+              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
             ),
           ),
           children: [
             TileLayer(
+              // Clean, modern map style
+              urlTemplate:
+                  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+              subdomains: const ['a', 'b', 'c', 'd'],
               userAgentPackageName: 'com.example.daktarpi',
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
             ),
             MarkerLayer(
               markers: [
                 Marker(
                   point: LatLng(lat, lng),
-                  width: 40,
-                  height: 40,
-                  child: const Icon(
-                    Icons.location_on,
-                    color: Colors.red,
-                    size: 40,
+                  width: 60,
+                  height: 60,
+                  child: Column(
+                    children: [
+                      // Custom Modern Marker
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: primaryGreen,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.local_hospital_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      // Pointer Triangle
+                      ClipPath(
+                        clipper: _TriangleClipper(),
+                        child: Container(
+                          width: 10,
+                          height: 8,
+                          color: primaryGreen,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1066,4 +1092,20 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       }),
     );
   }
+}
+
+// --- HELPER CLIPPER FOR MARKER POINTER ---
+class _TriangleClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(size.width / 2, size.height);
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
