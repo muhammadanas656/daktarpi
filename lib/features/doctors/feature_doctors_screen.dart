@@ -18,14 +18,13 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
   List<Map<String, dynamic>> _doctors = [];
   Set<int> _favoriteDoctorIds = {};
   bool _isLoading = true;
-  bool _showClearIcon = false; // Track if X should be visible
+  bool _showClearIcon = false;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
 
-    // Listen to text changes for both search logic and UI state (X icon)
     _searchController.addListener(() {
       setState(() {
         _showClearIcon = _searchController.text.isNotEmpty;
@@ -53,9 +52,8 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
 
   // --- CLEAR SEARCH ---
   void _clearSearch() {
-    _searchController.clear(); // Clears text field
-    FocusScope.of(context).unfocus(); // Hides keyboard
-    // Listener will trigger _fetchData(query: "") automatically
+    _searchController.clear();
+    FocusScope.of(context).unfocus();
   }
 
   Future<void> _fetchData({String? query}) async {
@@ -142,6 +140,16 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
     }
   }
 
+  // --- NAVIGATION LOGIC ---
+  Future<void> _navigateToDoctorDetails(int doctorId) async {
+    // 1. Wait for user to return
+    await context.push('/doctor_details/$doctorId');
+    // 2. Refresh list on return
+    if (mounted) {
+      _fetchData(query: _searchController.text);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const bgColor = Color(0xFFFBFBFB);
@@ -177,7 +185,7 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
+                    color: Colors.black.withOpacity(0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -189,7 +197,6 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
                   hintText: "Search",
                   hintStyle: const TextStyle(color: Colors.grey),
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  // --- CLEAR BUTTON LOGIC ---
                   suffixIcon:
                       _showClearIcon
                           ? IconButton(
@@ -198,9 +205,9 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
                               color: Colors.grey,
                               size: 20,
                             ),
-                            onPressed: _clearSearch, // Calls the clear function
+                            onPressed: _clearSearch,
                           )
-                          : null, // Hide icon if empty
+                          : null,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 15),
                 ),
@@ -216,7 +223,7 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
                       child: CircularProgressIndicator(color: primaryGreen),
                     )
                     : _doctors.isEmpty
-                    ? const Center(child: Text("No doctors found"))
+                    ? const Center(child: Text("No featured doctors found"))
                     : ListView.separated(
                       padding: const EdgeInsets.all(24),
                       itemCount: _doctors.length,
@@ -235,12 +242,16 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
                         return _buildDoctorListCard(
                           id: docId,
                           name: doctor['full_name'] ?? 'Unknown',
-                          specialty: specialtyName,
+                          specialty: " $specialtyName",
                           rating: doctor['rating']?.toString() ?? '0.0',
                           price: doctor['hourly_rate']?.toString() ?? '20',
                           imageUrl: doctor['profile_picture_url'],
                           isFavorite: isFavorite,
                           onFavoriteTap: () => _toggleFavorite(docId),
+                          onCardTap:
+                              () => _navigateToDoctorDetails(
+                                docId,
+                              ), // Add Navigation Tap
                         );
                       },
                     ),
@@ -259,137 +270,144 @@ class _FeatureDoctorsScreenState extends State<FeatureDoctorsScreen> {
     required String? imageUrl,
     required bool isFavorite,
     required VoidCallback onFavoriteTap,
+    required VoidCallback onCardTap, // New Parameter
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 80,
-              height: 80,
-              child:
-                  (imageUrl != null && imageUrl.isNotEmpty)
-                      ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder:
-                            (context, error, stackTrace) => Container(
-                              color: Colors.grey[200],
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.grey,
-                                size: 40,
+    return GestureDetector(
+      onTap: onCardTap, // Handle Card Tap
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 80,
+                height: 80,
+                child:
+                    (imageUrl != null && imageUrl.isNotEmpty)
+                        ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder:
+                              (context, error, stackTrace) => Container(
+                                color: Colors.grey[200],
+                                child: const Icon(
+                                  Icons.person,
+                                  color: Colors.grey,
+                                  size: 40,
+                                ),
+                              ),
+                        )
+                        : Container(
+                          color: Colors.grey[200],
+                          child: const Icon(
+                            Icons.person,
+                            color: Colors.grey,
+                            size: 40,
+                          ),
+                        ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A1A1A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: onFavoriteTap,
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            left: 8.0,
+                            bottom: 4.0,
+                          ),
+                          child: Icon(
+                            isFavorite ? Icons.favorite : Icons.favorite_border,
+                            color: isFavorite ? Colors.red : Colors.grey,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    specialty,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, color: Colors.amber, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        rating,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Spacer(),
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            const TextSpan(
+                              text: "\$ ",
+                              style: TextStyle(
+                                color: Color(0xFF00C689),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
                             ),
-                      )
-                      : Container(
-                        color: Colors.grey[200],
-                        child: const Icon(
-                          Icons.person,
-                          color: Colors.grey,
-                          size: 40,
+                            TextSpan(
+                              text: "$price/hour",
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1A1A),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: onFavoriteTap,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-                        child: Icon(
-                          isFavorite ? Icons.favorite : Icons.favorite_border,
-                          color: isFavorite ? Colors.red : Colors.grey,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Specialist $specialty",
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w400,
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.star, color: Colors.amber, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      rating,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const Spacer(),
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          const TextSpan(
-                            text: "\$ ",
-                            style: TextStyle(
-                              color: Color(0xFF00C689),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          TextSpan(
-                            text: "$price/hour",
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

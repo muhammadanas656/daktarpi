@@ -13,7 +13,8 @@ import '../../core/main_wrapper/main_wrapper.dart';
 // --- DOCTOR SCREENS ---
 import '../../features/doctors/popular_doctors_screen.dart';
 import '../../features/doctors/feature_doctors_screen.dart';
-import '../../features/doctors/doctor_details_screen.dart'; // <--- NEW IMPORT
+import '../../features/doctors/doctor_details_screen.dart';
+import '../../features/doctors/specialty_doctors_screen.dart'; // <--- NEW IMPORT
 
 // --- NAVIGATOR KEYS ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -42,21 +43,34 @@ final appRouter = GoRouter(
     // 2. DOCTOR & DETAILS ROUTES (Cover Bottom Bar)
     GoRoute(
       path: '/popular_doctors',
-      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const PopularDoctorsScreen(),
     ),
     GoRoute(
       path: '/feature_doctors',
-      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const FeatureDoctorsScreen(),
     ),
-    // --- NEW: Dynamic Doctor Details Route ---
     GoRoute(
-      path: '/doctor_details/:id', // :id is a dynamic parameter
-      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      path: '/doctor_details/:id',
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final doctorId = state.pathParameters['id']!;
         return DoctorDetailsScreen(doctorId: doctorId);
+      },
+    ),
+
+    // --- NEW: Specialty Doctors Route ---
+    GoRoute(
+      path: '/specialty_doctors/:id',
+      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      builder: (context, state) {
+        final id = state.pathParameters['id']!;
+        // We extract the name passed via 'extra' to show it in the AppBar title immediately
+        final extra = state.extra as Map<String, dynamic>?;
+        final name = extra?['name'] as String? ?? 'Doctors';
+
+        return SpecialtyDoctorsScreen(specialtyId: id, specialtyName: name);
       },
     ),
 

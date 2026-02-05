@@ -18,7 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _userName = "Handwerker";
   String? _avatarUrl;
 
-  // Data Lists (Replaces Futures)
+  // Data Lists
   List<Map<String, dynamic>> _specialties = [];
   List<Map<String, dynamic>> _popularDoctors = [];
   List<Map<String, dynamic>> _featuredDoctors = [];
@@ -28,6 +28,18 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _fetchAllData();
+  }
+
+  // --- SMOOTH REFRESH HELPER ---
+  Future<void> _refreshData() async {
+    if (!mounted) return;
+
+    setState(() => _isLoading = true);
+
+    // Give the UI 50ms to draw the spinner before freezing it with network calls
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    await _fetchAllData();
   }
 
   // --- FETCH ALL DATA (PARALLEL) ---
@@ -111,18 +123,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- NAVIGATION HELPER (With Refresh Logic) ---
-  Future<void> _navigateToDoctorDetails(
-    BuildContext context,
-    int doctorId,
-  ) async {
-    // 1. Wait for the user to return from the details screen
+  // --- NAVIGATION HELPERS ---
+  Future<void> _navigateToDoctorDetails(int doctorId) async {
     await context.push('/doctor_details/$doctorId');
+    _refreshData();
+  }
 
-    // 2. Once they return, refresh the data to update hearts/ratings
-    if (mounted) {
-      _fetchAllData();
-    }
+  // NEW: Navigate to Specialty Category
+  Future<void> _navigateToSpecialty(
+    int specialtyId,
+    String specialtyName,
+  ) async {
+    // Assuming you have a route set up like '/specialty_doctors/:id'
+    // You can also pass the name as an 'extra' object if needed
+    await context.push(
+      '/specialty_doctors/$specialtyId',
+      extra: {'name': specialtyName},
+    );
+    _refreshData();
   }
 
   @override
@@ -215,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       readOnly: true,
                       onTap: () async {
                         await context.push('/popular_doctors');
-                        if (mounted) _fetchAllData(); // Refresh on return
+                        _refreshData(); // Smooth refresh
                       },
                       decoration: const InputDecoration(
                         hintText: "Search.....",
@@ -290,9 +308,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             // --- SPECIALTIES LIST ---
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: const Text(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
                 "Specialities most relevant to you",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
@@ -313,39 +331,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   separatorBuilder: (_, __) => const SizedBox(width: 24),
                   itemBuilder: (context, index) {
                     final item = _specialties[index];
+                    final int id = item['id'];
                     final name = item['name'] ?? 'Unknown';
                     final iconUrl = item['icon_url'];
 
-                    return Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          padding: const EdgeInsets.all(12),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFE0F7FA),
-                            shape: BoxShape.circle,
+                    // UPDATED: Added GestureDetector for Navigation
+                    return GestureDetector(
+                      onTap: () => _navigateToSpecialty(id, name),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 60,
+                            height: 60,
+                            padding: const EdgeInsets.all(12),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFE0F7FA),
+                              shape: BoxShape.circle,
+                            ),
+                            child:
+                                iconUrl != null
+                                    ? Image.network(
+                                      iconUrl,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (_, __, ___) =>
+                                              _getFallbackIcon(name),
+                                    )
+                                    : _getFallbackIcon(name),
                           ),
-                          child:
-                              iconUrl != null
-                                  ? Image.network(
-                                    iconUrl,
-                                    fit: BoxFit.contain,
-                                    errorBuilder:
-                                        (_, __, ___) => _getFallbackIcon(name),
-                                  )
-                                  : _getFallbackIcon(name),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                          const SizedBox(height: 8),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -356,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
               "Popular Doctor",
               onTap: () async {
                 await context.push('/popular_doctors');
-                if (mounted) _fetchAllData(); // Refresh on return
+                _refreshData(); // Smooth refresh
               },
             ),
             if (_popularDoctors.isEmpty)
@@ -396,7 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
               "Feature Doctor",
               onTap: () async {
                 await context.push('/feature_doctors');
-                if (mounted) _fetchAllData(); // Refresh on return
+                _refreshData(); // Smooth refresh
               },
             ),
             if (_featuredDoctors.isEmpty)
@@ -480,7 +504,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- POPULAR DOCTOR CARD (Updated Stars & Navigation) ---
+  // --- POPULAR DOCTOR CARD ---
   Widget _buildPopularDoctorCard({
     required BuildContext context,
     required int id,
@@ -494,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool hasHalfStar = (ratingVal - fullStars) >= 0.5;
 
     return GestureDetector(
-      onTap: () => _navigateToDoctorDetails(context, id),
+      onTap: () => _navigateToDoctorDetails(id),
       child: Container(
         width: 170,
         decoration: BoxDecoration(
@@ -510,7 +534,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Column(
           children: [
-            // Image Section
             Expanded(
               flex: 3,
               child: ClipRRect(
@@ -545,7 +568,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
               ),
             ),
-            // Info Section
             Expanded(
               flex: 2,
               child: Padding(
@@ -572,7 +594,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: const TextStyle(color: Colors.grey, fontSize: 11),
                     ),
                     const SizedBox(height: 8),
-                    // STARS
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(5, (index) {
@@ -607,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- FEATURED DOCTOR CARD (Navigation & Visual Favorite) ---
+  // --- FEATURED DOCTOR CARD ---
   Widget _buildFeatureDoctorCard({
     required BuildContext context,
     required int id,
@@ -618,7 +639,7 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isFavorite = false,
   }) {
     return GestureDetector(
-      onTap: () => _navigateToDoctorDetails(context, id),
+      onTap: () => _navigateToDoctorDetails(id),
       child: Container(
         width: 130,
         padding: const EdgeInsets.all(12),

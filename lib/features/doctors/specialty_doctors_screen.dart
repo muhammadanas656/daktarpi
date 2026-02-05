@@ -3,14 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class PopularDoctorsScreen extends StatefulWidget {
-  const PopularDoctorsScreen({super.key});
+class SpecialtyDoctorsScreen extends StatefulWidget {
+  final String specialtyId;
+  final String specialtyName;
+
+  const SpecialtyDoctorsScreen({
+    super.key,
+    required this.specialtyId,
+    required this.specialtyName,
+  });
 
   @override
-  State<PopularDoctorsScreen> createState() => _PopularDoctorsScreenState();
+  State<SpecialtyDoctorsScreen> createState() => _SpecialtyDoctorsScreenState();
 }
 
-class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
+class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
 
@@ -64,10 +71,11 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
 
     try {
       // 1. Build Query
+      // We filter by specialty_id AND optionally by name search
       var dbQuery = client
           .from('doctors')
           .select('*, specialties(name)')
-          .eq('is_popular', true);
+          .eq('specialty_id', widget.specialtyId);
 
       // 2. Apply Search
       if (query != null && query.isNotEmpty) {
@@ -113,6 +121,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
 
     final isCurrentlyFavorite = _favoriteDoctorIds.contains(doctorId);
 
+    // Optimistic UI Update
     setState(() {
       if (isCurrentlyFavorite) {
         _favoriteDoctorIds.remove(doctorId);
@@ -135,6 +144,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
       }
     } catch (e) {
       debugPrint("Error toggling favorite: $e");
+      // Revert on error
       if (mounted) {
         setState(() {
           if (isCurrentlyFavorite) {
@@ -169,13 +179,29 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
         backgroundColor: bgColor,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black, size: 20),
-          onPressed: () => context.pop(),
+        leading: Center(
+          child: InkWell(
+            onTap: () => context.pop(),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: const Icon(
+                Icons.arrow_back_ios_new,
+                size: 18,
+                color: Colors.black,
+              ),
+            ),
+          ),
         ),
-        title: const Text(
-          "Popular Doctors",
-          style: TextStyle(
+        title: Text(
+          "${widget.specialtyName}s", // e.g. "Dentists"
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -193,7 +219,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -202,7 +228,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: "Search",
+                  hintText: "Search ${widget.specialtyName}...",
                   hintStyle: const TextStyle(color: Colors.grey),
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   suffixIcon:
@@ -231,7 +257,23 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                       child: CircularProgressIndicator(color: primaryGreen),
                     )
                     : _doctors.isEmpty
-                    ? const Center(child: Text("No popular doctors found"))
+                    ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 64,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "No doctors found",
+                            style: TextStyle(color: Colors.grey[500]),
+                          ),
+                        ],
+                      ),
+                    )
                     : ListView.separated(
                       padding: const EdgeInsets.all(24),
                       itemCount: _doctors.length,
@@ -258,10 +300,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                           imageUrl: doctor['profile_picture_url'],
                           isFavorite: isFavorite,
                           onFavoriteTap: () => _toggleFavorite(docId),
-                          onCardTap:
-                              () => _navigateToDoctorDetails(
-                                docId,
-                              ), // Added Tap Handler
+                          onCardTap: () => _navigateToDoctorDetails(docId),
                         );
                       },
                     ),
@@ -271,6 +310,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
     );
   }
 
+  // --- REUSABLE DOCTOR LIST CARD ---
   Widget _buildDoctorListCard({
     required int id,
     required String name,
@@ -280,7 +320,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
     required String? imageUrl,
     required bool isFavorite,
     required VoidCallback onFavoriteTap,
-    required VoidCallback onCardTap, // New Parameter
+    required VoidCallback onCardTap,
   }) {
     // 1. Calculate star values
     final double ratingVal = double.tryParse(rating) ?? 0.0;
@@ -288,7 +328,6 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
     final bool hasHalfStar = (ratingVal - fullStars) >= 0.5;
 
     return GestureDetector(
-      // Wrap Container in GestureDetector
       onTap: onCardTap,
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -297,7 +336,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -317,6 +356,21 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                         ? Image.network(
                           imageUrl,
                           fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: const Color(
+                                    0xFF00C689,
+                                  ).withValues(alpha: 0.5),
+                                ),
+                              ),
+                            );
+                          },
                           errorBuilder:
                               (context, error, stackTrace) => Container(
                                 color: Colors.grey[200],
