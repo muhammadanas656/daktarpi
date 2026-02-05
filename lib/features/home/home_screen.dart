@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart'; // Import go_router
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,11 +19,15 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Map<String, dynamic>>> _popularDoctorsFuture;
   late Future<List<Map<String, dynamic>>> _featureDoctorsFuture;
 
+  // Store favorite IDs to check status
+  Set<int> _favoriteDoctorIds = {};
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
     _initDataFetches();
+    _fetchFavorites(); // <--- Fetch favorites on load
   }
 
   void _initDataFetches() {
@@ -31,19 +36,42 @@ class _HomeScreenState extends State<HomeScreen> {
     // Fetch Specialties
     _specialtiesFuture = client.from('specialties').select().limit(10);
 
-    // Fetch Popular Doctors (is_popular = true)
+    // Fetch Popular Doctors
     _popularDoctorsFuture = client
         .from('doctors')
-        .select('*, specialties(name)') // Join to get specialty name
+        .select('*, specialties(name)')
         .eq('is_popular', true)
         .limit(5);
 
-    // Fetch Featured Doctors (is_featured = true)
+    // Fetch Featured Doctors
     _featureDoctorsFuture = client
         .from('doctors')
         .select('*, specialties(name)')
         .eq('is_featured', true)
         .limit(5);
+  }
+
+  // --- FETCH FAVORITES (VISUAL ONLY) ---
+  Future<void> _fetchFavorites() async {
+    final client = Supabase.instance.client;
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    try {
+      final response = await client
+          .from('favorite_doctors')
+          .select('doctor_id')
+          .eq('user_id', userId);
+
+      if (mounted) {
+        setState(() {
+          _favoriteDoctorIds =
+              (response as List).map((e) => e['doctor_id'] as int).toSet();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching favorites: $e');
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -71,8 +99,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-
-      // REMOVED: bottomNavigationBar (Handled by MainWrapper/ShellRoute)
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // --- SPECIALTIES LIST (Connected to DB) ---
+            // --- SPECIALTIES LIST ---
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: const Text(
@@ -234,9 +260,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (snapshot.hasError) {
-                    return const Center(child: Text("Error loading data"));
-                  }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return const Center(child: Text("No specialties found"));
                   }
@@ -247,28 +270,37 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     scrollDirection: Axis.horizontal,
                     itemCount: specialties.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 20),
+                    separatorBuilder: (_, __) => const SizedBox(width: 24),
                     itemBuilder: (context, index) {
                       final item = specialties[index];
-                      // Note: Assuming you might store icon_url in DB later.
-                      // For now, using a static icon for all.
+                      final name = item['name'] ?? 'Unknown';
+                      final iconUrl = item['icon_url'];
+
                       return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            width: 60,
+                            height: 60,
+                            padding: const EdgeInsets.all(12),
                             decoration: const BoxDecoration(
                               color: Color(0xFFE0F7FA),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.medical_services_outlined,
-                              color: Color(0xFF008FA0),
-                              size: 28,
-                            ),
+                            child:
+                                iconUrl != null
+                                    ? Image.network(
+                                      iconUrl,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (_, __, ___) =>
+                                              _getFallbackIcon(name),
+                                    )
+                                    : _getFallbackIcon(name),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            item['name'] ?? '',
+                            name,
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -282,8 +314,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // --- POPULAR DOCTORS (Connected to DB) ---
-            _buildSectionHeader("Popular Doctor"),
+            // --- POPULAR DOCTORS ---
+            _buildSectionHeader(
+              "Popular Doctor",
+              onTap: () => context.push('/popular_doctors'),
+            ),
             SizedBox(
               height: 240,
               child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -307,7 +342,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     separatorBuilder: (_, __) => const SizedBox(width: 16),
                     itemBuilder: (context, index) {
                       final doctor = doctors[index];
-                      // Safely access nested specialty name
                       final specialtyName =
                           doctor['specialties'] != null
                               ? doctor['specialties']['name']
@@ -317,9 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         name: doctor['full_name'] ?? 'Unknown',
                         specialty: specialtyName,
                         rating: doctor['rating']?.toString() ?? '5.0',
-                        imageUrl:
-                            doctor['profile_picture_url'] ??
-                            'https://i.pravatar.cc/150?img=${index + 50}',
+                        imageUrl: doctor['profile_picture_url'],
                       );
                     },
                   );
@@ -327,8 +359,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // --- FEATURED DOCTORS (Connected to DB) ---
-            _buildSectionHeader("Feature Doctor"),
+            // --- FEATURED DOCTORS ---
+            _buildSectionHeader(
+              "Feature Doctor",
+              onTap: () => context.push('/feature_doctors'),
+            ),
             SizedBox(
               height: 160,
               child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -352,13 +387,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     separatorBuilder: (_, __) => const SizedBox(width: 16),
                     itemBuilder: (context, index) {
                       final doctor = doctors[index];
+                      // Check if this doctor is in the favorites list
+                      final isFavorite = _favoriteDoctorIds.contains(
+                        doctor['id'],
+                      );
+
                       return _buildFeatureDoctorCard(
                         name: doctor['full_name'] ?? 'Unknown',
                         price: doctor['hourly_rate']?.toString() ?? '20',
                         rating: doctor['rating']?.toString() ?? '4.8',
-                        imageUrl:
-                            doctor['profile_picture_url'] ??
-                            'https://i.pravatar.cc/150?img=${index + 10}',
+                        imageUrl: doctor['profile_picture_url'],
+                        isFavorite: isFavorite, // <--- Pass the state here
                       );
                     },
                   );
@@ -372,9 +411,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- HELPER: FALLBACK ICONS ---
+  Widget _getFallbackIcon(String name) {
+    IconData iconData;
+    switch (name.toLowerCase()) {
+      case 'dentist':
+      case 'dental':
+        iconData = Icons.masks_rounded;
+        break;
+      case 'cardiologist':
+      case 'heart':
+        iconData = Icons.favorite_rounded;
+        break;
+      case 'eye specialist':
+      case 'eye':
+        iconData = Icons.remove_red_eye_rounded;
+        break;
+      case 'pulmonologist':
+      case 'lungs':
+        iconData = Icons.air;
+        break;
+      default:
+        iconData = Icons.medical_services_rounded;
+    }
+    return Icon(iconData, color: const Color(0xFF008FA0), size: 28);
+  }
+
   // --- REUSABLE WIDGETS ---
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, {VoidCallback? onTap}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
       child: Row(
@@ -384,54 +449,11 @@ class _HomeScreenState extends State<HomeScreen> {
             title,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          const Text(
-            "See all >",
-            style: TextStyle(color: Colors.grey, fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPopularDoctorCard({
-    required String name,
-    required String specialty,
-    required String rating,
-    required String imageUrl,
-  }) {
-    return Container(
-      width: 160,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircleAvatar(radius: 40, backgroundImage: NetworkImage(imageUrl)),
-          const SizedBox(height: 10),
-          Text(
-            name,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-          Text(
-            specialty,
-            style: const TextStyle(color: Colors.grey, fontSize: 11),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              5,
-              (i) => const Icon(Icons.star, color: Colors.amber, size: 14),
+          InkWell(
+            onTap: onTap,
+            child: const Text(
+              "See all >",
+              style: TextStyle(color: Colors.grey, fontSize: 13),
             ),
           ),
         ],
@@ -439,11 +461,115 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- POPULAR DOCTOR CARD ---
+  Widget _buildPopularDoctorCard({
+    required String name,
+    required String specialty,
+    required String rating,
+    required String? imageUrl,
+  }) {
+    return Container(
+      width: 170,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Image Section
+          Expanded(
+            flex: 3,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+              child:
+                  (imageUrl != null && imageUrl.isNotEmpty)
+                      ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: double.infinity,
+                            color: Colors.grey[200],
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.grey,
+                              size: 50,
+                            ),
+                          );
+                        },
+                      )
+                      : Container(
+                        width: double.infinity,
+                        color: Colors.grey[200],
+                        child: const Icon(
+                          Icons.person,
+                          color: Colors.grey,
+                          size: 50,
+                        ),
+                      ),
+            ),
+          ),
+          // Info Section
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    specialty,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      5,
+                      (i) =>
+                          const Icon(Icons.star, color: Colors.amber, size: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- FEATURED DOCTOR CARD ---
   Widget _buildFeatureDoctorCard({
     required String name,
     required String price,
     required String rating,
-    required String imageUrl,
+    required String? imageUrl,
+    required bool isFavorite, // <--- New Parameter
   }) {
     return Container(
       width: 130,
@@ -453,7 +579,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -461,10 +587,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Column(
         children: [
+          // Favorite Icon (Visual Only) & Rating
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Icon(Icons.favorite_border, color: Colors.grey, size: 16),
+              // Visual State: Red if favorite, Grey border if not
+              Icon(
+                isFavorite ? Icons.favorite : Icons.favorite_border,
+                color: isFavorite ? Colors.red : Colors.grey,
+                size: 16,
+              ),
               Row(
                 children: [
                   const Icon(Icons.star, color: Colors.amber, size: 12),
@@ -481,16 +613,52 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          CircleAvatar(radius: 25, backgroundImage: NetworkImage(imageUrl)),
+
+          // Circle Image with Fallback
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.grey[200],
+            ),
+            child: ClipOval(
+              child:
+                  (imageUrl != null && imageUrl.isNotEmpty)
+                      ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        width: 50,
+                        height: 50,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.person,
+                            color: Colors.grey,
+                            size: 30,
+                          );
+                        },
+                      )
+                      : const Icon(Icons.person, color: Colors.grey, size: 30),
+            ),
+          ),
+
           const SizedBox(height: 8),
+
+          // Name
           Text(
             name,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
           const SizedBox(height: 4),
+
+          // Price
           Text(
             "\$ $price/hour",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Color(0xFF00C689),
               fontSize: 10,
