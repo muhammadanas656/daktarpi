@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import 'package:url_launcher/url_launcher.dart'; // Import url_launcher
 
 class DoctorDetailsScreen extends StatefulWidget {
   final String doctorId;
@@ -20,7 +21,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   final Color cyanHeader = const Color(0xFFE0F7FA);
   final Color bgColor = const Color(0xFFFBFBFB);
   final Color textDark = const Color(0xFF1A1A1A);
-  final Color goldColor = const Color(0xFFFFC107);
 
   // --- DATA STATE ---
   bool _isLoading = true;
@@ -35,7 +35,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   bool _isLoadingSlots = false;
 
   // --- UI STATE ---
-  int _selectedDateIndex = 0; // 0=Today, 1=Tomorrow, 2=Day After
+  int _selectedDateIndex = 0;
   int _selectedTimeSlotIndex = -1;
 
   @override
@@ -50,22 +50,18 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     final userId = client.auth.currentUser?.id;
 
     try {
-      // Use <dynamic> to allow mixed return types (Map vs List)
       final results = await Future.wait<dynamic>([
-        // 0: Doctor Details
         client
             .from('doctors')
             .select('*, specialties(name)')
             .eq('id', widget.doctorId)
             .single(),
-        // 1: Clinics & Pricing
         client
             .from('doctor_clinics')
             .select(
               'clinic_id, visit_price, avg_wait_time, clinics(id, name, address, latitude, longitude)',
             )
             .eq('doctor_id', widget.doctorId),
-        // 2: Schedules
         client
             .from('doctor_schedules')
             .select('*')
@@ -76,7 +72,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       final clinicsResponse = results[1] as List<dynamic>;
       final schedulesResponse = results[2] as List<dynamic>;
 
-      // Check Favorites separately
       bool isFav = false;
       if (userId != null) {
         final favRes =
@@ -86,9 +81,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 .eq('user_id', userId)
                 .eq('doctor_id', widget.doctorId)
                 .maybeSingle();
-        if (favRes != null) {
-          isFav = true;
-        }
+        if (favRes != null) isFav = true;
       }
 
       if (mounted) {
@@ -115,23 +108,17 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
           _isLoading = false;
         });
-
-        // After basics load, fetch availability
         _fetchBookedSlots();
       }
     } catch (e) {
       debugPrint("Error fetching initial data: $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   // --- 2. FETCH BOOKED SLOTS ---
   Future<void> _fetchBookedSlots() async {
-    if (_selectedClinic == null) {
-      return;
-    }
+    if (_selectedClinic == null) return;
 
     setState(() => _isLoadingSlots = true);
 
@@ -162,9 +149,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       }
     } catch (e) {
       debugPrint("Error fetching slots: $e");
-      if (mounted) {
-        setState(() => _isLoadingSlots = false);
-      }
+      if (mounted) setState(() => _isLoadingSlots = false);
     }
   }
 
@@ -225,16 +210,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       }
     } catch (e) {
       _showSnack("Booking failed: $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _showSnack(String msg, {bool isSuccess = false}) {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -248,9 +229,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   Future<void> _toggleFavorite() async {
     final client = Supabase.instance.client;
     final userId = client.auth.currentUser?.id;
-    if (userId == null) {
-      return;
-    }
+    if (userId == null) return;
 
     setState(() => _isFavorite = !_isFavorite);
 
@@ -267,9 +246,37 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isFavorite = !_isFavorite);
+      if (mounted) setState(() => _isFavorite = !_isFavorite);
+    }
+  }
+
+  // --- 5. LAUNCH DIRECTIONS ---
+  Future<void> _launchDirections() async {
+    if (_selectedClinic == null) return;
+
+    final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
+    final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
+
+    // Use platform-specific URL schemes
+    final Uri googleMapsUrl = Uri.parse("google.navigation:q=$lat,$lng&mode=d");
+    final Uri appleMapsUrl = Uri.parse(
+      "https://maps.apple.com/?daddr=$lat,$lng",
+    );
+
+    try {
+      if (await canLaunchUrl(googleMapsUrl)) {
+        await launchUrl(googleMapsUrl);
+      } else if (await canLaunchUrl(appleMapsUrl)) {
+        await launchUrl(appleMapsUrl);
+      } else {
+        // Fallback to web browser
+        final Uri webUrl = Uri.parse(
+          "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng",
+        );
+        await launchUrl(webUrl, mode: LaunchMode.externalApplication);
       }
+    } catch (e) {
+      _showSnack("Could not launch maps");
     }
   }
 
@@ -280,14 +287,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   List<String> _getSlotsForSelectedDate() {
-    if (_schedules.isEmpty || _selectedClinic == null) {
-      return [];
-    }
+    if (_schedules.isEmpty || _selectedClinic == null) return [];
 
     final selectedDate = _getNextDays()[_selectedDateIndex];
-    final dayName = DateFormat('EEEE').format(selectedDate); // e.g. "Monday"
+    final dayName = DateFormat('EEEE').format(selectedDate);
 
-    // 1. Find Schedule (Case-Insensitive)
     final scheduleEntry = _schedules.firstWhere(
       (s) =>
           s['clinic_id'] == _selectedClinic!['id'] &&
@@ -295,12 +299,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       orElse: () => {},
     );
 
-    if (scheduleEntry.isEmpty) {
-      return [];
-    }
+    if (scheduleEntry.isEmpty) return [];
 
     try {
-      // 2. Parse Times safely
       final startStr = scheduleEntry['start_time'].toString();
       final endStr = scheduleEntry['end_time'].toString();
       final duration = scheduleEntry['slot_duration_minutes'] as int? ?? 30;
@@ -623,16 +624,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     );
   }
 
-  // --- UPDATED APPOINTMENT CARD ---
   Widget _buildInClinicAppointmentCard() {
     final bool hasData = _clinics.isNotEmpty && _selectedClinic != null;
-
     final clinicName =
         hasData ? _selectedClinic!['name'] : 'No Clinic Available';
     final clinicAddress = hasData ? _selectedClinic!['address'] : '';
     final price = hasData ? _selectedClinic!['visit_price'] : 0;
     final waitTime = hasData ? _selectedClinic!['avg_wait_time'] : 'N/A';
-
     final availableSlots = _getSlotsForSelectedDate();
 
     return Container(
@@ -779,7 +777,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 const Divider(height: 1, color: Colors.grey),
                 const SizedBox(height: 20),
 
-                // TIME SLOTS (Pills)
+                // Time Slots
                 if (_isLoadingSlots)
                   const Center(
                     child: Padding(
@@ -809,7 +807,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                           availableSlots.asMap().entries.map((entry) {
                             final index = entry.key;
                             final slotText = entry.value;
-
                             final isBooked = _bookedSlots.contains(slotText);
                             final isSelected = _selectedTimeSlotIndex == index;
 
@@ -827,7 +824,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                   vertical: 10,
                                 ),
                                 decoration: BoxDecoration(
-                                  // GREY if booked, Green if selected, Cyan if available
                                   color:
                                       isBooked
                                           ? Colors.grey[200]
@@ -843,7 +839,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                 child: Text(
                                   slotText,
                                   style: TextStyle(
-                                    // GREY TEXT if booked
                                     color:
                                         isBooked
                                             ? Colors.grey[400]
@@ -852,7 +847,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                             : const Color(0xFF00695C),
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    decoration: null,
                                   ),
                                 ),
                               ),
@@ -869,12 +863,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   Widget _buildTimingList() {
-    if (_schedules.isEmpty) {
+    if (_schedules.isEmpty)
       return const Text(
         "No schedule info",
         style: TextStyle(color: Colors.grey),
       );
-    }
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -914,9 +907,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   Widget _buildLocationSelector() {
-    if (_clinics.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (_clinics.isEmpty) return const SizedBox.shrink();
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -983,7 +974,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     );
   }
 
-  // --- UPDATED MAP WIDGET WITH CARTODB & CUSTOM MARKER ---
+  // --- UPDATED MAP WIDGET WITH DIRECTIONS BUTTON ---
   Widget _buildMap() {
     if (_selectedClinic == null) {
       return Container(
@@ -1002,78 +993,96 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     final lat = _selectedClinic!['latitude'] as double? ?? 23.8103;
     final lng = _selectedClinic!['longitude'] as double? ?? 90.4125;
 
-    return Container(
-      height: 180,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: FlutterMap(
-          key: ValueKey("$lat-$lng"),
-          options: MapOptions(
-            initialCenter: LatLng(lat, lng),
-            initialZoom: 15.0,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-            ),
+    return Stack(
+      // Wrap in Stack to overlay the button
+      children: [
+        Container(
+          height: 180,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade200),
           ),
-          children: [
-            TileLayer(
-              // Clean, modern map style
-              urlTemplate:
-                  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-              subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.example.daktarpi',
-            ),
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: LatLng(lat, lng),
-                  width: 60,
-                  height: 60,
-                  child: Column(
-                    children: [
-                      // Custom Modern Marker
-                      Container(
-                        padding: const EdgeInsets.all(8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: FlutterMap(
+              key: ValueKey("$lat-$lng"),
+              options: MapOptions(
+                initialCenter: LatLng(lat, lng),
+                initialZoom: 15.0,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                ),
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+                  subdomains: const ['a', 'b', 'c', 'd'],
+                  userAgentPackageName: 'com.example.daktarpi',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: LatLng(lat, lng),
+                      width: 36, // Smaller size
+                      height: 36, // Smaller size
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: primaryGreen,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
+                          shape: BoxShape.circle, // Circle shape
+                          border: Border.all(color: Colors.white, width: 2),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 3),
                             ),
                           ],
+                          // --- GRADIENT ---
+                          gradient: RadialGradient(
+                            center: Alignment.center,
+                            radius: 0.8,
+                            colors: [
+                              primaryGreen, // Center color
+                              Colors.white, // Circumference color
+                            ],
+                          ),
                         ),
                         child: const Icon(
-                          Icons.local_hospital_rounded,
-                          color: Colors.white,
-                          size: 20,
+                          Icons.location_on_rounded,
+                          color:
+                              Colors.white, // White icon to pop against center
+                          size: 18, // Smaller icon
                         ),
                       ),
-                      // Pointer Triangle
-                      ClipPath(
-                        clipper: _TriangleClipper(),
-                        child: Container(
-                          width: 10,
-                          height: 8,
-                          color: primaryGreen,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
-      ),
+
+        // --- DIRECTIONS BUTTON ---
+        Positioned(
+          bottom: 12,
+          right: 12,
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            elevation: 4,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _launchDirections,
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Icon(Icons.directions, color: primaryGreen, size: 24),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1092,20 +1101,4 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       }),
     );
   }
-}
-
-// --- HELPER CLIPPER FOR MARKER POINTER ---
-class _TriangleClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(0, 0);
-    path.lineTo(size.width / 2, size.height);
-    path.lineTo(size.width, 0);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
