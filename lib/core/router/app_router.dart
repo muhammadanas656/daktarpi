@@ -10,11 +10,14 @@ import '../../features/profile/profile_screen.dart';
 import '../../features/profile/profileview_screen.dart';
 import '../../core/main_wrapper/main_wrapper.dart';
 
+// --- COMMON IMPORTS ---
+import '../../features/common/enable_location_screen.dart'; // <--- NEW IMPORT
+
 // --- DOCTOR SCREENS ---
 import '../../features/doctors/popular_doctors_screen.dart';
 import '../../features/doctors/feature_doctors_screen.dart';
 import '../../features/doctors/doctor_details_screen.dart';
-import '../../features/doctors/specialty_doctors_screen.dart'; // <--- NEW IMPORT
+import '../../features/doctors/specialty_doctors_screen.dart';
 
 // --- NAVIGATOR KEYS ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -40,6 +43,13 @@ final appRouter = GoRouter(
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
     GoRoute(path: '/signup', builder: (context, state) => const SignUpScreen()),
 
+    // --- NEW: Location Permission Route ---
+    GoRoute(
+      path: '/location_permission',
+      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      builder: (context, state) => const EnableLocationScreen(),
+    ),
+
     // 2. DOCTOR & DETAILS ROUTES (Cover Bottom Bar)
     GoRoute(
       path: '/popular_doctors',
@@ -60,13 +70,12 @@ final appRouter = GoRouter(
       },
     ),
 
-    // --- NEW: Specialty Doctors Route ---
+    // --- Specialty Doctors Route ---
     GoRoute(
       path: '/specialty_doctors/:id',
-      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final id = state.pathParameters['id']!;
-        // We extract the name passed via 'extra' to show it in the AppBar title immediately
         final extra = state.extra as Map<String, dynamic>?;
         final name = extra?['name'] as String? ?? 'Doctors';
 

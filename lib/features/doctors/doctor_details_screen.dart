@@ -1,10 +1,14 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
-import 'package:url_launcher/url_launcher.dart'; // Import url_launcher
+import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 class DoctorDetailsScreen extends StatefulWidget {
   final String doctorId;
@@ -15,7 +19,8 @@ class DoctorDetailsScreen extends StatefulWidget {
   State<DoctorDetailsScreen> createState() => _DoctorDetailsScreenState();
 }
 
-class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
+class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
+    with TickerProviderStateMixin {
   // --- DESIGN COLORS ---
   final Color primaryGreen = const Color(0xFF00C689);
   final Color cyanHeader = const Color(0xFFE0F7FA);
@@ -37,11 +42,204 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   // --- UI STATE ---
   int _selectedDateIndex = 0;
   int _selectedTimeSlotIndex = -1;
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _locationSectionKey = GlobalKey();
+
+  // --- ANIMATION STATE (Directions - Bottom) ---
+  late AnimationController _menuController;
+  late Animation<double> _expandAnimation;
+  late Animation<double> _rotateAnimation;
+  bool _isMenuOpen = false;
+  Timer? _autoCloseTimer;
+
+  // --- ANIMATION STATE (Locator - Top) ---
+  late AnimationController _locatorMenuController;
+  late Animation<double> _locatorExpandAnimation;
+  late Animation<double> _locatorRotateAnimation;
+  bool _isLocatorMenuOpen = false;
+  Timer? _locatorAutoCloseTimer;
+
+  // --- NAVIGATION STATE ---
+  LatLng? _userLocation;
+  List<LatLng> _routePoints = [];
+  bool _isRouteLoading = false;
+  bool _isNavigating = false;
+  bool _isUserPanning = false;
+  final MapController _mapController = MapController();
+  StreamSubscription<Position>? _positionStream;
 
   @override
   void initState() {
     super.initState();
     _fetchInitialData();
+
+    // 1. Bottom Menu Controller
+    _menuController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _menuController,
+      curve: Curves.easeOutBack,
+    );
+    _rotateAnimation = Tween<double>(begin: 0.0, end: 0.5).animate(
+      CurvedAnimation(parent: _menuController, curve: Curves.easeInOut),
+    );
+
+    // 2. Locator Controller
+    _locatorMenuController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _locatorExpandAnimation = CurvedAnimation(
+      parent: _locatorMenuController,
+      curve: Curves.easeOutBack,
+    );
+    _locatorRotateAnimation = Tween<double>(begin: 0.0, end: 0.5).animate(
+      CurvedAnimation(parent: _locatorMenuController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _menuController.dispose();
+    _locatorMenuController.dispose();
+    _scrollController.dispose();
+    _autoCloseTimer?.cancel();
+    _locatorAutoCloseTimer?.cancel();
+    _positionStream?.cancel();
+    super.dispose();
+  }
+
+  // --- MENU LOGIC ---
+  void _toggleDirectionMenu() {
+    if (_isMenuOpen) {
+      _closeMenu();
+    } else {
+      _openMenu();
+      if (_isLocatorMenuOpen) _closeLocatorMenu();
+    }
+  }
+
+  void _openMenu() {
+    setState(() => _isMenuOpen = true);
+    _menuController.forward();
+    _autoCloseTimer?.cancel();
+    _autoCloseTimer = Timer(const Duration(seconds: 5), _closeMenu);
+  }
+
+  void _closeMenu() {
+    if (!mounted) return;
+    _autoCloseTimer?.cancel();
+    _menuController.reverse().then((_) {
+      if (mounted) setState(() => _isMenuOpen = false);
+    });
+  }
+
+  void _toggleLocatorMenu() {
+    if (_isLocatorMenuOpen) {
+      _closeLocatorMenu();
+    } else {
+      _openLocatorMenu();
+      if (_isMenuOpen) _closeMenu();
+    }
+  }
+
+  void _openLocatorMenu() {
+    setState(() => _isLocatorMenuOpen = true);
+    _locatorMenuController.forward();
+    _locatorAutoCloseTimer?.cancel();
+    _locatorAutoCloseTimer = Timer(
+      const Duration(seconds: 5),
+      _closeLocatorMenu,
+    );
+  }
+
+  void _closeLocatorMenu() {
+    if (!mounted) return;
+    _locatorAutoCloseTimer?.cancel();
+    _locatorMenuController.reverse().then((_) {
+      if (mounted) setState(() => _isLocatorMenuOpen = false);
+    });
+  }
+
+  void _scrollToLocations() {
+    final context = _locationSectionKey.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  // --- LOCATION PERMISSION HELPER (UPDATED) ---
+  Future<bool> _ensureLocationReady() async {
+    // 1. Check Service Status
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (!mounted) return false;
+
+      // FIX: Use GoRouter path defined in app_router.dart
+      final result = await context.push<bool>('/location_permission');
+
+      // If user returned 'true' (enabled), proceed. Otherwise check again.
+      if (result != true) {
+        serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) return false;
+      }
+    }
+
+    // 2. Check Permissions
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        _showSnack("Location permission denied");
+        return false;
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      _showSnack("Location permissions are permanently denied");
+      return false;
+    }
+    return true;
+  }
+
+  // --- MAP CAMERA CONTROLS ---
+  Future<void> _centerOnUser() async {
+    _closeLocatorMenu();
+
+    final isReady = await _ensureLocationReady();
+    if (!isReady) return;
+
+    if (_userLocation == null) {
+      try {
+        Position position = await Geolocator.getCurrentPosition();
+        setState(() {
+          _userLocation = LatLng(position.latitude, position.longitude);
+        });
+      } catch (e) {
+        _showSnack("Could not fetch location");
+        return;
+      }
+    }
+
+    if (_userLocation != null) {
+      setState(() => _isUserPanning = false);
+      _mapController.move(_userLocation!, 17.0);
+    }
+  }
+
+  void _centerOnClinic() {
+    _closeLocatorMenu();
+    if (_selectedClinic != null) {
+      setState(() => _isUserPanning = true);
+      final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
+      final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
+      _mapController.move(LatLng(lat, lng), 16.0);
+    }
   }
 
   // --- 1. INITIAL DATA FETCH ---
@@ -61,7 +259,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
             .select(
               'clinic_id, visit_price, avg_wait_time, clinics(id, name, address, latitude, longitude)',
             )
-            .eq('doctor_id', widget.doctorId),
+            .eq('doctor_id', widget.doctorId)
+            .order('visit_price', ascending: true),
         client
             .from('doctor_schedules')
             .select('*')
@@ -119,9 +318,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   // --- 2. FETCH BOOKED SLOTS ---
   Future<void> _fetchBookedSlots() async {
     if (_selectedClinic == null) return;
-
     setState(() => _isLoadingSlots = true);
-
     try {
       final client = Supabase.instance.client;
       final date = _getNextDays()[_selectedDateIndex];
@@ -131,7 +328,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           .from('appointments')
           .select('start_time, end_time')
           .eq('doctor_id', widget.doctorId)
-          .eq('clinic_id', _selectedClinic!['id'])
           .eq('schedule_date', formattedDate)
           .neq('status', 'cancelled');
 
@@ -144,11 +340,18 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 return "$start - $end";
               }).toList();
 
+          if (_selectedTimeSlotIndex != -1) {
+            final slots = _getSlotsForSelectedDate();
+            if (_selectedTimeSlotIndex < slots.length) {
+              if (_bookedSlots.contains(slots[_selectedTimeSlotIndex])) {
+                _selectedTimeSlotIndex = -1;
+              }
+            }
+          }
           _isLoadingSlots = false;
         });
       }
     } catch (e) {
-      debugPrint("Error fetching slots: $e");
       if (mounted) setState(() => _isLoadingSlots = false);
     }
   }
@@ -159,14 +362,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       _showSnack("No clinic selected");
       return;
     }
-
     final slots = _getSlotsForSelectedDate();
     if (_selectedTimeSlotIndex == -1 ||
         _selectedTimeSlotIndex >= slots.length) {
       _showSnack("Please select a time slot");
       return;
     }
-
     final selectedSlot = slots[_selectedTimeSlotIndex];
     if (_bookedSlots.contains(selectedSlot)) {
       _showSnack("Sorry, this slot is already booked.");
@@ -209,7 +410,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         });
       }
     } catch (e) {
-      _showSnack("Booking failed: $e");
+      _showSnack("Booking failed: ${e.toString().split('\n').first}");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -225,7 +426,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     );
   }
 
-  // --- 4. FAVORITE LOGIC ---
   Future<void> _toggleFavorite() async {
     final client = Supabase.instance.client;
     final userId = client.auth.currentUser?.id;
@@ -250,14 +450,15 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     }
   }
 
-  // --- 5. LAUNCH DIRECTIONS ---
-  Future<void> _launchDirections() async {
+  // --- 5. NAVIGATION LOGIC ---
+
+  Future<void> _launchExternalMaps() async {
+    _closeMenu();
     if (_selectedClinic == null) return;
 
     final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
     final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
 
-    // Use platform-specific URL schemes
     final Uri googleMapsUrl = Uri.parse("google.navigation:q=$lat,$lng&mode=d");
     final Uri appleMapsUrl = Uri.parse(
       "https://maps.apple.com/?daddr=$lat,$lng",
@@ -269,7 +470,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       } else if (await canLaunchUrl(appleMapsUrl)) {
         await launchUrl(appleMapsUrl);
       } else {
-        // Fallback to web browser
         final Uri webUrl = Uri.parse(
           "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng",
         );
@@ -280,7 +480,101 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     }
   }
 
-  // --- HELPERS ---
+  Future<void> _launchInAppDirection() async {
+    _closeMenu();
+    if (_selectedClinic == null) return;
+
+    // Check Location Service via Router
+    final isReady = await _ensureLocationReady();
+    if (!isReady) return;
+
+    setState(() {
+      _isRouteLoading = true;
+      _isNavigating = true;
+      _isUserPanning = false;
+    });
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      final clinicLat = _selectedClinic!['latitude'] as double;
+      final clinicLng = _selectedClinic!['longitude'] as double;
+
+      await _fetchRoute(
+        start: LatLng(position.latitude, position.longitude),
+        end: LatLng(clinicLat, clinicLng),
+      );
+
+      _positionStream?.cancel();
+      _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 5,
+        ),
+      ).listen((Position position) {
+        if (!mounted) return;
+
+        final newLoc = LatLng(position.latitude, position.longitude);
+        setState(() {
+          _userLocation = newLoc;
+        });
+
+        if (!_isUserPanning) {
+          _mapController.move(newLoc, 17.0);
+        }
+      });
+    } catch (e) {
+      debugPrint("Error starting navigation: $e");
+      _showSnack("Could not start navigation");
+      setState(() {
+        _isRouteLoading = false;
+        _isNavigating = false;
+      });
+    }
+  }
+
+  Future<void> _fetchRoute({required LatLng start, required LatLng end}) async {
+    try {
+      final url = Uri.parse(
+        'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson',
+      );
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final coordinates =
+            data['routes'][0]['geometry']['coordinates'] as List;
+
+        final List<LatLng> points =
+            coordinates.map((coord) {
+              return LatLng(coord[1].toDouble(), coord[0].toDouble());
+            }).toList();
+
+        if (mounted) {
+          setState(() {
+            _routePoints = points;
+            _userLocation = start;
+            _isRouteLoading = false;
+          });
+          _fitMapBounds();
+        }
+      }
+    } catch (e) {
+      debugPrint("Route fetch error: $e");
+    }
+  }
+
+  void _fitMapBounds() {
+    if (_routePoints.isEmpty) return;
+    final bounds = LatLngBounds.fromPoints(_routePoints);
+    _mapController.fitCamera(
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+    );
+  }
+
   List<DateTime> _getNextDays() {
     final now = DateTime.now();
     return List.generate(3, (index) => now.add(Duration(days: index)));
@@ -291,6 +585,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
     final selectedDate = _getNextDays()[_selectedDateIndex];
     final dayName = DateFormat('EEEE').format(selectedDate);
+    final isToday = _selectedDateIndex == 0;
+    final now = DateTime.now();
 
     final scheduleEntry = _schedules.firstWhere(
       (s) =>
@@ -314,14 +610,31 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
       List<String> slots = [];
       while (startMinutes + duration <= endMinutes) {
-        final sTime = _minutesToTime(startMinutes);
-        final eTime = _minutesToTime(startMinutes + duration);
-        slots.add("$sTime - $eTime");
+        bool isPast = false;
+        if (isToday) {
+          final slotHour = startMinutes ~/ 60;
+          final slotMinute = startMinutes % 60;
+          final slotTime = DateTime(
+            now.year,
+            now.month,
+            now.day,
+            slotHour,
+            slotMinute,
+          );
+          if (slotTime.isBefore(now)) {
+            isPast = true;
+          }
+        }
+
+        if (!isPast) {
+          final sTime = _minutesToTime(startMinutes);
+          final eTime = _minutesToTime(startMinutes + duration);
+          slots.add("$sTime - $eTime");
+        }
         startMinutes += duration;
       }
       return slots;
     } catch (e) {
-      debugPrint("Error parsing slots: $e");
       return [];
     }
   }
@@ -337,7 +650,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     return "$h:$m";
   }
 
-  // --- BUILD ---
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -359,6 +671,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           Positioned.fill(
             bottom: 80,
             child: SingleChildScrollView(
+              controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,9 +689,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   const SizedBox(height: 12),
                   _buildTimingList(),
                   const SizedBox(height: 24),
-                  const Text(
+                  Text(
                     "Location",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    key: _locationSectionKey,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _buildLocationSelector(),
@@ -626,11 +943,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   Widget _buildInClinicAppointmentCard() {
     final bool hasData = _clinics.isNotEmpty && _selectedClinic != null;
+
     final clinicName =
         hasData ? _selectedClinic!['name'] : 'No Clinic Available';
     final clinicAddress = hasData ? _selectedClinic!['address'] : '';
     final price = hasData ? _selectedClinic!['visit_price'] : 0;
     final waitTime = hasData ? _selectedClinic!['avg_wait_time'] : 'N/A';
+
     final availableSlots = _getSlotsForSelectedDate();
 
     return Container(
@@ -707,7 +1026,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                     ),
                     if (hasData && _clinics.length > 1)
                       GestureDetector(
-                        onTap: () {},
+                        onTap: _scrollToLocations,
                         child: Text(
                           "${_clinics.length - 1} More clinic",
                           style: const TextStyle(
@@ -863,11 +1182,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   Widget _buildTimingList() {
-    if (_schedules.isEmpty)
+    if (_schedules.isEmpty) {
       return const Text(
         "No schedule info",
         style: TextStyle(color: Colors.grey),
       );
+    }
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -921,6 +1241,14 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 onTap: () {
                   setState(() => _selectedClinic = clinic);
                   _fetchBookedSlots();
+
+                  final lat = clinic['latitude'] as double? ?? 0.0;
+                  final lng = clinic['longitude'] as double? ?? 0.0;
+                  _mapController.move(LatLng(lat, lng), 15.0);
+
+                  if (_isNavigating && _userLocation != null) {
+                    _fetchRoute(start: _userLocation!, end: LatLng(lat, lng));
+                  }
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 12),
@@ -974,7 +1302,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     );
   }
 
-  // --- UPDATED MAP WIDGET WITH DIRECTIONS BUTTON ---
   Widget _buildMap() {
     if (_selectedClinic == null) {
       return Container(
@@ -994,7 +1321,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     final lng = _selectedClinic!['longitude'] as double? ?? 90.4125;
 
     return Stack(
-      // Wrap in Stack to overlay the button
       children: [
         Container(
           height: 180,
@@ -1006,10 +1332,15 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: FlutterMap(
-              key: ValueKey("$lat-$lng"),
+              mapController: _mapController,
               options: MapOptions(
                 initialCenter: LatLng(lat, lng),
                 initialZoom: 15.0,
+                onPositionChanged: (pos, hasGesture) {
+                  if (hasGesture && _isNavigating) {
+                    setState(() => _isUserPanning = true);
+                  }
+                },
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
@@ -1021,16 +1352,26 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   subdomains: const ['a', 'b', 'c', 'd'],
                   userAgentPackageName: 'com.example.daktarpi',
                 ),
+                if (_routePoints.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _routePoints,
+                        strokeWidth: 4.0,
+                        color: Colors.blueAccent,
+                      ),
+                    ],
+                  ),
                 MarkerLayer(
                   markers: [
                     Marker(
                       point: LatLng(lat, lng),
-                      width: 36, // Smaller size
-                      height: 36, // Smaller size
+                      width: 36,
+                      height: 36,
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle, // Circle shape
+                          shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                           boxShadow: [
                             BoxShadow(
@@ -1039,47 +1380,185 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                               offset: const Offset(0, 3),
                             ),
                           ],
-                          // --- GRADIENT ---
                           gradient: RadialGradient(
                             center: Alignment.center,
                             radius: 0.8,
-                            colors: [
-                              primaryGreen, // Center color
-                              Colors.white, // Circumference color
-                            ],
+                            colors: [primaryGreen, Colors.white],
                           ),
                         ),
                         child: const Icon(
                           Icons.location_on_rounded,
-                          color:
-                              Colors.white, // White icon to pop against center
-                          size: 18, // Smaller icon
+                          color: Colors.white,
+                          size: 18,
                         ),
                       ),
                     ),
+                    if (_userLocation != null)
+                      Marker(
+                        point: _userLocation!,
+                        width: 30,
+                        height: 30,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 5,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.navigation,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ],
             ),
           ),
         ),
+        if (_isRouteLoading)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          ),
 
-        // --- DIRECTIONS BUTTON ---
+        // --- VERTICAL STACK FOR FABs ---
         Positioned(
           bottom: 12,
           right: 12,
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            elevation: 4,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _launchDirections,
-              child: Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Icon(Icons.directions, color: primaryGreen, size: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // 1. LOCATOR MENU ROW
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizeTransition(
+                    sizeFactor: _locatorExpandAnimation,
+                    axis: Axis.horizontal,
+                    axisAlignment: 1.0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FloatingActionButton.small(
+                        heroTag: "btn_center_clinic",
+                        backgroundColor: Colors.white,
+                        onPressed: _centerOnClinic,
+                        tooltip: "Clinic Location",
+                        child: Icon(
+                          Icons.medical_services_outlined,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Only show "User Location" button if navigating
+                  if (_isNavigating)
+                    SizeTransition(
+                      sizeFactor: _locatorExpandAnimation,
+                      axis: Axis.horizontal,
+                      axisAlignment: 1.0,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: FloatingActionButton.small(
+                          heroTag: "btn_center_user",
+                          backgroundColor: Colors.white,
+                          onPressed: _centerOnUser,
+                          tooltip: "My Location",
+                          child: Icon(
+                            Icons.accessibility_new_rounded,
+                            color: Colors.blueAccent,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  FloatingActionButton.small(
+                    heroTag: "btn_locator_toggle",
+                    backgroundColor: Colors.white,
+                    onPressed: _toggleLocatorMenu,
+                    child: RotationTransition(
+                      turns: _locatorRotateAnimation,
+                      child: Icon(
+                        _isLocatorMenuOpen ? Icons.close : Icons.gps_fixed,
+                        color: primaryGreen,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
+
+              const SizedBox(height: 16), // Spacing between rows
+              // 2. DIRECTIONS MENU ROW
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizeTransition(
+                    sizeFactor: _expandAnimation,
+                    axis: Axis.horizontal,
+                    axisAlignment: 1.0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FloatingActionButton.small(
+                        heroTag: "btn_external_map",
+                        backgroundColor: Colors.white,
+                        onPressed: _launchExternalMaps,
+                        tooltip: "Google Maps",
+                        child: const Icon(
+                          Icons.public,
+                          color: Colors.blue,
+                        ), // Globe icon
+                      ),
+                    ),
+                  ),
+                  SizeTransition(
+                    sizeFactor: _expandAnimation,
+                    axis: Axis.horizontal,
+                    axisAlignment: 1.0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FloatingActionButton.small(
+                        heroTag: "btn_inapp_map",
+                        backgroundColor: Colors.white,
+                        onPressed: _launchInAppDirection,
+                        tooltip: "In-App Route",
+                        child: Icon(
+                          Icons.turn_sharp_right,
+                          color: primaryGreen,
+                        ), // Turn icon
+                      ),
+                    ),
+                  ),
+                  FloatingActionButton.small(
+                    heroTag: "btn_main_toggle",
+                    backgroundColor: primaryGreen, // Colored Main Button
+                    onPressed: _toggleDirectionMenu,
+                    child: RotationTransition(
+                      turns: _rotateAnimation,
+                      child: Icon(
+                        _isMenuOpen
+                            ? Icons.close
+                            : Icons.directions, // Signpost
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ],

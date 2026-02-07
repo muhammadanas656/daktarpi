@@ -56,8 +56,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  // --- CUSTOM ERROR OVERLAY ---
   void _showTopError(String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     _errorOverlay?.remove();
     _errorOverlay = OverlayEntry(
       builder:
@@ -126,7 +129,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // 1. Check Service
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        throw 'Location services are disabled. Please enable them.';
+        if (!mounted) {
+          return;
+        }
+
+        // Navigate to the reusable permission screen using GoRouter path
+        final result = await context.push<bool>('/location_permission');
+
+        // Check again after returning
+        if (result != true) {
+          serviceEnabled = await Geolocator.isLocationServiceEnabled();
+          if (!serviceEnabled) {
+            throw 'Location services are disabled. Please enable them.';
+          }
+        }
       }
 
       // 2. Check Permissions
@@ -156,6 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         String formattedAddress = [
+          place.subLocality,
           place.locality,
           place.country,
         ].where((e) => e != null && e.isNotEmpty).join(', ');
@@ -164,7 +181,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _locationController.text = formattedAddress;
         });
 
-        // Optional: Show success snackbar
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -180,12 +196,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
-      _showTopError(e.toString());
+      if (e.toString() !=
+              "Location services are disabled. Please enable them." ||
+          mounted) {
+        _showTopError(e.toString());
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
+  // --- LOAD EXISTING PROFILE ---
   Future<void> _loadUserProfile() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -200,8 +223,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (response != null) {
           setState(() {
             _nameController.text = response['full_name'] ?? '';
-            _locationController.text =
-                response['location'] ?? ''; // Load Location
+            _locationController.text = response['location'] ?? '';
             _avatarUrl = response['profile_picture_url'];
 
             if (response['date_of_birth'] != null) {
@@ -228,10 +250,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       debugPrint("Error loading profile: $e");
     } finally {
-      if (mounted) setState(() => _isInitialLoad = false);
+      if (mounted) {
+        setState(() => _isInitialLoad = false);
+      }
     }
   }
 
+  // --- IMAGE PICKER ---
   Future<void> _pickImage() async {
     try {
       final pickedFile = await _picker.pickImage(
@@ -251,6 +276,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // --- DATE PICKER ---
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -277,6 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // --- DELETE OLD AVATAR (Cleanup) ---
   Future<void> _deleteOldProfilePic(String userId) async {
     if (_avatarUrl != null && _avatarUrl!.contains('profile_pictures')) {
       try {
@@ -314,23 +341,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // --- SAVE PROFILE LOGIC ---
   Future<void> _saveProfile() async {
-    if (_nameController.text.trim().isEmpty)
-      return _showTopError("Name is required.");
-    if (_phoneController.text.trim().isEmpty)
-      return _showTopError("Contact Number is required.");
-    if (_selectedDate == null)
-      return _showTopError("Date of Birth is required.");
+    // 1. Smart Validation
+    List<String> missingFields = [];
+    if (_nameController.text.trim().isEmpty) {
+      missingFields.add("Name");
+    }
+    if (_phoneController.text.trim().isEmpty) {
+      missingFields.add("Contact Number");
+    }
+    if (_selectedDate == null) {
+      missingFields.add("Date of Birth");
+    }
+    if (_locationController.text.trim().isEmpty) {
+      missingFields.add("Location");
+    }
+
+    if (missingFields.isNotEmpty) {
+      if (missingFields.length == 4) {
+        return _showTopError("Please complete your profile to continue.");
+      } else if (missingFields.length == 1) {
+        return _showTopError("${missingFields.first} is required.");
+      } else {
+        return _showTopError("${missingFields.join(', ')} are required.");
+      }
+    }
 
     setState(() => _isLoading = true);
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw "No active session.";
+      if (user == null) {
+        throw "No active session.";
+      }
 
       final userId = user.id;
       String? finalAvatarUrl = _avatarUrl;
 
+      // Upload new image if selected
       if (_imageFile != null) {
         await _deleteOldProfilePic(userId);
 
@@ -371,7 +420,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'full_name': _nameController.text.trim(),
           'phone_number': fullPhoneNumber,
           'date_of_birth': _selectedDate?.toIso8601String(),
-          'location': _locationController.text.trim(), // Save location
+          'location': _locationController.text.trim(),
           'profile_picture_url': finalAvatarUrl,
           'updated_at': DateTime.now().toIso8601String(),
         });
@@ -429,19 +478,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         if (mounted) {
           if (_isEditing && context.canPop()) {
-            context.pop(true); // Return to Profile View and Trigger Refresh
+            context.pop(true);
           } else {
             context.go('/home');
           }
         }
       }
     } catch (e) {
-      if (mounted) _showTopError(e.toString().replaceAll("Exception: ", ""));
+      if (mounted) {
+        _showTopError(e.toString().replaceAll("Exception: ", ""));
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
+  // --- BACK PRESS HANDLER ---
   Future<void> _onBackPress() async {
     if (_isEditing) {
       if (context.canPop()) {
@@ -455,14 +509,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isNameMissing = _nameController.text.trim().isEmpty;
     final isPhoneMissing = _phoneController.text.trim().isEmpty;
     final isDobMissing = _selectedDate == null;
+    final isLocationMissing = _locationController.text.trim().isEmpty;
 
-    if (isNameMissing || isPhoneMissing || isDobMissing) {
+    if (isNameMissing || isPhoneMissing || isDobMissing || isLocationMissing) {
       setState(() => _isLoading = true);
       try {
         await Supabase.instance.client.auth.signOut();
-        if (mounted) context.go('/login');
+        if (mounted) {
+          context.go('/login');
+        }
       } catch (e) {
-        if (mounted) context.go('/login');
+        if (mounted) {
+          context.go('/login');
+        }
       }
     } else {
       if (context.canPop()) {
@@ -485,7 +544,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop) {
+          return;
+        }
         _onBackPress();
       },
       child: Scaffold(
@@ -576,7 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 4),
-                            color: Colors.grey[200], // Default Background
+                            color: Colors.grey[200],
                           ),
                           child: ClipOval(
                             child:
@@ -602,7 +663,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                     color: Colors.grey,
                                                   ),
                                         )
-                                        // Default Icon if no image
                                         : const Icon(
                                           Icons.person,
                                           size: 60,
@@ -635,7 +695,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 25),
-              // Inputs...
+
+              // --- FORM INPUTS ---
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
@@ -650,6 +711,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
+
+                    // Name
                     _ProfileInputCard(
                       label: "Name *",
                       child: TextField(
@@ -668,6 +731,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // Phone
                     _ProfileInputCard(
                       label: "Contact Number *",
                       child: Row(
@@ -721,6 +786,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // Date of Birth
                     GestureDetector(
                       onTap: _selectDate,
                       child: _ProfileInputCard(
@@ -754,15 +821,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // --- UPDATED LOCATION CARD (Read Only + GPS) ---
+                    // --- LOCATION FIELD (MANDATORY) ---
                     _ProfileInputCard(
-                      label: "Location",
+                      label: "Location *",
                       child: Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _locationController,
-                              readOnly: true, // Prevent manual typing
+                              readOnly: true,
                               style: const TextStyle(
                                 fontSize: 16,
                                 color: Color(0xFF555555),
@@ -776,7 +843,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           ),
-                          // Aligned GPS Button
                           InkWell(
                             onTap: _isLoading ? null : _getCurrentLocation,
                             borderRadius: BorderRadius.circular(20),
@@ -803,8 +869,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
 
-                    // ------------------------------------------------
                     const SizedBox(height: 40),
+
+                    // --- SUBMIT BUTTON ---
                     SizedBox(
                       width: double.infinity,
                       height: 56,
