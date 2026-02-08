@@ -19,8 +19,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = false;
   bool _isInitialLoad = true;
-
-  // Logic: If true, user has already set up profile -> Show "Edit" UI.
   bool _isEditing = false;
 
   // Form Controllers
@@ -37,7 +35,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _picker = ImagePicker();
   OverlayEntry? _errorOverlay;
 
-  // Define colors to match your theme
+  // Define colors
   final Color primaryGreen = const Color(0xFF00C689);
   final Color hintTextColor = const Color(0xFFC4C4C4);
 
@@ -58,9 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // --- CUSTOM ERROR OVERLAY ---
   void _showTopError(String message) {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     _errorOverlay?.remove();
     _errorOverlay = OverlayEntry(
       builder:
@@ -126,17 +122,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Check Service
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (!mounted) {
-          return;
-        }
-
-        // Navigate to the reusable permission screen using GoRouter path
+        if (!mounted) return;
         final result = await context.push<bool>('/location_permission');
 
-        // Check again after returning
         if (result != true) {
           serviceEnabled = await Geolocator.isLocationServiceEnabled();
           if (!serviceEnabled) {
@@ -145,7 +135,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
 
-      // 2. Check Permissions
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -158,12 +147,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         throw 'Location permissions are permanently denied.';
       }
 
-      // 3. Get Position
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // 4. Reverse Geocode (Get Address)
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
@@ -202,13 +189,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _showTopError(e.toString());
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- LOAD EXISTING PROFILE ---
+  // --- LOAD PROFILE ---
   Future<void> _loadUserProfile() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -250,9 +235,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       debugPrint("Error loading profile: $e");
     } finally {
-      if (mounted) {
-        setState(() => _isInitialLoad = false);
-      }
+      if (mounted) setState(() => _isInitialLoad = false);
     }
   }
 
@@ -267,9 +250,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (pickedFile != null) {
-        setState(() {
-          _imageFile = File(pickedFile.path);
-        });
+        setState(() => _imageFile = File(pickedFile.path));
       }
     } catch (e) {
       _showTopError("Failed to pick image");
@@ -297,19 +278,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
     if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
+      setState(() => _selectedDate = picked);
     }
   }
 
-  // --- DELETE OLD AVATAR (Cleanup) ---
   Future<void> _deleteOldProfilePic(String userId) async {
     if (_avatarUrl != null && _avatarUrl!.contains('profile_pictures')) {
       try {
         Uri uri = Uri.parse(_avatarUrl!);
         int bucketIndex = uri.pathSegments.indexOf('profile_pictures');
-
         if (bucketIndex != -1 && bucketIndex + 2 < uri.pathSegments.length) {
           String pathToDelete = uri.pathSegments
               .sublist(bucketIndex + 1)
@@ -323,12 +300,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         debugPrint("Error parsing old URL: $e");
       }
     }
-
     try {
       final List<FileObject> objects = await Supabase.instance.client.storage
           .from('profile_pictures')
           .list(path: userId);
-
       if (objects.isNotEmpty) {
         final List<String> paths =
             objects.map((e) => '$userId/${e.name}').toList();
@@ -341,22 +316,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- SAVE PROFILE LOGIC ---
+  // --- SAVE PROFILE ---
   Future<void> _saveProfile() async {
-    // 1. Smart Validation
     List<String> missingFields = [];
-    if (_nameController.text.trim().isEmpty) {
-      missingFields.add("Name");
-    }
-    if (_phoneController.text.trim().isEmpty) {
+    if (_nameController.text.trim().isEmpty) missingFields.add("Name");
+    if (_phoneController.text.trim().isEmpty)
       missingFields.add("Contact Number");
-    }
-    if (_selectedDate == null) {
-      missingFields.add("Date of Birth");
-    }
-    if (_locationController.text.trim().isEmpty) {
-      missingFields.add("Location");
-    }
+    if (_selectedDate == null) missingFields.add("Date of Birth");
+    if (_locationController.text.trim().isEmpty) missingFields.add("Location");
 
     if (missingFields.isNotEmpty) {
       if (missingFields.length == 4) {
@@ -372,17 +339,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) {
-        throw "No active session.";
-      }
+      if (user == null) throw "No active session.";
 
       final userId = user.id;
       String? finalAvatarUrl = _avatarUrl;
 
-      // Upload new image if selected
       if (_imageFile != null) {
         await _deleteOldProfilePic(userId);
-
         final fileExt = _imageFile!.path.split('.').last;
         final fileName = '$userId/avatar.$fileExt';
 
@@ -394,11 +357,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _imageFile!,
                 fileOptions: const FileOptions(upsert: true),
               );
-
           finalAvatarUrl = Supabase.instance.client.storage
               .from('profile_pictures')
               .getPublicUrl(fileName);
-
           finalAvatarUrl =
               Uri.parse(finalAvatarUrl)
                   .replace(
@@ -439,7 +400,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (mounted) {
         setState(() => _isEditing = true);
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -475,7 +435,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
 
         await Future.delayed(const Duration(milliseconds: 500));
-
         if (mounted) {
           if (_isEditing && context.canPop()) {
             context.pop(true);
@@ -485,24 +444,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
-      if (mounted) {
-        _showTopError(e.toString().replaceAll("Exception: ", ""));
-      }
+      if (mounted) _showTopError(e.toString().replaceAll("Exception: ", ""));
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- BACK PRESS HANDLER ---
   Future<void> _onBackPress() async {
     if (_isEditing) {
-      if (context.canPop()) {
+      if (context.canPop())
         context.pop();
-      } else {
+      else
         context.go('/home');
-      }
       return;
     }
 
@@ -515,20 +468,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isLoading = true);
       try {
         await Supabase.instance.client.auth.signOut();
-        if (mounted) {
-          context.go('/login');
-        }
+        if (mounted) context.go('/login');
       } catch (e) {
-        if (mounted) {
-          context.go('/login');
-        }
+        if (mounted) context.go('/login');
       }
     } else {
-      if (context.canPop()) {
+      if (context.canPop())
         context.pop();
-      } else {
+      else
         context.go('/home');
-      }
     }
   }
 
@@ -544,9 +492,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          return;
-        }
+        if (didPop) return;
         _onBackPress();
       },
       child: Scaffold(
@@ -554,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         body: SingleChildScrollView(
           child: Column(
             children: [
-              // --- HEADER ---
+              // --- HEADER (Updated Design) ---
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.only(
@@ -572,7 +518,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Column(
                   children: [
-                    // --- APP BAR ---
+                    // --- APP BAR ROW ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -592,41 +538,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                         ),
-                        Text(
-                          _isEditing ? "Edit Profile" : "Profile",
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        // Removed text here to reduce repetition and cleaner look
                         const SizedBox(width: 40),
                       ],
                     ),
                     const SizedBox(height: 30),
 
+                    // --- DISTINCT MAIN HEADER ---
                     Text(
                       _isEditing ? "Edit Profile" : "Set up your profile",
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 24, // Increased Size for distinct rhythm
+                        fontWeight: FontWeight.bold,
                         color: Colors.white,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
 
                     Text(
                       _isEditing
                           ? "Make changes to your personal information below."
-                          : "Update your profile to connect your doctor with\nbetter impression.",
+                          : "Update your profile to connect with your doctor.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 14,
+                        // Lower opacity to separate it visually from the main header
+                        color: Colors.white.withValues(alpha: 0.8),
                         height: 1.4,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 35),
 
                     // --- AVATAR ---
                     Stack(
@@ -702,6 +645,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // --- Reverted to standard Text Header ---
                     const Text(
                       "Personal information",
                       style: TextStyle(

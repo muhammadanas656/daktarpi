@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui'; // For BackdropFilter
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -22,10 +23,10 @@ class DoctorDetailsScreen extends StatefulWidget {
 class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     with TickerProviderStateMixin {
   // --- DESIGN COLORS ---
-  final Color primaryGreen = const Color(0xFF00C689);
-  final Color cyanHeader = const Color(0xFFE0F7FA);
-  final Color bgColor = const Color(0xFFFBFBFB);
-  final Color textDark = const Color(0xFF1A1A1A);
+  static const Color primaryGreen = Color(0xFF00C689);
+  static const Color cyanHeader = Color(0xFFE0F7FA);
+  static const Color bgColor = Color(0xFFFBFBFB);
+  static const Color textDark = Color(0xFF1A1A1A);
 
   // --- DATA STATE ---
   bool _isLoading = true;
@@ -36,23 +37,22 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
   bool _isFavorite = false;
 
   // Booking Data
+  DateTime _selectedDate = DateTime.now();
   List<String> _bookedSlots = [];
   bool _isLoadingSlots = false;
 
   // --- UI STATE ---
-  int _selectedDateIndex = 0;
   int _selectedTimeSlotIndex = -1;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _locationSectionKey = GlobalKey();
 
-  // --- ANIMATION STATE (Directions - Bottom) ---
+  // --- ANIMATION CONTROLLERS ---
   late AnimationController _menuController;
   late Animation<double> _expandAnimation;
   late Animation<double> _rotateAnimation;
   bool _isMenuOpen = false;
   Timer? _autoCloseTimer;
 
-  // --- ANIMATION STATE (Locator - Top) ---
   late AnimationController _locatorMenuController;
   late Animation<double> _locatorExpandAnimation;
   late Animation<double> _locatorRotateAnimation;
@@ -73,7 +73,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     super.initState();
     _fetchInitialData();
 
-    // 1. Bottom Menu Controller
+    // 1. Directions Menu Animation
     _menuController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -86,7 +86,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
       CurvedAnimation(parent: _menuController, curve: Curves.easeInOut),
     );
 
-    // 2. Locator Controller
+    // 2. Locator Menu Animation
     _locatorMenuController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -111,7 +111,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     super.dispose();
   }
 
-  // --- MENU LOGIC ---
+  // --- HELPERS ---
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  // --- ANIMATION LOGIC ---
   void _toggleDirectionMenu() {
     if (_isMenuOpen) {
       _closeMenu();
@@ -174,75 +179,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     }
   }
 
-  // --- LOCATION PERMISSION HELPER (UPDATED) ---
-  Future<bool> _ensureLocationReady() async {
-    // 1. Check Service Status
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (!mounted) return false;
-
-      // FIX: Use GoRouter path defined in app_router.dart
-      final result = await context.push<bool>('/location_permission');
-
-      // If user returned 'true' (enabled), proceed. Otherwise check again.
-      if (result != true) {
-        serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        if (!serviceEnabled) return false;
-      }
-    }
-
-    // 2. Check Permissions
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _showSnack("Location permission denied");
-        return false;
-      }
-    }
-    if (permission == LocationPermission.deniedForever) {
-      _showSnack("Location permissions are permanently denied");
-      return false;
-    }
-    return true;
-  }
-
-  // --- MAP CAMERA CONTROLS ---
-  Future<void> _centerOnUser() async {
-    _closeLocatorMenu();
-
-    final isReady = await _ensureLocationReady();
-    if (!isReady) return;
-
-    if (_userLocation == null) {
-      try {
-        Position position = await Geolocator.getCurrentPosition();
-        setState(() {
-          _userLocation = LatLng(position.latitude, position.longitude);
-        });
-      } catch (e) {
-        _showSnack("Could not fetch location");
-        return;
-      }
-    }
-
-    if (_userLocation != null) {
-      setState(() => _isUserPanning = false);
-      _mapController.move(_userLocation!, 17.0);
-    }
-  }
-
-  void _centerOnClinic() {
-    _closeLocatorMenu();
-    if (_selectedClinic != null) {
-      setState(() => _isUserPanning = true);
-      final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
-      final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
-      _mapController.move(LatLng(lat, lng), 16.0);
-    }
-  }
-
-  // --- 1. INITIAL DATA FETCH ---
+  // --- DATA FETCHING ---
   Future<void> _fetchInitialData() async {
     final client = Supabase.instance.client;
     final userId = client.auth.currentUser?.id;
@@ -310,19 +247,17 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         _fetchBookedSlots();
       }
     } catch (e) {
-      debugPrint("Error fetching initial data: $e");
+      debugPrint("Error fetching data: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- 2. FETCH BOOKED SLOTS ---
   Future<void> _fetchBookedSlots() async {
     if (_selectedClinic == null) return;
     setState(() => _isLoadingSlots = true);
     try {
       final client = Supabase.instance.client;
-      final date = _getNextDays()[_selectedDateIndex];
-      final formattedDate = DateFormat('yyyy-MM-dd').format(date);
+      final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
       final response = await client
           .from('appointments')
@@ -340,6 +275,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 return "$start - $end";
               }).toList();
 
+          // Reset selection if slot is now booked
           if (_selectedTimeSlotIndex != -1) {
             final slots = _getSlotsForSelectedDate();
             if (_selectedTimeSlotIndex < slots.length) {
@@ -356,101 +292,65 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     }
   }
 
-  // --- 3. BOOKING HANDLER ---
-  Future<void> _handleBooking() async {
-    if (_selectedClinic == null) {
-      _showSnack("No clinic selected");
-      return;
-    }
-    final slots = _getSlotsForSelectedDate();
-    if (_selectedTimeSlotIndex == -1 ||
-        _selectedTimeSlotIndex >= slots.length) {
-      _showSnack("Please select a time slot");
-      return;
-    }
-    final selectedSlot = slots[_selectedTimeSlotIndex];
-    if (_bookedSlots.contains(selectedSlot)) {
-      _showSnack("Sorry, this slot is already booked.");
-      _fetchBookedSlots();
-      return;
+  // --- LOCATION & MAP LOGIC ---
+  Future<bool> _ensureLocationReady() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (!mounted) return false;
+      final result = await context.push<bool>('/location_permission');
+      if (result != true) {
+        serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) return false;
+      }
     }
 
-    setState(() => _isLoading = true);
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        _showSnack("Location permission denied");
+        return false;
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      _showSnack("Location permissions are permanently denied");
+      return false;
+    }
+    return true;
+  }
 
-    try {
-      final client = Supabase.instance.client;
-      final userId = client.auth.currentUser?.id;
+  Future<void> _centerOnUser() async {
+    _closeLocatorMenu();
+    final isReady = await _ensureLocationReady();
+    if (!isReady) return;
 
-      if (userId == null) {
-        _showSnack("Please login to book");
-        setState(() => _isLoading = false);
+    if (_userLocation == null) {
+      try {
+        Position position = await Geolocator.getCurrentPosition();
+        setState(() {
+          _userLocation = LatLng(position.latitude, position.longitude);
+        });
+      } catch (e) {
+        _showSnack("Could not fetch location");
         return;
       }
+    }
 
-      final date = _getNextDays()[_selectedDateIndex];
-      final formattedDate = DateFormat('yyyy-MM-dd').format(date);
-      final times = selectedSlot.split(' - ');
-
-      await client.from('appointments').insert({
-        'user_id': userId,
-        'doctor_id': widget.doctorId,
-        'clinic_id': _selectedClinic!['id'],
-        'schedule_date': formattedDate,
-        'start_time': times[0],
-        'end_time': times[1],
-        'status': 'confirmed',
-      });
-
-      if (mounted) {
-        _showSnack("Appointment Booked Successfully!", isSuccess: true);
-        await _fetchBookedSlots();
-        setState(() {
-          _selectedTimeSlotIndex = -1;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      _showSnack("Booking failed: ${e.toString().split('\n').first}");
-      if (mounted) setState(() => _isLoading = false);
+    if (_userLocation != null) {
+      setState(() => _isUserPanning = false);
+      _mapController.move(_userLocation!, 17.0);
     }
   }
 
-  void _showSnack(String msg, {bool isSuccess = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isSuccess ? Colors.green : Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Future<void> _toggleFavorite() async {
-    final client = Supabase.instance.client;
-    final userId = client.auth.currentUser?.id;
-    if (userId == null) return;
-
-    setState(() => _isFavorite = !_isFavorite);
-
-    try {
-      if (!_isFavorite) {
-        await client.from('favorite_doctors').delete().match({
-          'user_id': userId,
-          'doctor_id': widget.doctorId,
-        });
-      } else {
-        await client.from('favorite_doctors').insert({
-          'user_id': userId,
-          'doctor_id': widget.doctorId,
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isFavorite = !_isFavorite);
+  void _centerOnClinic() {
+    _closeLocatorMenu();
+    if (_selectedClinic != null) {
+      setState(() => _isUserPanning = true);
+      final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
+      final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
+      _mapController.move(LatLng(lat, lng), 16.0);
     }
   }
-
-  // --- 5. NAVIGATION LOGIC ---
 
   Future<void> _launchExternalMaps() async {
     _closeMenu();
@@ -484,7 +384,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     _closeMenu();
     if (_selectedClinic == null) return;
 
-    // Check Location Service via Router
     final isReady = await _ensureLocationReady();
     if (!isReady) return;
 
@@ -515,18 +414,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         ),
       ).listen((Position position) {
         if (!mounted) return;
-
         final newLoc = LatLng(position.latitude, position.longitude);
-        setState(() {
-          _userLocation = newLoc;
-        });
-
-        if (!_isUserPanning) {
-          _mapController.move(newLoc, 17.0);
-        }
+        setState(() => _userLocation = newLoc);
+        if (!_isUserPanning) _mapController.move(newLoc, 17.0);
       });
     } catch (e) {
-      debugPrint("Error starting navigation: $e");
       _showSnack("Could not start navigation");
       setState(() {
         _isRouteLoading = false;
@@ -540,14 +432,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
       final url = Uri.parse(
         'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson',
       );
-
       final response = await http.get(url);
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final coordinates =
             data['routes'][0]['geometry']['coordinates'] as List;
-
         final List<LatLng> points =
             coordinates.map((coord) {
               return LatLng(coord[1].toDouble(), coord[0].toDouble());
@@ -563,7 +452,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         }
       }
     } catch (e) {
-      debugPrint("Route fetch error: $e");
+      debugPrint("Route error: $e");
     }
   }
 
@@ -575,68 +464,212 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     );
   }
 
-  List<DateTime> _getNextDays() {
-    final now = DateTime.now();
-    return List.generate(3, (index) => now.add(Duration(days: index)));
+  // --- BOOKING & FAVORITE ---
+  Future<void> _handleBooking() async {
+    if (_selectedClinic == null) {
+      _showSnack("No clinic selected");
+      return;
+    }
+    final slots = _getSlotsForSelectedDate();
+    if (_selectedTimeSlotIndex == -1 ||
+        _selectedTimeSlotIndex >= slots.length) {
+      _showSnack("Please select a time slot");
+      return;
+    }
+    final selectedSlot = slots[_selectedTimeSlotIndex];
+    if (_bookedSlots.contains(selectedSlot)) {
+      _showSnack("Sorry, this slot is already booked.");
+      _fetchBookedSlots();
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final client = Supabase.instance.client;
+      final userId = client.auth.currentUser?.id;
+
+      if (userId == null) {
+        _showSnack("Please login to book");
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final times = selectedSlot.split(' - ');
+
+      await client.from('appointments').insert({
+        'user_id': userId,
+        'doctor_id': widget.doctorId,
+        'clinic_id': _selectedClinic!['id'],
+        'schedule_date': formattedDate,
+        'start_time': times[0],
+        'end_time': times[1],
+        'status': 'confirmed',
+      });
+
+      if (mounted) {
+        _showSnack("Appointment Booked Successfully!", isSuccess: true);
+        await _fetchBookedSlots();
+        setState(() {
+          _selectedTimeSlotIndex = -1;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      _showSnack("Booking failed: ${e.toString().split('\n').first}");
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
+  Future<void> _toggleFavorite() async {
+    final client = Supabase.instance.client;
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    setState(() => _isFavorite = !_isFavorite);
+
+    try {
+      if (!_isFavorite) {
+        await client.from('favorite_doctors').delete().match({
+          'user_id': userId,
+          'doctor_id': widget.doctorId,
+        });
+      } else {
+        await client.from('favorite_doctors').insert({
+          'user_id': userId,
+          'doctor_id': widget.doctorId,
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isFavorite = !_isFavorite);
+    }
+  }
+
+  void _showSnack(String msg, {bool isSuccess = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isSuccess ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // --- CALENDAR UI LOGIC ---
+  Future<void> _openDatePicker() async {
+    final now = DateTime.now();
+    final pickedDate = await showDialog<DateTime>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.3),
+      builder: (context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5), // Optimizable blur
+          child: Dialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Select Date",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 350,
+                    width: 300,
+                    child: CalendarDatePicker(
+                      initialDate: _selectedDate,
+                      firstDate: now,
+                      lastDate: now.add(const Duration(days: 365)),
+                      onDateChanged: (date) {
+                        Navigator.of(context).pop(date);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (pickedDate != null && !_isSameDay(pickedDate, _selectedDate)) {
+      setState(() {
+        _selectedDate = pickedDate;
+        _selectedTimeSlotIndex = -1;
+      });
+      _fetchBookedSlots();
+    }
+  }
+
+  // --- SLOT GENERATOR ---
   List<String> _getSlotsForSelectedDate() {
     if (_schedules.isEmpty || _selectedClinic == null) return [];
 
-    final selectedDate = _getNextDays()[_selectedDateIndex];
-    final dayName = DateFormat('EEEE').format(selectedDate);
-    final isToday = _selectedDateIndex == 0;
+    final dayName = DateFormat('EEEE').format(_selectedDate);
     final now = DateTime.now();
+    final isToday = _isSameDay(_selectedDate, now);
 
-    final scheduleEntry = _schedules.firstWhere(
-      (s) =>
-          s['clinic_id'] == _selectedClinic!['id'] &&
-          s['day_of_week'].toString().toLowerCase() == dayName.toLowerCase(),
-      orElse: () => {},
-    );
+    final daySchedules =
+        _schedules
+            .where(
+              (s) =>
+                  s['clinic_id'] == _selectedClinic!['id'] &&
+                  s['day_of_week'].toString().toLowerCase() ==
+                      dayName.toLowerCase(),
+            )
+            .toList();
 
-    if (scheduleEntry.isEmpty) return [];
+    List<String> allSlots = [];
 
-    try {
-      final startStr = scheduleEntry['start_time'].toString();
-      final endStr = scheduleEntry['end_time'].toString();
-      final duration = scheduleEntry['slot_duration_minutes'] as int? ?? 30;
+    for (var scheduleEntry in daySchedules) {
+      try {
+        final startStr = scheduleEntry['start_time'].toString();
+        final endStr = scheduleEntry['end_time'].toString();
+        final duration = scheduleEntry['slot_duration_minutes'] as int? ?? 30;
 
-      TimeOfDay startTime = _parseTime(startStr);
-      TimeOfDay endTime = _parseTime(endStr);
+        TimeOfDay startTime = _parseTime(startStr);
+        TimeOfDay endTime = _parseTime(endStr);
 
-      int startMinutes = startTime.hour * 60 + startTime.minute;
-      int endMinutes = endTime.hour * 60 + endTime.minute;
+        int startMinutes = startTime.hour * 60 + startTime.minute;
+        int endMinutes = endTime.hour * 60 + endTime.minute;
 
-      List<String> slots = [];
-      while (startMinutes + duration <= endMinutes) {
-        bool isPast = false;
-        if (isToday) {
-          final slotHour = startMinutes ~/ 60;
-          final slotMinute = startMinutes % 60;
-          final slotTime = DateTime(
-            now.year,
-            now.month,
-            now.day,
-            slotHour,
-            slotMinute,
-          );
-          if (slotTime.isBefore(now)) {
-            isPast = true;
+        while (startMinutes + duration <= endMinutes) {
+          bool isPast = false;
+          if (isToday) {
+            final slotHour = startMinutes ~/ 60;
+            final slotMinute = startMinutes % 60;
+            final slotTime = DateTime(
+              now.year,
+              now.month,
+              now.day,
+              slotHour,
+              slotMinute,
+            );
+            if (slotTime.isBefore(now)) isPast = true;
           }
-        }
 
-        if (!isPast) {
-          final sTime = _minutesToTime(startMinutes);
-          final eTime = _minutesToTime(startMinutes + duration);
-          slots.add("$sTime - $eTime");
+          if (!isPast) {
+            final sTime = _minutesToTime(startMinutes);
+            final eTime = _minutesToTime(startMinutes + duration);
+            allSlots.add("$sTime - $eTime");
+          }
+          startMinutes += duration;
         }
-        startMinutes += duration;
+      } catch (e) {
+        debugPrint("Error parsing schedule row: $e");
       }
-      return slots;
-    } catch (e) {
-      return [];
     }
+    allSlots.sort((a, b) => a.compareTo(b));
+    return allSlots.toSet().toList();
   }
 
   TimeOfDay _parseTime(String timeStr) {
@@ -650,10 +683,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     return "$h:$m";
   }
 
+  // --- BUILD ---
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: bgColor,
         body: Center(child: CircularProgressIndicator(color: primaryGreen)),
       );
@@ -700,7 +734,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                   const SizedBox(height: 12),
                   _buildLocationSelector(),
                   const SizedBox(height: 16),
-                  _buildMap(),
+
+                  // OPTIMIZATION: RepaintBoundary prevents map repaints on scroll
+                  RepaintBoundary(child: _buildMap()),
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -800,10 +837,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
+            // OPTIMIZATION: Added cacheWidth/Height to reduce memory usage
             child: Image.network(
               _doctor!['profile_picture_url'] ?? 'https://i.pravatar.cc/300',
               width: 80,
               height: 80,
+              cacheWidth: 160, // 2x for Retina
+              cacheHeight: 160,
               fit: BoxFit.cover,
               errorBuilder:
                   (_, __, ___) => Container(
@@ -825,7 +865,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                     Expanded(
                       child: Text(
                         _doctor!['full_name'],
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: textDark,
@@ -856,7 +896,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                     const Spacer(),
                     Text(
                       "$displayPrice/visit",
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: primaryGreen,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
@@ -924,7 +964,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         const SizedBox(height: 8),
         Text(
           value,
-          style: TextStyle(
+          style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 16,
             color: textDark,
@@ -943,14 +983,28 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
   Widget _buildInClinicAppointmentCard() {
     final bool hasData = _clinics.isNotEmpty && _selectedClinic != null;
-
     final clinicName =
         hasData ? _selectedClinic!['name'] : 'No Clinic Available';
     final clinicAddress = hasData ? _selectedClinic!['address'] : '';
     final price = hasData ? _selectedClinic!['visit_price'] : 0;
     final waitTime = hasData ? _selectedClinic!['avg_wait_time'] : 'N/A';
-
     final availableSlots = _getSlotsForSelectedDate();
+
+    // Setup Logic for Calendar Dates
+    final now = DateTime.now();
+    // Use standard dates + determine if selected is custom
+    final today = now;
+    final tomorrow = now.add(const Duration(days: 1));
+    DateTime thirdDate = now.add(const Duration(days: 2));
+
+    bool isCustomDate =
+        !_isSameDay(_selectedDate, today) &&
+        !_isSameDay(_selectedDate, tomorrow);
+    if (isCustomDate) {
+      thirdDate = _selectedDate;
+    }
+
+    final datesToShow = [today, tomorrow, thirdDate];
 
     return Container(
       width: double.infinity,
@@ -970,9 +1024,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: cyanHeader,
-              borderRadius: const BorderRadius.only(
+              borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
               ),
@@ -986,7 +1040,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 ),
                 Text(
                   "৳ $price",
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: primaryGreen,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -1002,7 +1056,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
               children: [
                 Text(
                   clinicName,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                     color: textDark,
@@ -1046,57 +1100,81 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 ),
                 const SizedBox(height: 20),
 
-                // Date Tabs
+                // --- OPTIMIZED DATE SELECTION ROW ---
                 Row(
-                  children: List.generate(3, (index) {
-                    final date = DateTime.now().add(Duration(days: index));
-                    final isSelected = _selectedDateIndex == index;
-                    String label =
-                        index == 0
-                            ? "Today"
-                            : index == 1
-                            ? "Tomorrow"
-                            : DateFormat('d MMM').format(date);
+                  children: [
+                    // Dynamic Date Tabs
+                    ...List.generate(datesToShow.length, (index) {
+                      final date = datesToShow[index];
+                      final isSelected = _isSameDay(date, _selectedDate);
 
-                    return Expanded(
+                      String label;
+                      if (_isSameDay(date, today)) {
+                        label = "Today";
+                      } else if (_isSameDay(date, tomorrow)) {
+                        label = "Tomorrow";
+                      } else {
+                        label = DateFormat('d MMM').format(date);
+                      }
+
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedDate = date;
+                              _selectedTimeSlotIndex = -1;
+                            });
+                            _fetchBookedSlots();
+                          },
+                          child: Column(
+                            children: [
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  fontWeight:
+                                      isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                  color: isSelected ? textDark : Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                height: 3,
+                                color:
+                                    isSelected
+                                        ? primaryGreen
+                                        : Colors.transparent,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+
+                    // Expand / Calendar Button
+                    Expanded(
                       child: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedDateIndex = index;
-                            _selectedTimeSlotIndex = -1;
-                          });
-                          _fetchBookedSlots();
-                        },
+                        onTap: _openDatePicker,
                         child: Column(
                           children: [
-                            Text(
-                              label,
-                              style: TextStyle(
-                                fontWeight:
-                                    isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.w500,
-                                color: isSelected ? textDark : Colors.grey,
-                              ),
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              size: 20,
+                              color: Colors.grey,
                             ),
                             const SizedBox(height: 8),
-                            Container(
-                              height: 3,
-                              color:
-                                  isSelected
-                                      ? primaryGreen
-                                      : Colors.transparent,
-                            ),
+                            Container(height: 3, color: Colors.transparent),
                           ],
                         ),
                       ),
-                    );
-                  }),
+                    ),
+                  ],
                 ),
                 const Divider(height: 1, color: Colors.grey),
                 const SizedBox(height: 20),
 
-                // Time Slots
+                // Time Slots List
                 if (_isLoadingSlots)
                   const Center(
                     child: Padding(
@@ -1241,11 +1319,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 onTap: () {
                   setState(() => _selectedClinic = clinic);
                   _fetchBookedSlots();
-
                   final lat = clinic['latitude'] as double? ?? 0.0;
                   final lng = clinic['longitude'] as double? ?? 0.0;
                   _mapController.move(LatLng(lat, lng), 15.0);
-
                   if (_isNavigating && _userLocation != null) {
                     _fetchRoute(start: _userLocation!, end: LatLng(lat, lng));
                   }
@@ -1380,7 +1456,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                               offset: const Offset(0, 3),
                             ),
                           ],
-                          gradient: RadialGradient(
+                          gradient: const RadialGradient(
                             center: Alignment.center,
                             radius: 0.8,
                             colors: [primaryGreen, Colors.white],
@@ -1457,15 +1533,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                         backgroundColor: Colors.white,
                         onPressed: _centerOnClinic,
                         tooltip: "Clinic Location",
-                        child: Icon(
+                        child: const Icon(
                           Icons.medical_services_outlined,
                           color: Colors.redAccent,
                         ),
                       ),
                     ),
                   ),
-
-                  // Only show "User Location" button if navigating
                   if (_isNavigating)
                     SizeTransition(
                       sizeFactor: _locatorExpandAnimation,
@@ -1478,14 +1552,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                           backgroundColor: Colors.white,
                           onPressed: _centerOnUser,
                           tooltip: "My Location",
-                          child: Icon(
+                          child: const Icon(
                             Icons.accessibility_new_rounded,
                             color: Colors.blueAccent,
                           ),
                         ),
                       ),
                     ),
-
                   FloatingActionButton.small(
                     heroTag: "btn_locator_toggle",
                     backgroundColor: Colors.white,
@@ -1500,8 +1573,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                   ),
                 ],
               ),
-
-              const SizedBox(height: 16), // Spacing between rows
+              const SizedBox(height: 16),
               // 2. DIRECTIONS MENU ROW
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1517,10 +1589,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                         backgroundColor: Colors.white,
                         onPressed: _launchExternalMaps,
                         tooltip: "Google Maps",
-                        child: const Icon(
-                          Icons.public,
-                          color: Colors.blue,
-                        ), // Globe icon
+                        child: const Icon(Icons.public, color: Colors.blue),
                       ),
                     ),
                   ),
@@ -1535,23 +1604,21 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                         backgroundColor: Colors.white,
                         onPressed: _launchInAppDirection,
                         tooltip: "In-App Route",
-                        child: Icon(
+                        child: const Icon(
                           Icons.turn_sharp_right,
                           color: primaryGreen,
-                        ), // Turn icon
+                        ),
                       ),
                     ),
                   ),
                   FloatingActionButton.small(
                     heroTag: "btn_main_toggle",
-                    backgroundColor: primaryGreen, // Colored Main Button
+                    backgroundColor: primaryGreen,
                     onPressed: _toggleDirectionMenu,
                     child: RotationTransition(
                       turns: _rotateAnimation,
                       child: Icon(
-                        _isMenuOpen
-                            ? Icons.close
-                            : Icons.directions, // Signpost
+                        _isMenuOpen ? Icons.close : Icons.directions,
                         color: Colors.white,
                       ),
                     ),
