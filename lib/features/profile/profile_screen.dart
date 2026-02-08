@@ -56,7 +56,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // --- CUSTOM ERROR OVERLAY ---
   void _showTopError(String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     _errorOverlay?.remove();
     _errorOverlay = OverlayEntry(
       builder:
@@ -124,7 +126,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         final result = await context.push<bool>('/location_permission');
 
         if (result != true) {
@@ -189,7 +193,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _showTopError(e.toString());
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -235,7 +241,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       debugPrint("Error loading profile: $e");
     } finally {
-      if (mounted) setState(() => _isInitialLoad = false);
+      if (mounted) {
+        setState(() => _isInitialLoad = false);
+      }
     }
   }
 
@@ -250,7 +258,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (pickedFile != null) {
-        setState(() => _imageFile = File(pickedFile.path));
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
       }
     } catch (e) {
       _showTopError("Failed to pick image");
@@ -278,7 +288,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
     if (picked != null && picked != _selectedDate) {
-      setState(() => _selectedDate = picked);
+      setState(() {
+        _selectedDate = picked;
+      });
     }
   }
 
@@ -319,11 +331,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // --- SAVE PROFILE ---
   Future<void> _saveProfile() async {
     List<String> missingFields = [];
-    if (_nameController.text.trim().isEmpty) missingFields.add("Name");
-    if (_phoneController.text.trim().isEmpty)
+    if (_nameController.text.trim().isEmpty) {
+      missingFields.add("Name");
+    }
+    if (_phoneController.text.trim().isEmpty) {
       missingFields.add("Contact Number");
-    if (_selectedDate == null) missingFields.add("Date of Birth");
-    if (_locationController.text.trim().isEmpty) missingFields.add("Location");
+    }
+    if (_selectedDate == null) {
+      missingFields.add("Date of Birth");
+    }
+    if (_locationController.text.trim().isEmpty) {
+      missingFields.add("Location");
+    }
 
     if (missingFields.isNotEmpty) {
       if (missingFields.length == 4) {
@@ -339,7 +358,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw "No active session.";
+      if (user == null) {
+        throw "No active session.";
+      }
 
       final userId = user.id;
       String? finalAvatarUrl = _avatarUrl;
@@ -444,18 +465,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
-      if (mounted) _showTopError(e.toString().replaceAll("Exception: ", ""));
+      if (mounted) {
+        _showTopError(e.toString().replaceAll("Exception: ", ""));
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _onBackPress() async {
     if (_isEditing) {
-      if (context.canPop())
+      if (context.canPop()) {
         context.pop();
-      else
+      } else {
         context.go('/home');
+      }
       return;
     }
 
@@ -468,15 +494,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isLoading = true);
       try {
         await Supabase.instance.client.auth.signOut();
-        if (mounted) context.go('/login');
+        if (mounted) {
+          context.go('/login');
+        }
       } catch (e) {
-        if (mounted) context.go('/login');
+        if (mounted) {
+          context.go('/login');
+        }
       }
     } else {
-      if (context.canPop())
+      if (context.canPop()) {
         context.pop();
-      else
+      } else {
         context.go('/home');
+      }
     }
   }
 
@@ -492,7 +523,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop) {
+          return;
+        }
         _onBackPress();
       },
       child: Scaffold(
