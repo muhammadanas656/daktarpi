@@ -11,7 +11,11 @@ import '../../features/profile/profileview_screen.dart';
 import '../../core/main_wrapper/main_wrapper.dart';
 
 // --- COMMON IMPORTS ---
-import '../../features/common/enable_location_screen.dart'; // <--- NEW IMPORT
+import '../../features/common/enable_location_screen.dart';
+
+// --- NEW IMPORTS: Privacy Policy & Appointments ---
+import '../../features/privacy_policy/privacy_policy_screen.dart';
+import '../../features/appointments/my_appointments_screen.dart'; // <--- NEW IMPORT
 
 // --- DOCTOR SCREENS ---
 import '../../features/doctors/popular_doctors_screen.dart';
@@ -43,7 +47,14 @@ final appRouter = GoRouter(
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
     GoRoute(path: '/signup', builder: (context, state) => const SignUpScreen()),
 
-    // --- NEW: Location Permission Route ---
+    // --- Privacy Policy Route ---
+    GoRoute(
+      path: '/privacy_policy',
+      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      builder: (context, state) => const PrivacyPolicyScreen(),
+    ),
+
+    // --- Location Permission Route ---
     GoRoute(
       path: '/location_permission',
       parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
@@ -117,9 +128,8 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/appointments',
-              builder:
-                  (context, state) =>
-                      const Scaffold(body: Center(child: Text("Appointments"))),
+              // UPDATED: Now points to the real Appointments Screen
+              builder: (context, state) => const MyAppointmentsScreen(),
             ),
           ],
         ),

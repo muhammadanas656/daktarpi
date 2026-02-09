@@ -37,12 +37,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --- DATA LOADING ---
+  // This logic runs:
+  // 1. When the app starts (initState)
+  // 2. When the user returns from ANY other page (via _refreshData)
   Future<void> _refreshData() async {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
+
+    // This immediately shows the loading screen
     setState(() => _isLoading = true);
+
+    // A tiny delay ensures the UI has time to render the loading spinner
+    // before the network request starts, making the transition feel smoother.
     await Future.delayed(const Duration(milliseconds: 50));
+
     await _fetchAllData();
   }
 
@@ -99,9 +106,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- NAVIGATION ---
+  // --- NAVIGATION LOGIC ---
+  // Every navigation action below uses 'await' to pause execution
+  // and '_refreshData()' to reload when the user returns.
+
   Future<void> _navigateToDoctorDetails(int doctorId) async {
     await context.push('/doctor_details/$doctorId');
+    // Code resumes here when user hits 'Back'
     _refreshData();
   }
 
@@ -127,8 +138,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFBFBFB),
-      // IMPORTANT: No Drawer or GestureDetector here.
-      // MainWrapper handles the swipes now.
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,9 +187,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              // Avatar is just visual now.
-              // To open drawer via tap, you'd need a GlobalKey or Provider,
-              // but SWIPE Right will open the drawer from MainWrapper.
               CircleAvatar(
                 radius: 24,
                 backgroundColor: Colors.white24,
@@ -208,6 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
               controller: _searchController,
               readOnly: true,
               onTap: () async {
+                // Logic added for Search Bar return
                 await context.push('/popular_doctors');
                 _refreshData();
               },
@@ -341,6 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildSectionHeader(
           "Popular Doctor",
           onTap: () async {
+            // Logic added for Popular Doctor See All
             await context.push('/popular_doctors');
             _refreshData();
           },
@@ -373,6 +381,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildSectionHeader(
           "Feature Doctor",
           onTap: () async {
+            // Logic added for Feature Doctor See All
             await context.push('/feature_doctors');
             _refreshData();
           },

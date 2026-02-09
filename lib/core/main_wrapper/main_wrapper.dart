@@ -50,40 +50,90 @@ class MainWrapper extends StatefulWidget {
 }
 
 class _MainWrapperState extends State<MainWrapper>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  // 💎 PREMIUM PHYSICS ENGINE
+  // Quint: Starts fast, decelerates extremely slowly (Heavy feel).
+  static const Curve _openCurve = Curves.easeOutQuint;
+  // Circ: Slides shut and slows down gently at the very end (Soft close).
+  static const Curve _closeCurve = Curves.easeOutCirc;
+
   final Color primaryGreen = const Color(0xFF00C689);
-  final Color drawerBgColor = const Color(0xFF626F8D); // Dark Blue-Grey
+  final Color drawerBgColor = const Color(0xFF626F8D);
 
   late AnimationController _drawerController;
-  final double _maxSlide = 290.0; // Max distance for the front card
-
-  // Gesture State
+  final double _maxSlide = 290.0;
   bool _isDraggingDrawer = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     _drawerController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runIntroTutorial();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _drawerController.dispose();
     super.dispose();
   }
 
-  // --- NAVIGATION LOGIC ---
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_drawerController.value == 0) {
+        _runIntroTutorial();
+      }
+    }
+  }
+
+  /// ----------------------------------------------------------------
+  /// 🎩 THE "LUXURY" TUTORIAL
+  /// ----------------------------------------------------------------
+  Future<void> _runIntroTutorial() async {
+    // 1. Settle: Wait 3.5s. Everything loads, user breathes.
+    await Future.delayed(const Duration(milliseconds: 3500));
+    if (!mounted) return;
+
+    try {
+      // 2. The "Glide": Open 15%.
+      // 1600ms is very slow, but easeOutQuint makes the first 10% happens fast,
+      // and the last 5% takes forever. This feels incredibly high-end.
+      await _drawerController.animateTo(
+        0.15,
+        duration: const Duration(milliseconds: 1600),
+        curve: _openCurve,
+      );
+
+      // 3. The "Pause": Let it hover.
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+
+      // 4. The "Soft Close": Slide back without slamming.
+      await _drawerController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 1200),
+        curve: _closeCurve,
+      );
+    } catch (e) {
+      debugPrint("Animation interrupted: $e");
+    }
+  }
+
+  // --- NAVIGATION & GESTURES ---
   void _goToBranch(int index) {
-    // 1. Navigate to the selected tab (Works for ALL tabs, including Profile)
     widget.navigationShell.goBranch(
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
     );
-
-    // 2. If the drawer happens to be open, close it smoothly
     if (_drawerController.value > 0) {
       _drawerController.reverse();
     }
@@ -97,7 +147,6 @@ class _MainWrapperState extends State<MainWrapper>
     }
   }
 
-  // --- GESTURE LOGIC ---
   void _onHorizontalDragStart(DragStartDetails details) {
     bool isDrawerOpen = _drawerController.value > 0;
     if (isDrawerOpen || details.globalPosition.dx < 60) {
@@ -136,7 +185,6 @@ class _MainWrapperState extends State<MainWrapper>
     int currentIndex = widget.navigationShell.currentIndex;
 
     if (velocity < -500 && currentIndex < 3) {
-      // Ensure we don't go past the last tab
       _goToBranch(currentIndex + 1);
     } else if (velocity > 500 && currentIndex > 0) {
       _goToBranch(currentIndex - 1);
@@ -150,7 +198,7 @@ class _MainWrapperState extends State<MainWrapper>
       body: Stack(
         children: [
           // -----------------------------------------------------------
-          // LAYER 1: THE "BACK" CARD (Doctors Page Placeholder)
+          // LAYER 1: BACK CARD
           // -----------------------------------------------------------
           AnimatedBuilder(
             animation: _drawerController,
@@ -158,6 +206,7 @@ class _MainWrapperState extends State<MainWrapper>
               double slide = 265 * _drawerController.value;
               double scale = 1 - (_drawerController.value * 0.45);
               double rotate = 0.0;
+              double fade = (_drawerController.value * 6).clamp(0.0, 1.0);
 
               return Transform(
                 transform:
@@ -167,7 +216,7 @@ class _MainWrapperState extends State<MainWrapper>
                       ..rotateZ(rotate),
                 alignment: Alignment.centerLeft,
                 child: Opacity(
-                  opacity: _drawerController.value,
+                  opacity: fade,
                   child: AbsorbPointer(
                     absorbing: true,
                     child: Container(
@@ -178,7 +227,7 @@ class _MainWrapperState extends State<MainWrapper>
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
+                            color: Colors.black.withOpacity(0.1),
                             blurRadius: 10,
                             offset: const Offset(-15, 15),
                           ),
@@ -192,8 +241,8 @@ class _MainWrapperState extends State<MainWrapper>
                           ),
                           Container(
                             decoration: BoxDecoration(
-                              color: drawerBgColor.withValues(
-                                alpha: 0.8 * _drawerController.value,
+                              color: drawerBgColor.withOpacity(
+                                (0.8 * _drawerController.value).clamp(0.0, 1.0),
                               ),
                               borderRadius: BorderRadius.circular(30),
                             ),
@@ -208,7 +257,7 @@ class _MainWrapperState extends State<MainWrapper>
           ),
 
           // -----------------------------------------------------------
-          // LAYER 2: THE MENU
+          // LAYER 2: MENU
           // -----------------------------------------------------------
           SafeArea(
             child: SizedBox(
@@ -221,7 +270,7 @@ class _MainWrapperState extends State<MainWrapper>
           ),
 
           // -----------------------------------------------------------
-          // LAYER 3: MAIN APP CONTENT (Front Card)
+          // LAYER 3: FRONT CARD (Main App)
           // -----------------------------------------------------------
           GestureDetector(
             onHorizontalDragStart: _onHorizontalDragStart,
@@ -235,6 +284,16 @@ class _MainWrapperState extends State<MainWrapper>
                 double scale = 1 - (_drawerController.value * 0.3);
                 bool isDrawerOpen = _drawerController.value > 0.1;
 
+                // --- 💎 PREMIUM CORNER RADIUS ---
+                // We use a massive multiplier (400).
+                // This guarantees that at 0.01 progress (1%), the corners are already 4px round.
+                // At 0.1 progress (10%), they are fully maxed out at 40px.
+                // This eliminates the "rectangle -> rounded" transition artifact.
+                double cornerRadius = (_drawerController.value * 400).clamp(
+                  0.0,
+                  40.0,
+                );
+
                 return Transform(
                   transform:
                       Matrix4.identity()
@@ -242,14 +301,12 @@ class _MainWrapperState extends State<MainWrapper>
                         ..scale(scale),
                   alignment: Alignment.centerLeft,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(
-                      _drawerController.value * 40,
-                    ),
+                    borderRadius: BorderRadius.circular(cornerRadius),
                     child: Container(
                       decoration: BoxDecoration(
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
+                            color: Colors.black.withOpacity(0.3),
                             blurRadius: 40,
                             offset: const Offset(-30, 30),
                           ),
@@ -274,7 +331,7 @@ class _MainWrapperState extends State<MainWrapper>
                   selectedIndex: widget.navigationShell.currentIndex,
                   onDestinationSelected: _goToBranch,
                   backgroundColor: Colors.white,
-                  indicatorColor: primaryGreen.withValues(alpha: 0.15),
+                  indicatorColor: primaryGreen.withOpacity(0.15),
                   elevation: 0,
                   destinations: const [
                     NavigationDestination(
@@ -336,7 +393,7 @@ class _MainWrapperState extends State<MainWrapper>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
+                            color: Colors.black.withOpacity(0.3),
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),

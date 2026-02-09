@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// NOTE: You no longer need to import 'privacy_policy_screen.dart' here
+// because we are navigating using the route string '/privacy_policy'.
+
 class CustomDrawer extends StatefulWidget {
   final VoidCallback onClose;
   final Function(int) onNavigateToTab;
@@ -17,14 +20,12 @@ class CustomDrawer extends StatefulWidget {
 }
 
 class _CustomDrawerState extends State<CustomDrawer> {
-  // Use transparent here because MainWrapper has the bg color
   final Color drawerContentColor = Colors.transparent;
+  final Color primaryGreen = const Color(0xFF00C689);
 
   String _userName = "Abdullah Mamun";
   String _phone = "01303-527300";
   String? _avatarUrl;
-
-  // [Removed] _isLoading was unused because you have default values above.
 
   @override
   void initState() {
@@ -43,7 +44,6 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 .eq('id', user.id)
                 .maybeSingle();
 
-        // Check mounted before calling setState
         if (mounted && data != null) {
           setState(() {
             _userName = data['full_name'] ?? "Abdullah Mamun";
@@ -52,10 +52,68 @@ class _CustomDrawerState extends State<CustomDrawer> {
           });
         }
       } catch (e) {
-        // Handle error silently or log it
         debugPrint('Error fetching profile: $e');
       }
     }
+  }
+
+  Future<void> _showLogoutDialog(BuildContext parentContext) async {
+    return showDialog<void>(
+      context: parentContext,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'Log Out',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              color: Colors.black,
+            ),
+          ),
+          content: const Text(
+            'Are you sure you want to logout?',
+            style: TextStyle(color: Colors.grey, fontSize: 16),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: primaryGreen,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await Supabase.instance.client.auth.signOut();
+                if (parentContext.mounted) {
+                  parentContext.go('/login');
+                }
+              },
+              child: Text(
+                'Ok',
+                style: TextStyle(
+                  color: primaryGreen,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -66,7 +124,6 @@ class _CustomDrawerState extends State<CustomDrawer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- PROFILE HEADER ---
           Row(
             children: [
               CircleAvatar(
@@ -117,17 +174,13 @@ class _CustomDrawerState extends State<CustomDrawer> {
               ),
             ],
           ),
-
           const SizedBox(height: 50),
-
-          // --- MENU LIST ---
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
                 _buildDrawerItem(Icons.person, "My Doctors", () {
                   widget.onClose();
-                  // Navigate
                 }, isSelected: true),
                 _buildDrawerItem(Icons.assignment, "Medical Records", () {
                   widget.onClose();
@@ -136,8 +189,11 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   widget.onClose();
                   widget.onNavigateToTab(2);
                 }),
+                // --- UPDATED NAVIGATION ---
                 _buildDrawerItem(Icons.security, "Privacy & Policy", () {
                   widget.onClose();
+                  // Use the named route defined in app_router.dart
+                  context.push('/privacy_policy');
                 }),
                 _buildDrawerItem(Icons.help_outline, "Help Center", () {
                   widget.onClose();
@@ -148,8 +204,6 @@ class _CustomDrawerState extends State<CustomDrawer> {
               ],
             ),
           ),
-
-          // --- LOGOUT ---
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.logout, color: Colors.white, size: 24),
@@ -161,13 +215,8 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            onTap: () async {
-              await Supabase.instance.client.auth.signOut();
-
-              // Correct fix for "Do not use BuildContext across async gaps"
-              if (!mounted) return;
-
-              context.go('/login');
+            onTap: () {
+              _showLogoutDialog(context);
             },
           ),
         ],
