@@ -308,7 +308,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                         : null,
               ),
               const SizedBox(width: 16),
-              // FIX: Expanded prevents text from pushing off screen
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -321,7 +320,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                         color: textDark,
                       ),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis, // Truncate if too long
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -342,13 +341,12 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
           const SizedBox(height: 20),
 
-          // Row 2: Date & Time Info (The common overflow area)
+          // Row 2: Date & Time Info
           Row(
             children: [
               // --- Date Section ---
-              // FIX: Expanded + Row ensures this takes available space but not more
               Expanded(
-                flex: 4, // 40% of space
+                flex: 4,
                 child: Row(
                   children: [
                     const Icon(
@@ -357,7 +355,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       color: Color(0xFF626F8D),
                     ),
                     const SizedBox(width: 6),
-                    // FIX: Inner Expanded allows text to shrink/truncate
                     Expanded(
                       child: Text(
                         date,
@@ -376,9 +373,9 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
               const SizedBox(width: 8),
 
-              // --- Time Section ---
+              // --- Time Section (ADJUSTED PLACEMENT) ---
               Expanded(
-                flex: 5, // 50% of space (Time ranges can be long)
+                flex: 5,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -388,8 +385,10 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       color: Color(0xFF626F8D),
                     ),
                     const SizedBox(width: 6),
-                    // FIX: Inner Expanded prevents right-overflow
-                    Expanded(
+                    // CHANGED: From Expanded to Flexible.
+                    // Flexible allows text to take only needed space, keeping it hugged to the icon.
+                    // MainAxisAlignment.end pushes the whole [Icon + Text] group to the right.
+                    Flexible(
                       child: Text(
                         time,
                         textAlign: TextAlign.right,
