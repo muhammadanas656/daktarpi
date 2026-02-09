@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui'; // For image filtering if needed
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,22 +9,16 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  // --- CONTROLLERS & CONFIG ---
+class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
-  late AnimationController _drawerController;
   final Color primaryGreen = const Color(0xFF00C689);
-  final double _maxDrawerWidth = 300.0;
 
   // --- STATE VARIABLES ---
-  bool _canBeDragged = false;
   bool _isLoading = true;
-  bool _showTutorial = false;
   String _userName = "Handwerker";
   String? _avatarUrl;
 
-  // --- DATA LISTS ---
+  // Data Lists
   List<Map<String, dynamic>> _specialties = [];
   List<Map<String, dynamic>> _popularDoctors = [];
   List<Map<String, dynamic>> _featuredDoctors = [];
@@ -36,84 +27,20 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
-    // Initialize the Animation Controller for the custom drawer
-    _drawerController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
     _fetchAllData();
   }
 
   @override
   void dispose() {
-    _drawerController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  // ---------------------------------------------------------------------------
-  // 1. CUSTOM DRAWER LOGIC (The "Engine")
-  // ---------------------------------------------------------------------------
-
-  void _onDragStart(DragStartDetails details) {
-    if (_showTutorial)
-      _dismissTutorial(); // Auto-dismiss tutorial on interaction
-
-    // Allow dragging if:
-    // 1. Drawer is already open (to close it)
-    // 2. OR touch starts within the left 70% of the screen (Mid-screen swipe support)
-    bool isDrawerOpen = _drawerController.value > 0;
-    bool isDragFromLeft =
-        details.localPosition.dx < MediaQuery.of(context).size.width * 0.7;
-
-    _canBeDragged = isDrawerOpen || isDragFromLeft;
-  }
-
-  void _onDragUpdate(DragUpdateDetails details) {
-    if (_canBeDragged) {
-      // Convert pixel movement to animation value (0.0 to 1.0)
-      double delta = details.primaryDelta! / _maxDrawerWidth;
-      _drawerController.value += delta;
-    }
-  }
-
-  void _onDragEnd(DragEndDetails details) {
-    if (!_canBeDragged) return;
-    if (_drawerController.isDismissed || _drawerController.isCompleted) return;
-
-    // Physics: If swipe is fast (>365 velocity), snap in that direction.
-    // Otherwise, snap to the nearest side (0 or 1) based on drag distance.
-    if (details.velocity.pixelsPerSecond.dx.abs() >= 365.0) {
-      double visualVelocity =
-          details.velocity.pixelsPerSecond.dx / _maxDrawerWidth;
-      _drawerController.fling(velocity: visualVelocity);
-    } else {
-      if (_drawerController.value < 0.5) {
-        _drawerController.reverse(); // Snap Close
-      } else {
-        _drawerController.forward(); // Snap Open
-      }
-    }
-  }
-
-  void _toggleDrawer() {
-    if (_drawerController.isDismissed) {
-      _drawerController.forward();
-    } else {
-      _drawerController.reverse();
-    }
-  }
-
-  void _dismissTutorial() {
-    if (mounted) setState(() => _showTutorial = false);
-  }
-
-  // ---------------------------------------------------------------------------
-  // 2. DATA FETCHING
-  // ---------------------------------------------------------------------------
-
+  // --- DATA LOADING ---
   Future<void> _refreshData() async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() => _isLoading = true);
     await Future.delayed(const Duration(milliseconds: 50));
     await _fetchAllData();
@@ -163,18 +90,16 @@ class _HomeScreenState extends State<HomeScreen>
           );
           _isLoading = false;
         });
-
-        // Trigger tutorial AFTER loading finishes
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) setState(() => _showTutorial = true);
-        });
       }
     } catch (e) {
-      debugPrint("Error loading data: $e");
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Error loading home data: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
+  // --- NAVIGATION ---
   Future<void> _navigateToDoctorDetails(int doctorId) async {
     await context.push('/doctor_details/$doctorId');
     _refreshData();
@@ -191,10 +116,6 @@ class _HomeScreenState extends State<HomeScreen>
     _refreshData();
   }
 
-  // ---------------------------------------------------------------------------
-  // 3. MAIN UI BUILD
-  // ---------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -204,71 +125,20 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }
 
-    return Stack(
-      children: [
-        // LAYER 1: The Main Screen (Scaffold)
-        GestureDetector(
-          // Attach Gesture Logic directly to the main screen layer
-          onHorizontalDragStart: _onDragStart,
-          onHorizontalDragUpdate: _onDragUpdate,
-          onHorizontalDragEnd: _onDragEnd,
-          behavior: HitTestBehavior.translucent,
-          child: Scaffold(
-            backgroundColor: const Color(0xFFFBFBFB),
-            body: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  _buildBanner(),
-                  _buildContentSections(),
-                ],
-              ),
-            ),
-          ),
+    return Scaffold(
+      backgroundColor: const Color(0xFFFBFBFB),
+      // IMPORTANT: No Drawer or GestureDetector here.
+      // MainWrapper handles the swipes now.
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [_buildHeader(), _buildBanner(), _buildContentSections()],
         ),
-
-        // LAYER 2: The Scrim (Dark Overlay)
-        // Only visible when drawer moves. Tapping it closes drawer.
-        AnimatedBuilder(
-          animation: _drawerController,
-          builder: (context, child) {
-            if (_drawerController.value == 0) return const SizedBox.shrink();
-            return GestureDetector(
-              onTap: _toggleDrawer,
-              child: Container(
-                color: Colors.black.withValues(
-                  alpha: 0.5 * _drawerController.value,
-                ),
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            );
-          },
-        ),
-
-        // LAYER 3: The Custom Drawer Panel
-        AnimatedBuilder(
-          animation: _drawerController,
-          builder: (context, child) {
-            // Translate X from -300 (hidden) to 0 (visible)
-            final double slide =
-                -_maxDrawerWidth * (1.0 - _drawerController.value);
-            return Transform.translate(offset: Offset(slide, 0), child: child);
-          },
-          child: _buildDrawerPanel(),
-        ),
-
-        // LAYER 4: The Swipe Tutorial Overlay
-        if (_showTutorial)
-          Positioned.fill(child: SwipeIndicator(onDismiss: _dismissTutorial)),
-      ],
+      ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // 4. COMPONENT WIDGETS
-  // ---------------------------------------------------------------------------
+  // --- WIDGETS ---
 
   Widget _buildHeader() {
     return Container(
@@ -308,17 +178,16 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ],
               ),
-              // Avatar Toggles Custom Drawer
-              GestureDetector(
-                onTap: _toggleDrawer,
-                child: CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.white24,
-                  backgroundImage:
-                      _avatarUrl != null
-                          ? NetworkImage(_avatarUrl!)
-                          : const NetworkImage('https://i.pravatar.cc/300'),
-                ),
+              // Avatar is just visual now.
+              // To open drawer via tap, you'd need a GlobalKey or Provider,
+              // but SWIPE Right will open the drawer from MainWrapper.
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.white24,
+                backgroundImage:
+                    _avatarUrl != null
+                        ? NetworkImage(_avatarUrl!)
+                        : const NetworkImage('https://i.pravatar.cc/300'),
               ),
             ],
           ),
@@ -354,103 +223,6 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDrawerPanel() {
-    return Container(
-      width: _maxDrawerWidth,
-      height: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 15,
-            offset: const Offset(5, 0),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            height: 220,
-            width: double.infinity,
-            color: primaryGreen,
-            padding: const EdgeInsets.only(top: 60, left: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 35,
-                  backgroundColor: Colors.white,
-                  backgroundImage:
-                      _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-                  child:
-                      _avatarUrl == null
-                          ? Icon(Icons.person, size: 40, color: primaryGreen)
-                          : null,
-                ),
-                const SizedBox(height: 15),
-                Text(
-                  _userName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Text(
-                  "Welcome back",
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _buildDrawerItem(
-                  Icons.person,
-                  "My Profile",
-                  () => context.go('/profile'),
-                ),
-                _buildDrawerItem(
-                  Icons.calendar_today,
-                  "My Appointments",
-                  () => context.push('/appointments'),
-                ),
-                _buildDrawerItem(Icons.settings, "Settings", _toggleDrawer),
-                const Divider(),
-                _buildDrawerItem(Icons.logout, "Logout", () async {
-                  await Supabase.instance.client.auth.signOut();
-                  if (mounted) context.go('/login');
-                }, color: Colors.red),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(
-    IconData icon,
-    String title,
-    VoidCallback onTap, {
-    Color? color,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: color ?? Colors.grey[700]),
-      title: Text(
-        title,
-        style: TextStyle(color: color ?? const Color(0xFF1A1A1A), fontSize: 16),
-      ),
-      onTap: () {
-        _toggleDrawer(); // Close drawer first
-        onTap();
-      },
     );
   }
 
@@ -639,11 +411,15 @@ class _HomeScreenState extends State<HomeScreen>
   // --- REUSABLE UI HELPERS ---
   Widget _getFallbackIcon(String name) {
     IconData iconData = Icons.medical_services_rounded;
-    if (name.toLowerCase().contains('dentist')) iconData = Icons.masks_rounded;
-    if (name.toLowerCase().contains('cardio'))
+    if (name.toLowerCase().contains('dentist')) {
+      iconData = Icons.masks_rounded;
+    }
+    if (name.toLowerCase().contains('cardio')) {
       iconData = Icons.favorite_rounded;
-    if (name.toLowerCase().contains('eye'))
+    }
+    if (name.toLowerCase().contains('eye')) {
       iconData = Icons.remove_red_eye_rounded;
+    }
     return Icon(iconData, color: const Color(0xFF008FA0), size: 28);
   }
 
@@ -837,127 +613,6 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
       ),
-    );
-  }
-}
-
-// -----------------------------------------------------------------------------
-// 5. INTEGRATED SWIPE INDICATOR CLASS (No separate file needed)
-// -----------------------------------------------------------------------------
-
-class SwipeIndicator extends StatefulWidget {
-  final VoidCallback onDismiss;
-  const SwipeIndicator({super.key, required this.onDismiss});
-
-  @override
-  State<SwipeIndicator> createState() => _SwipeIndicatorState();
-}
-
-class _SwipeIndicatorState extends State<SwipeIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _positionAnimation;
-  late Animation<double> _opacityAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-    // Start from 20 (Left) -> Move to 120 (Right) to simulate opening drawer
-    _positionAnimation = Tween<double>(begin: 20.0, end: 120.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
-      ),
-    );
-    _opacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.6, 1.0, curve: Curves.easeOut),
-      ),
-    );
-    _startTutorial();
-  }
-
-  Future<void> _startTutorial() async {
-    await _controller.forward();
-    _controller.reset();
-    await _controller.forward();
-    if (mounted) widget.onDismiss();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: widget.onDismiss,
-          child: Container(
-            color: Colors.black.withValues(alpha: 0.4),
-            width: double.infinity,
-            height: double.infinity,
-          ),
-        ),
-        Positioned(
-          left: 0,
-          top: MediaQuery.of(context).size.height * 0.4,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(_positionAnimation.value, 0),
-                child: Opacity(opacity: _opacityAnimation.value, child: child),
-              );
-            },
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.2),
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  child: const Icon(
-                    Icons.touch_app_rounded,
-                    color: Colors.white,
-                    size: 40,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Material(
-                  color: Colors.transparent,
-                  child: Text(
-                    "Swipe to open menu",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        BoxShadow(
-                          color: Colors.black,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
