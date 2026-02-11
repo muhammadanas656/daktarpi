@@ -14,8 +14,10 @@ import '../../core/main_wrapper/main_wrapper.dart';
 import '../../features/common/enable_location_screen.dart';
 
 // --- NEW IMPORTS: Privacy Policy & Appointments ---
-import '../../features/privacy_policy/privacy_policy_screen.dart';
-import '../../features/appointments/my_appointments_screen.dart'; // <--- NEW IMPORT
+import '../../features/menu/privacy_policy_screen.dart';
+import '../../features/appointments/my_appointments_screen.dart';
+import '../../features/appointments/appointment_confirmation_screen.dart';
+import '../../features/appointments/patient_details_screen.dart';
 
 // --- DOCTOR SCREENS ---
 import '../../features/doctors/popular_doctors_screen.dart';
@@ -78,6 +80,35 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final doctorId = state.pathParameters['id']!;
         return DoctorDetailsScreen(doctorId: doctorId);
+      },
+    ),
+
+    // Appointment patient booking details entry page
+    GoRoute(
+      path: '/appointment_booking',
+      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return PatientDetailsScreen(
+          doctor: extra['doctor'],
+          clinic: extra['clinic'],
+          initialDate: extra['initialDate'],
+        );
+      },
+    ),
+
+    GoRoute(
+      path: '/payment_method', // Kept name for compatibility with previous step
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return AppointmentConfirmationScreen(
+          doctor: extra['doctor'],
+          clinic: extra['clinic'],
+          patientDetails: extra['patientDetails'],
+          initialDate: extra['appointmentDate'], // Mapped from previous step
+          appointmentId: extra['appointmentId'],
+        );
       },
     ),
 

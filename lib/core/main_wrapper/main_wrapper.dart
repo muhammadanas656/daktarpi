@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/menu/custom_drawer.dart';
 
-// --- DOCTORS SCREEN PLACEHOLDER ---
+// --- DOCTORS SCREEN PLACEHOLDER (Visual for Back Card) ---
 class DoctorsScreen extends StatelessWidget {
   const DoctorsScreen({super.key});
 
@@ -61,9 +61,7 @@ class _MainWrapperState extends State<MainWrapper>
   late AnimationController _drawerController;
   final double _maxSlide = 290.0;
 
-  // --- TUNING PARAMETERS ---
-  // Increased from 60 to 100 to make it easier to grab
-  final double _dragHitArea = 100.0;
+  // Track if we are currently manipulating the drawer
   bool _isDraggingDrawer = false;
 
   @override
@@ -86,6 +84,9 @@ class _MainWrapperState extends State<MainWrapper>
   }
 
   Future<void> _runIntroTutorial() async {
+    // Only run intro if on Home tab
+    if (widget.navigationShell.currentIndex != 0) return;
+
     await Future.delayed(const Duration(milliseconds: 3500));
     if (!mounted) return;
 
@@ -115,12 +116,16 @@ class _MainWrapperState extends State<MainWrapper>
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
     );
+    // Always close drawer when navigating
     if (_drawerController.value > 0) {
       _drawerController.reverse();
     }
   }
 
   void _toggleDrawer() {
+    // Only allow toggling if on Home Screen
+    if (widget.navigationShell.currentIndex != 0) return;
+
     if (_drawerController.isDismissed) {
       _drawerController.forward();
     } else {
@@ -128,43 +133,71 @@ class _MainWrapperState extends State<MainWrapper>
     }
   }
 
-  // --- ⚡ IMPROVED GESTURE LOGIC ⚡ ---
+  // --- ⚡ SMART ROUTING GESTURES ⚡ ---
 
-  void _onHorizontalDragStart(DragStartDetails details) {
-    bool isDrawerOpen = _drawerController.value > 0;
+  void _onDragStart(DragStartDetails details) {
+    _isDraggingDrawer = false;
+  }
 
-    // Allow dragging if drawer is open OR if touch is within the hit area
-    if (isDrawerOpen || details.globalPosition.dx < _dragHitArea) {
+  void _onDragUpdate(DragUpdateDetails details) {
+    // 1. If we are NOT on Home Tab, we NEVER move the drawer visually.
+    if (widget.navigationShell.currentIndex != 0) return;
+
+    double delta = details.primaryDelta! / _maxSlide;
+
+    // 2. Only allow opening (positive delta) if closed, or any movement if already open
+    if (_drawerController.value > 0 || delta > 0) {
+      _drawerController.value += delta;
+    }
+
+    // 3. Flag that we are interacting with the drawer
+    if (_drawerController.value > 0.0) {
       _isDraggingDrawer = true;
-    } else {
-      _isDraggingDrawer = false;
     }
   }
 
-  void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (!_isDraggingDrawer) return;
+  void _onDragEnd(DragEndDetails details) {
+    double velocity = details.primaryVelocity ?? 0;
+    int currentIndex = widget.navigationShell.currentIndex;
 
-    // Calculate delta (movement amount)
-    double delta = details.primaryDelta! / _maxSlide;
-
-    // Update controller
-    _drawerController.value += delta;
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (_isDraggingDrawer) {
-      // 1. Velocity Check: A quick flick (velocity > 200) opens it
-      // 2. Position Check: If dragged more than 30% open, finish opening
-      double velocity = details.primaryVelocity ?? 0;
-
-      if (_drawerController.value > 0.3 || velocity > 200) {
-        _drawerController.forward();
+    // --- CASE A: DRAWER IS ACTIVE (Home Tab Only) ---
+    if (_isDraggingDrawer || _drawerController.value > 0.0) {
+      // If user swiped fast or dragged past 50%
+      if (velocity.abs() > 400) {
+        if (velocity > 0)
+          _drawerController.forward(); // Open
+        else
+          _drawerController.reverse(); // Close
       } else {
-        _drawerController.reverse();
+        if (_drawerController.value > 0.5)
+          _drawerController.forward();
+        else
+          _drawerController.reverse();
       }
-
       _isDraggingDrawer = false;
       return;
+    }
+
+    // --- CASE B: TAB SWITCHING (Drawer is Closed) ---
+    // Require a deliberate swipe (> 300 velocity)
+    if (velocity.abs() > 300) {
+      if (velocity < 0) {
+        // <<< SWIPE LEFT (Next Tab)
+        if (currentIndex < 3) {
+          _goToBranch(currentIndex + 1);
+        }
+      } else {
+        // >>> SWIPE RIGHT (Previous Tab OR Open Drawer)
+
+        // If we are on Home (Index 0), Swipe Right opens Drawer
+        if (currentIndex == 0) {
+          _drawerController.forward();
+        }
+        // If we are on any other tab, Swipe Right goes to Previous Tab
+        else {
+          _goToBranch(currentIndex - 1);
+        }
+      }
     }
   }
 
@@ -174,6 +207,12 @@ class _MainWrapperState extends State<MainWrapper>
       canPop: false,
       onPopInvoked: (didPop) {
         if (didPop) return;
+
+        if (_drawerController.value > 0) {
+          _drawerController.reverse();
+          return;
+        }
+
         final String location = GoRouterState.of(context).uri.path;
         final bool isRootTab =
             location == '/home' ||
@@ -189,88 +228,86 @@ class _MainWrapperState extends State<MainWrapper>
       },
       child: Scaffold(
         backgroundColor: drawerBgColor,
-        body: Stack(
-          children: [
-            // LAYER 1: BACK CARD
-            AnimatedBuilder(
-              animation: _drawerController,
-              builder: (context, child) {
-                double slide = 265 * _drawerController.value;
-                double scale = 1 - (_drawerController.value * 0.45);
-                double rotate = 0.0;
-                double fade = (_drawerController.value * 6).clamp(0.0, 1.0);
+        body: GestureDetector(
+          onHorizontalDragStart: _onDragStart,
+          onHorizontalDragUpdate: _onDragUpdate,
+          onHorizontalDragEnd: _onDragEnd,
+          behavior: HitTestBehavior.translucent,
+          child: Stack(
+            children: [
+              // LAYER 1: BACK CARD (Decoration)
+              AnimatedBuilder(
+                animation: _drawerController,
+                builder: (context, child) {
+                  double slide = 265 * _drawerController.value;
+                  double scale = 1 - (_drawerController.value * 0.45);
+                  double rotate = 0.0;
+                  double fade = (_drawerController.value * 6).clamp(0.0, 1.0);
 
-                return Transform(
-                  transform:
-                      Matrix4.identity()
-                        ..translate(slide)
-                        ..scale(scale)
-                        ..rotateZ(rotate),
-                  alignment: Alignment.centerLeft,
-                  child: Opacity(
-                    opacity: fade,
-                    child: AbsorbPointer(
-                      absorbing: true,
-                      child: Container(
-                        width: MediaQuery.of(context).size.width,
-                        height: MediaQuery.of(context).size.height,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(-15, 15),
-                            ),
-                          ],
-                        ),
-                        child: Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(30),
-                              child: const DoctorsScreen(),
-                            ),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: drawerBgColor.withOpacity(
-                                  (0.8 * _drawerController.value).clamp(
-                                    0.0,
-                                    1.0,
-                                  ),
-                                ),
-                                borderRadius: BorderRadius.circular(30),
+                  return Transform(
+                    transform:
+                        Matrix4.identity()
+                          ..translate(slide)
+                          ..scale(scale)
+                          ..rotateZ(rotate),
+                    alignment: Alignment.centerLeft,
+                    child: Opacity(
+                      opacity: fade,
+                      child: AbsorbPointer(
+                        absorbing: true,
+                        child: Container(
+                          width: MediaQuery.of(context).size.width,
+                          height: MediaQuery.of(context).size.height,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(-15, 15),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          child: Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(30),
+                                child: const DoctorsScreen(),
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: drawerBgColor.withOpacity(
+                                    (0.8 * _drawerController.value).clamp(
+                                      0.0,
+                                      1.0,
+                                    ),
+                                  ),
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
 
-            // LAYER 2: MENU
-            SafeArea(
-              child: SizedBox(
-                width: 260,
-                child: CustomDrawer(
-                  onClose: _toggleDrawer,
-                  onNavigateToTab: _goToBranch,
+              // LAYER 2: MENU
+              SafeArea(
+                child: SizedBox(
+                  width: 260,
+                  child: CustomDrawer(
+                    onClose: _toggleDrawer,
+                    onNavigateToTab: _goToBranch,
+                  ),
                 ),
               ),
-            ),
 
-            // LAYER 3: FRONT CARD (Main App)
-            GestureDetector(
-              // IMPORTANT: Using 'translucent' allows clicks to pass through
-              // to buttons, but catches swipes on empty spaces.
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragStart: _onHorizontalDragStart,
-              onHorizontalDragUpdate: _onHorizontalDragUpdate,
-              onHorizontalDragEnd: _onHorizontalDragEnd,
-              child: AnimatedBuilder(
+              // LAYER 3: FRONT CARD (Main App)
+              AnimatedBuilder(
                 animation: _drawerController,
                 builder: (context, child) {
                   double slide = _maxSlide * _drawerController.value;
@@ -300,6 +337,7 @@ class _MainWrapperState extends State<MainWrapper>
                             ),
                           ],
                         ),
+                        // Only absorb pointers if drawer is actively open
                         child: AbsorbPointer(
                           absorbing: isDrawerOpen,
                           child: child,
@@ -358,47 +396,47 @@ class _MainWrapperState extends State<MainWrapper>
                   ),
                 ),
               ),
-            ),
 
-            // LAYER 4: FLOATING CLOSE BUTTON
-            AnimatedBuilder(
-              animation: _drawerController,
-              builder: (context, child) {
-                if (_drawerController.value < 0.2) {
-                  return const SizedBox.shrink();
-                }
-                return Positioned(
-                  top: 60,
-                  right: 30,
-                  child: Opacity(
-                    opacity: _drawerController.value,
-                    child: GestureDetector(
-                      onTap: _toggleDrawer,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 26,
+              // LAYER 4: CLOSE BUTTON
+              AnimatedBuilder(
+                animation: _drawerController,
+                builder: (context, child) {
+                  if (_drawerController.value < 0.2) {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    top: 60,
+                    right: 30,
+                    child: Opacity(
+                      opacity: _drawerController.value,
+                      child: GestureDetector(
+                        onTap: _toggleDrawer,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 26,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-          ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

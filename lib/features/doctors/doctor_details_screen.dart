@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui'; // For BackdropFilter
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -33,7 +33,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
   Map<String, dynamic>? _doctor;
   List<Map<String, dynamic>> _clinics = [];
   List<Map<String, dynamic>> _schedules = [];
+
+  // THIS IS THE KEY VARIABLE: Tracks the user's selected location
   Map<String, dynamic>? _selectedClinic;
+
   bool _isFavorite = false;
 
   // Booking Data
@@ -42,7 +45,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
   bool _isLoadingSlots = false;
 
   // --- UI STATE ---
-  int _selectedTimeSlotIndex = -1;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _locationSectionKey = GlobalKey();
 
@@ -259,10 +261,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
       final client = Supabase.instance.client;
       final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
+      // We only care about slots for the *selected clinic* on the selected date
       final response = await client
           .from('appointments')
           .select('start_time, end_time')
           .eq('doctor_id', widget.doctorId)
+          .eq('clinic_id', _selectedClinic!['id']) // Filter by current clinic
           .eq('schedule_date', formattedDate)
           .neq('status', 'cancelled');
 
@@ -275,15 +279,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 return "$start - $end";
               }).toList();
 
-          // Reset selection if slot is now booked
-          if (_selectedTimeSlotIndex != -1) {
-            final slots = _getSlotsForSelectedDate();
-            if (_selectedTimeSlotIndex < slots.length) {
-              if (_bookedSlots.contains(slots[_selectedTimeSlotIndex])) {
-                _selectedTimeSlotIndex = -1;
-              }
-            }
-          }
           _isLoadingSlots = false;
         });
       }
@@ -464,62 +459,23 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     );
   }
 
-  // --- BOOKING & FAVORITE ---
+  // --- BOOKING LOGIC ---
   Future<void> _handleBooking() async {
     if (_selectedClinic == null) {
       _showSnack("No clinic selected");
       return;
     }
-    final slots = _getSlotsForSelectedDate();
-    if (_selectedTimeSlotIndex == -1 ||
-        _selectedTimeSlotIndex >= slots.length) {
-      _showSnack("Please select a time slot");
-      return;
-    }
-    final selectedSlot = slots[_selectedTimeSlotIndex];
-    if (_bookedSlots.contains(selectedSlot)) {
-      _showSnack("Sorry, this slot is already booked.");
-      _fetchBookedSlots();
-      return;
-    }
 
-    setState(() => _isLoading = true);
-
-    try {
-      final client = Supabase.instance.client;
-      final userId = client.auth.currentUser?.id;
-
-      if (userId == null) {
-        _showSnack("Please login to book");
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final times = selectedSlot.split(' - ');
-
-      await client.from('appointments').insert({
-        'user_id': userId,
-        'doctor_id': widget.doctorId,
-        'clinic_id': _selectedClinic!['id'],
-        'schedule_date': formattedDate,
-        'start_time': times[0],
-        'end_time': times[1],
-        'status': 'confirmed',
-      });
-
-      if (mounted) {
-        _showSnack("Appointment Booked Successfully!", isSuccess: true);
-        await _fetchBookedSlots();
-        setState(() {
-          _selectedTimeSlotIndex = -1;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      _showSnack("Booking failed: ${e.toString().split('\n').first}");
-      if (mounted) setState(() => _isLoading = false);
-    }
+    // IMPORTANT: We pass the selected clinic, doctor, and date to the next screen.
+    // The next screen will use this clinic ID to show relevant slots.
+    context.push(
+      '/appointment_booking',
+      extra: {
+        'doctor': _doctor,
+        'clinic': _selectedClinic, // <--- This saves the user's choice
+        'initialDate': _selectedDate,
+      },
+    );
   }
 
   Future<void> _toggleFavorite() async {
@@ -565,7 +521,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
       barrierColor: Colors.black.withValues(alpha: 0.3),
       builder: (context) {
         return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5), // Optimizable blur
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
           child: Dialog(
             backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(
@@ -604,13 +560,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     if (pickedDate != null && !_isSameDay(pickedDate, _selectedDate)) {
       setState(() {
         _selectedDate = pickedDate;
-        _selectedTimeSlotIndex = -1;
       });
       _fetchBookedSlots();
     }
   }
 
-  // --- SLOT GENERATOR ---
+  // --- SLOT GENERATOR (Visual Representation Only) ---
   List<String> _getSlotsForSelectedDate() {
     if (_schedules.isEmpty || _selectedClinic == null) return [];
 
@@ -618,6 +573,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     final now = DateTime.now();
     final isToday = _isSameDay(_selectedDate, now);
 
+    // Filter schedules for the *selected clinic*
     final daySchedules =
         _schedules
             .where(
@@ -683,7 +639,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     return "$h:$m";
   }
 
-  // --- BUILD ---
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -734,10 +689,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                   const SizedBox(height: 12),
                   _buildLocationSelector(),
                   const SizedBox(height: 16),
-
-                  // OPTIMIZATION: RepaintBoundary prevents map repaints on scroll
                   RepaintBoundary(child: _buildMap()),
-
                   const SizedBox(height: 40),
                 ],
               ),
@@ -837,12 +789,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            // OPTIMIZATION: Added cacheWidth/Height to reduce memory usage
             child: Image.network(
               _doctor!['profile_picture_url'] ?? 'https://i.pravatar.cc/300',
               width: 80,
               height: 80,
-              cacheWidth: 160, // 2x for Retina
+              cacheWidth: 160,
               cacheHeight: 160,
               fit: BoxFit.cover,
               errorBuilder:
@@ -990,9 +941,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     final waitTime = hasData ? _selectedClinic!['avg_wait_time'] : 'N/A';
     final availableSlots = _getSlotsForSelectedDate();
 
-    // Setup Logic for Calendar Dates
     final now = DateTime.now();
-    // Use standard dates + determine if selected is custom
     final today = now;
     final tomorrow = now.add(const Duration(days: 1));
     DateTime thirdDate = now.add(const Duration(days: 2));
@@ -1100,10 +1049,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 ),
                 const SizedBox(height: 20),
 
-                // --- OPTIMIZED DATE SELECTION ROW ---
+                // --- DATE SELECTION ---
                 Row(
                   children: [
-                    // Dynamic Date Tabs
                     ...List.generate(datesToShow.length, (index) {
                       final date = datesToShow[index];
                       final isSelected = _isSameDay(date, _selectedDate);
@@ -1122,7 +1070,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                           onTap: () {
                             setState(() {
                               _selectedDate = date;
-                              _selectedTimeSlotIndex = -1;
                             });
                             _fetchBookedSlots();
                           },
@@ -1151,8 +1098,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                         ),
                       );
                     }),
-
-                    // Expand / Calendar Button
                     Expanded(
                       child: GestureDetector(
                         onTap: _openDatePicker,
@@ -1174,7 +1119,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 const Divider(height: 1, color: Colors.grey),
                 const SizedBox(height: 20),
 
-                // Time Slots List
+                // --- TIME SLOTS (Visual only, no onTap) ---
                 if (_isLoadingSlots)
                   const Center(
                     child: Padding(
@@ -1202,18 +1147,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                     child: Row(
                       children:
                           availableSlots.asMap().entries.map((entry) {
-                            final index = entry.key;
                             final slotText = entry.value;
                             final isBooked = _bookedSlots.contains(slotText);
-                            final isSelected = _selectedTimeSlotIndex == index;
+                            // Visual: Default cyan color, Booked is grey.
+                            // We don't check for 'isSelected' here because selection is disabled.
 
                             return GestureDetector(
-                              onTap:
-                                  isBooked
-                                      ? null
-                                      : () => setState(
-                                        () => _selectedTimeSlotIndex = index,
-                                      ),
+                              onTap: null, // Disabled
                               child: Container(
                                 margin: const EdgeInsets.only(right: 12),
                                 padding: const EdgeInsets.symmetric(
@@ -1222,16 +1162,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                                 ),
                                 decoration: BoxDecoration(
                                   color:
-                                      isBooked
-                                          ? Colors.grey[200]
-                                          : isSelected
-                                          ? primaryGreen.withValues(alpha: 0.15)
-                                          : cyanHeader,
+                                      isBooked ? Colors.grey[200] : cyanHeader,
                                   borderRadius: BorderRadius.circular(20),
-                                  border:
-                                      isSelected && !isBooked
-                                          ? Border.all(color: primaryGreen)
-                                          : null,
                                 ),
                                 child: Text(
                                   slotText,
@@ -1239,8 +1171,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                                     color:
                                         isBooked
                                             ? Colors.grey[400]
-                                            : isSelected
-                                            ? primaryGreen
                                             : const Color(0xFF00695C),
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -1510,7 +1440,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
             ),
           ),
 
-        // --- VERTICAL STACK FOR FABs ---
+        // --- FLOATING ACTION BUTTONS ---
         Positioned(
           bottom: 12,
           right: 12,
@@ -1518,7 +1448,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // 1. LOCATOR MENU ROW
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1532,7 +1461,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                         heroTag: "btn_center_clinic",
                         backgroundColor: Colors.white,
                         onPressed: _centerOnClinic,
-                        tooltip: "Clinic Location",
                         child: const Icon(
                           Icons.medical_services_outlined,
                           color: Colors.redAccent,
@@ -1551,7 +1479,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                           heroTag: "btn_center_user",
                           backgroundColor: Colors.white,
                           onPressed: _centerOnUser,
-                          tooltip: "My Location",
                           child: const Icon(
                             Icons.accessibility_new_rounded,
                             color: Colors.blueAccent,
@@ -1574,7 +1501,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 ],
               ),
               const SizedBox(height: 16),
-              // 2. DIRECTIONS MENU ROW
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1588,7 +1514,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                         heroTag: "btn_external_map",
                         backgroundColor: Colors.white,
                         onPressed: _launchExternalMaps,
-                        tooltip: "Google Maps",
                         child: const Icon(Icons.public, color: Colors.blue),
                       ),
                     ),
@@ -1603,7 +1528,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                         heroTag: "btn_inapp_map",
                         backgroundColor: Colors.white,
                         onPressed: _launchInAppDirection,
-                        tooltip: "In-App Route",
                         child: const Icon(
                           Icons.turn_sharp_right,
                           color: primaryGreen,
