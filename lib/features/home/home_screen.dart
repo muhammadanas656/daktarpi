@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+// Import the Doctors Screen to access the global signal
+import '../../features/doctors/doctors_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,28 +31,32 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _fetchAllData();
+
+    // --- LISTENER FOR FAVORITES UPDATE ---
+    // This listens to the signal sent from DoctorsScreen
+    favoriteUpdateSignal.addListener(() {
+      if (mounted) {
+        _refreshData();
+      }
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    favoriteUpdateSignal.removeListener(
+      () {},
+    ); // Cleanup listener (best practice)
     super.dispose();
   }
 
   // --- DATA LOADING ---
-  // This logic runs:
-  // 1. When the app starts (initState)
-  // 2. When the user returns from ANY other page (via _refreshData)
   Future<void> _refreshData() async {
     if (!mounted) return;
-
-    // This immediately shows the loading screen
-    setState(() => _isLoading = true);
-
-    // A tiny delay ensures the UI has time to render the loading spinner
-    // before the network request starts, making the transition feel smoother.
-    await Future.delayed(const Duration(milliseconds: 50));
-
+    // Silent refresh if desired, or show loading.
+    // Showing loading briefly ensures user knows data updated.
+    // setState(() => _isLoading = true);
+    // await Future.delayed(const Duration(milliseconds: 50));
     await _fetchAllData();
   }
 
@@ -88,8 +95,11 @@ class _HomeScreenState extends State<HomeScreen> {
             _userName = profileData['full_name'] ?? "Handwerker";
             _avatarUrl = profileData['profile_picture_url'];
           }
+
+          // Parse Favorites
           _favoriteDoctorIds =
               (results[1] as List).map((e) => e['doctor_id'] as int).toSet();
+
           _specialties = List<Map<String, dynamic>>.from(results[2] as List);
           _popularDoctors = List<Map<String, dynamic>>.from(results[3] as List);
           _featuredDoctors = List<Map<String, dynamic>>.from(
@@ -107,12 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --- NAVIGATION LOGIC ---
-  // Every navigation action below uses 'await' to pause execution
-  // and '_refreshData()' to reload when the user returns.
-
   Future<void> _navigateToDoctorDetails(int doctorId) async {
     await context.push('/doctor_details/$doctorId');
-    // Code resumes here when user hits 'Back'
     _refreshData();
   }
 
@@ -214,7 +220,6 @@ class _HomeScreenState extends State<HomeScreen> {
               controller: _searchController,
               readOnly: true,
               onTap: () async {
-                // Logic added for Search Bar return
                 await context.push('/popular_doctors');
                 _refreshData();
               },
@@ -348,7 +353,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildSectionHeader(
           "Popular Doctor",
           onTap: () async {
-            // Logic added for Popular Doctor See All
             await context.push('/popular_doctors');
             _refreshData();
           },
@@ -381,7 +385,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildSectionHeader(
           "Feature Doctor",
           onTap: () async {
-            // Logic added for Feature Doctor See All
             await context.push('/feature_doctors');
             _refreshData();
           },

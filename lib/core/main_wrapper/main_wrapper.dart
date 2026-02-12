@@ -2,44 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/menu/custom_drawer.dart';
-
-// --- DOCTORS SCREEN PLACEHOLDER (Visual for Back Card) ---
-class DoctorsScreen extends StatelessWidget {
-  const DoctorsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text(
-          "Find Your Doctor",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.medical_services, size: 80, color: Colors.grey[200]),
-            const SizedBox(height: 16),
-            Text(
-              "Doctors List",
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+import '../../features/doctors/doctors_screen.dart';
 
 class MainWrapper extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -61,7 +24,6 @@ class _MainWrapperState extends State<MainWrapper>
   late AnimationController _drawerController;
   final double _maxSlide = 290.0;
 
-  // Track if we are currently manipulating the drawer
   bool _isDraggingDrawer = false;
 
   @override
@@ -84,7 +46,6 @@ class _MainWrapperState extends State<MainWrapper>
   }
 
   Future<void> _runIntroTutorial() async {
-    // Only run intro if on Home tab
     if (widget.navigationShell.currentIndex != 0) return;
 
     await Future.delayed(const Duration(milliseconds: 3500));
@@ -116,16 +77,13 @@ class _MainWrapperState extends State<MainWrapper>
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
     );
-    // Always close drawer when navigating
     if (_drawerController.value > 0) {
       _drawerController.reverse();
     }
   }
 
   void _toggleDrawer() {
-    // Only allow toggling if on Home Screen
-    if (widget.navigationShell.currentIndex != 0) return;
-
+    // Optional: Only toggle on home screen if desired, but button usually implies global access
     if (_drawerController.isDismissed) {
       _drawerController.forward();
     } else {
@@ -133,24 +91,23 @@ class _MainWrapperState extends State<MainWrapper>
     }
   }
 
-  // --- ⚡ SMART ROUTING GESTURES ⚡ ---
-
+  // --- GESTURES ---
   void _onDragStart(DragStartDetails details) {
     _isDraggingDrawer = false;
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    // 1. If we are NOT on Home Tab, we NEVER move the drawer visually.
+    // FIX: Only allow drawer drag on Home Screen (index 0)
+    // This prevents blocking vertical scrolls on other screens (like Doctors list)
     if (widget.navigationShell.currentIndex != 0) return;
 
     double delta = details.primaryDelta! / _maxSlide;
 
-    // 2. Only allow opening (positive delta) if closed, or any movement if already open
+    // Only allow dragging open (positive delta) or closing if already open
     if (_drawerController.value > 0 || delta > 0) {
       _drawerController.value += delta;
     }
 
-    // 3. Flag that we are interacting with the drawer
     if (_drawerController.value > 0.0) {
       _isDraggingDrawer = true;
     }
@@ -160,41 +117,42 @@ class _MainWrapperState extends State<MainWrapper>
     double velocity = details.primaryVelocity ?? 0;
     int currentIndex = widget.navigationShell.currentIndex;
 
-    // --- CASE A: DRAWER IS ACTIVE (Home Tab Only) ---
+    // 1. Handle Drawer Snap Logic
     if (_isDraggingDrawer || _drawerController.value > 0.0) {
-      // If user swiped fast or dragged past 50%
+      // If moving fast, snap based on direction
       if (velocity.abs() > 400) {
-        if (velocity > 0)
-          _drawerController.forward(); // Open
-        else
-          _drawerController.reverse(); // Close
-      } else {
-        if (_drawerController.value > 0.5)
+        if (velocity > 0) {
           _drawerController.forward();
-        else
+        } else {
           _drawerController.reverse();
+        }
+      } else {
+        // If moving slow, snap based on position (>50% open)
+        if (_drawerController.value > 0.5) {
+          _drawerController.forward();
+        } else {
+          _drawerController.reverse();
+        }
       }
       _isDraggingDrawer = false;
       return;
     }
 
-    // --- CASE B: TAB SWITCHING (Drawer is Closed) ---
-    // Require a deliberate swipe (> 300 velocity)
-    if (velocity.abs() > 300) {
+    // 2. Handle Tab Switching Swipe Logic
+    // Only allow swipe switching if drawer is closed
+    if (_drawerController.isDismissed && velocity.abs() > 300) {
       if (velocity < 0) {
-        // <<< SWIPE LEFT (Next Tab)
+        // Swipe Left -> Next Tab
         if (currentIndex < 3) {
           _goToBranch(currentIndex + 1);
         }
       } else {
-        // >>> SWIPE RIGHT (Previous Tab OR Open Drawer)
-
-        // If we are on Home (Index 0), Swipe Right opens Drawer
+        // Swipe Right -> Previous Tab (or Open Drawer if on Home)
         if (currentIndex == 0) {
+          // On Home, Swipe Right opens drawer
           _drawerController.forward();
-        }
-        // If we are on any other tab, Swipe Right goes to Previous Tab
-        else {
+        } else {
+          // On other tabs, Swipe Right goes to previous tab
           _goToBranch(currentIndex - 1);
         }
       }
@@ -203,9 +161,11 @@ class _MainWrapperState extends State<MainWrapper>
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
 
         if (_drawerController.value > 0) {
@@ -229,13 +189,14 @@ class _MainWrapperState extends State<MainWrapper>
       child: Scaffold(
         backgroundColor: drawerBgColor,
         body: GestureDetector(
+          // Allow gestures to pass through to child widgets (like lists)
+          behavior: HitTestBehavior.translucent,
           onHorizontalDragStart: _onDragStart,
           onHorizontalDragUpdate: _onDragUpdate,
           onHorizontalDragEnd: _onDragEnd,
-          behavior: HitTestBehavior.translucent,
           child: Stack(
             children: [
-              // LAYER 1: BACK CARD (Decoration)
+              // LAYER 1: BACK CARD (Doctors Screen visual)
               AnimatedBuilder(
                 animation: _drawerController,
                 builder: (context, child) {
@@ -256,37 +217,32 @@ class _MainWrapperState extends State<MainWrapper>
                       child: AbsorbPointer(
                         absorbing: true,
                         child: Container(
-                          width: MediaQuery.of(context).size.width,
-                          height: MediaQuery.of(context).size.height,
+                          width: size.width,
+                          height: size.height,
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(30),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
+                                color: Colors.black.withValues(alpha: 0.1),
                                 blurRadius: 10,
                                 offset: const Offset(-15, 15),
                               ),
                             ],
                           ),
-                          child: Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(30),
-                                child: const DoctorsScreen(),
-                              ),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: drawerBgColor.withOpacity(
-                                    (0.8 * _drawerController.value).clamp(
-                                      0.0,
-                                      1.0,
-                                    ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(30),
+                            child: Stack(
+                              children: [
+                                const DoctorsScreen(),
+                                Container(
+                                  color: drawerBgColor.withValues(
+                                    alpha: (0.8 * _drawerController.value)
+                                        .clamp(0.0, 1.0),
                                   ),
-                                  borderRadius: BorderRadius.circular(30),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -306,7 +262,7 @@ class _MainWrapperState extends State<MainWrapper>
                 ),
               ),
 
-              // LAYER 3: FRONT CARD (Main App)
+              // LAYER 3: FRONT CARD
               AnimatedBuilder(
                 animation: _drawerController,
                 builder: (context, child) {
@@ -331,13 +287,12 @@ class _MainWrapperState extends State<MainWrapper>
                         decoration: BoxDecoration(
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
+                              color: Colors.black.withValues(alpha: 0.3),
                               blurRadius: 40,
                               offset: const Offset(-30, 30),
                             ),
                           ],
                         ),
-                        // Only absorb pointers if drawer is actively open
                         child: AbsorbPointer(
                           absorbing: isDrawerOpen,
                           child: child,
@@ -357,7 +312,7 @@ class _MainWrapperState extends State<MainWrapper>
                     selectedIndex: widget.navigationShell.currentIndex,
                     onDestinationSelected: _goToBranch,
                     backgroundColor: Colors.white,
-                    indicatorColor: primaryGreen.withOpacity(0.15),
+                    indicatorColor: primaryGreen.withValues(alpha: 0.15),
                     elevation: 0,
                     destinations: const [
                       NavigationDestination(
@@ -418,7 +373,7 @@ class _MainWrapperState extends State<MainWrapper>
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 blurRadius: 10,
                                 offset: const Offset(0, 5),
                               ),

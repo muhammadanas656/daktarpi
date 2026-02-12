@@ -16,11 +16,14 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   static const Color textDark = Color(0xFF1A1A1A);
   static const Color textLight = Color(0xFF626F8D);
   static const Color borderColor = Color(0xFFE0E0E0);
-  static const Color dangerRed = Color(0xFFFF4D4F);
+  static const Color dangerRed = Color(
+    0xFFE53935,
+  ); // Matched ProfileScreen error red
 
   bool _isLoading = true;
   List<Map<String, dynamic>> _appointments = [];
   RealtimeChannel? _appointmentsSubscription;
+  OverlayEntry? _errorOverlay; // Added for Custom Error
 
   @override
   void initState() {
@@ -34,7 +37,121 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     if (_appointmentsSubscription != null) {
       Supabase.instance.client.removeChannel(_appointmentsSubscription!);
     }
+    _errorOverlay?.remove(); // Clean up overlay
     super.dispose();
+  }
+
+  // --- 1. CUSTOM ERROR OVERLAY (Copied from ProfileScreen) ---
+  void _showTopError(String message) {
+    if (!mounted) return;
+    _errorOverlay?.remove();
+    _errorOverlay = OverlayEntry(
+      builder:
+          (context) => Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 20,
+            right: 20,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: dangerRed,
+                  borderRadius: BorderRadius.circular(50),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        message,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+    );
+
+    Overlay.of(context).insert(_errorOverlay!);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) {
+        _errorOverlay?.remove();
+        _errorOverlay = null;
+      }
+    });
+  }
+
+  // --- 2. CUSTOM SUCCESS SNACKBAR (Matched ProfileScreen) ---
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: primaryGreen,
+        behavior: SnackBarBehavior.floating,
+        elevation: 6,
+        margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+      ),
+    );
+  }
+
+  // --- REFRESH LOGIC ---
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final extra = GoRouterState.of(context).extra;
+    if (extra != null && extra is Map && extra['refresh'] == true) {
+      _fetchAppointments();
+      // Clear extra logic would ideally happen here or inside router
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showSuccessSnackBar("Appointment Successful!");
+      });
+    }
   }
 
   void _setupRealtimeSubscription() {
@@ -101,6 +218,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
         });
       }
     } catch (e) {
+      // Use Top Error for fetch failures if desired, or silent/debugPrint
       debugPrint('Error fetching appointments: $e');
       if (mounted) setState(() => _isLoading = false);
     }
@@ -115,18 +233,11 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           .eq('id', id);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Appointment Cancelled"),
-            backgroundColor: textDark,
-          ),
-        );
+        _showSuccessSnackBar("Appointment Cancelled");
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not cancel appointment.")),
-        );
+        _showTopError("Could not cancel appointment.");
       }
     } finally {
       if (mounted) _fetchAppointments();
@@ -148,22 +259,19 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
       'dob': appointment['patient_dob'] ?? DateTime.now().toIso8601String(),
     };
 
-    // Wait for the result. If true, it means an update happened.
-    // We removed the unused 'result' variable here since we just refresh anyway.
-    await context.push(
+    final result = await context.push(
       '/payment_method',
       extra: {
         'doctor': doctor,
         'clinic': clinic,
         'patientDetails': patientDetails,
         'appointmentDate': DateTime.now().add(const Duration(days: 1)),
-        'appointmentId': appointmentId, // Pass ID
+        'appointmentId': appointmentId,
       },
     );
 
-    // Refresh immediately upon return
-    if (mounted) {
-      debugPrint("Returned from reschedule. Refreshing list...");
+    if (result == true && mounted) {
+      _showSuccessSnackBar("Reschedule Successful!");
       _fetchAppointments();
     }
   }
@@ -173,6 +281,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -217,20 +326,35 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          const Icon(Icons.edit_calendar, color: primaryGreen),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: primaryGreen.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.edit_calendar,
+                              color: primaryGreen,
+                              size: 20,
+                            ),
+                          ),
                           const SizedBox(width: 16),
                           const Text(
                             "Reschedule",
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 16,
+                              color: textDark,
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const Divider(color: borderColor),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Divider(color: borderColor),
+                  ),
                   InkWell(
                     onTap: () {
                       Navigator.pop(context);
@@ -241,7 +365,18 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          const Icon(Icons.close, color: dangerRed),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: dangerRed.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: dangerRed,
+                              size: 20,
+                            ),
+                          ),
                           const SizedBox(width: 16),
                           const Text(
                             "Cancel Appointment",
@@ -265,45 +400,76 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   void _confirmCancellation(Map<String, dynamic> appointment) {
     showDialog(
       context: context,
+      useRootNavigator: true,
+      barrierDismissible: true,
       builder:
           (context) => Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
             backgroundColor: Colors.white,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: dangerRed,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "Cancel Appointment?",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Are you sure? This slot will be freed.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: textLight),
+                  Container(
+                    height: 80,
+                    width: 80,
+                    decoration: BoxDecoration(
+                      color: dangerRed.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: dangerRed,
+                      size: 40,
+                    ),
                   ),
                   const SizedBox(height: 24),
+                  const Text(
+                    "Cancel Appointment?",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "Are you sure you want to cancel this appointment? This action cannot be undone.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: textLight,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
                   Row(
                     children: [
                       Expanded(
                         child: TextButton(
                           onPressed: () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                           child: const Text(
                             "Back",
-                            style: TextStyle(color: textLight),
+                            style: TextStyle(
+                              color: textLight,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () {
@@ -313,10 +479,18 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: dangerRed,
                             elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           child: const Text(
                             "Yes, Cancel",
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -358,11 +532,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                         ? const Center(
                           child: CircularProgressIndicator(color: primaryGreen),
                         )
-                        : RefreshIndicator(
-                          onRefresh: _fetchAppointments,
-                          color: primaryGreen,
-                          child: _buildListView(),
-                        ),
+                        : _buildListView(),
               ),
             ],
           ),
@@ -383,6 +553,13 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: const Icon(Icons.calendar_today, size: 18, color: textDark),
           ),

@@ -24,6 +24,7 @@ import '../../features/doctors/popular_doctors_screen.dart';
 import '../../features/doctors/feature_doctors_screen.dart';
 import '../../features/doctors/doctor_details_screen.dart';
 import '../../features/doctors/specialty_doctors_screen.dart';
+import '../../features/doctors/doctors_screen.dart';
 
 // --- NAVIGATOR KEYS ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -147,9 +148,7 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/doctors',
-              builder:
-                  (context, state) =>
-                      const Scaffold(body: Center(child: Text("Doctors"))),
+              builder: (context, state) => const DoctorsScreen(),
             ),
           ],
         ),

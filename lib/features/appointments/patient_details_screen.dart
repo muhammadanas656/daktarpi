@@ -28,7 +28,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   static const Color textLight = Color(0xFF626F8D);
   static const Color textGrey = Color(0xFF9E9E9E);
   static const Color borderColor = Color(0xFFE0E0E0);
-  static const Color lightGreenBg = Color(0xFFE0F7FA); // Now used
+  static const Color lightGreenBg = Color(0xFFE0F7FA);
 
   // --- TYPOGRAPHY ---
   final TextStyle _labelStyle = const TextStyle(
@@ -61,11 +61,14 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   String? _selectedDay;
   String? _selectedMonth;
   String? _selectedYear;
+
+  // 0 = Custom/Add, 1 = My Self, 2 = My Child
   int _selectedProfileIndex = 1;
+  String _customCategoryLabel = "Add";
 
   // Images
   String? _userProfileUrl;
-  File? _childProfileFile;
+  File? _newPatientImage;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -95,19 +98,22 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                 .maybeSingle();
 
         if (mounted && data != null) {
-          setState(() {
-            _userProfileUrl = data['profile_picture_url'];
-            _nameController.text = data['full_name'] ?? "";
-            _phoneController.text = data['phone_number'] ?? "";
-            _emailController.text = user.email ?? "";
+          _userProfileUrl = data['profile_picture_url'];
 
-            if (data['date_of_birth'] != null) {
-              final dob = DateTime.parse(data['date_of_birth']);
-              _selectedDay = dob.day.toString();
-              _selectedMonth = DateFormat('MMMM').format(dob);
-              _selectedYear = dob.year.toString();
-            }
-          });
+          if (_selectedProfileIndex == 1) {
+            setState(() {
+              _nameController.text = data['full_name'] ?? "";
+              _phoneController.text = data['phone_number'] ?? "";
+              _emailController.text = user.email ?? "";
+
+              if (data['date_of_birth'] != null) {
+                final dob = DateTime.parse(data['date_of_birth']);
+                _selectedDay = dob.day.toString();
+                _selectedMonth = DateFormat('MMMM').format(dob);
+                _selectedYear = dob.year.toString();
+              }
+            });
+          }
         }
       } catch (e) {
         debugPrint("Error loading profile: $e");
@@ -115,30 +121,174 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     }
   }
 
-  Future<void> _pickChildImage() async {
+  Future<void> _pickImage() async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
         setState(() {
-          _childProfileFile = File(image.path);
-          _selectedProfileIndex = 2;
+          _newPatientImage = File(image.path);
         });
-        _clearFormForChild();
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
   }
 
-  void _clearFormForChild() {
+  // --- CUSTOM DIALOG: Add Category ---
+  Future<void> _showAddCategoryDialog() async {
+    final TextEditingController categoryController = TextEditingController();
+
+    final String? category = await showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Add Profile Category",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Who is this patient? (e.g. Brother, Wife)",
+                      style: TextStyle(fontSize: 14, color: textLight),
+                    ),
+                    const SizedBox(height: 24),
+
+                    Container(
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F6F8),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Center(
+                        child: TextField(
+                          controller: categoryController,
+                          autofocus: true,
+                          style: _inputStyle,
+                          decoration: const InputDecoration(
+                            hintText: "Category Name",
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            "Cancel",
+                            style: TextStyle(
+                              color: textLight,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (categoryController.text.trim().isNotEmpty) {
+                              Navigator.pop(
+                                context,
+                                categoryController.text.trim(),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryGreen,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            "Add",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+    );
+
+    if (category != null && category.isNotEmpty) {
+      setState(() {
+        _customCategoryLabel = category;
+        _selectedProfileIndex = 0;
+        _nameController.clear();
+        _phoneController.clear();
+        _emailController.clear();
+        _selectedDay = null;
+        _selectedMonth = null;
+        _selectedYear = null;
+        _selectedGender = "Male";
+        _newPatientImage = null;
+      });
+    }
+  }
+
+  void _switchToMode(int index) {
+    if (index == 0) {
+      if (_customCategoryLabel == "Add") {
+        _showAddCategoryDialog();
+      } else {
+        setState(() => _selectedProfileIndex = 0);
+      }
+      return;
+    }
+
     setState(() {
-      _nameController.clear();
-      _phoneController.clear();
-      _emailController.clear();
-      _selectedDay = null;
-      _selectedMonth = null;
-      _selectedYear = null;
-      _selectedGender = "Male";
+      _selectedProfileIndex = index;
+      if (index == 1) {
+        // My Self
+        _newPatientImage = null;
+        _fetchUserProfile();
+      } else if (index == 2) {
+        // Child: Clear form
+        _nameController.clear();
+        _phoneController.clear();
+        _emailController.clear();
+        _selectedDay = null;
+        _selectedMonth = null;
+        _selectedYear = null;
+        _selectedGender = "Male";
+        _newPatientImage = null;
+      }
     });
   }
 
@@ -161,6 +311,18 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
       int.parse(_selectedDay!),
     );
 
+    String? imagePath;
+    if (_selectedProfileIndex == 1) {
+      imagePath = _userProfileUrl;
+    } else {
+      imagePath = _newPatientImage?.path;
+    }
+
+    String patientType = 'other';
+    if (_selectedProfileIndex == 1) patientType = 'self';
+    if (_selectedProfileIndex == 2) patientType = 'child';
+    if (_selectedProfileIndex == 0) patientType = _customCategoryLabel;
+
     context.push(
       '/payment_method',
       extra: {
@@ -173,8 +335,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
           'email': _emailController.text,
           'gender': _selectedGender,
           'dob': dob.toIso8601String(),
-          'imagePath':
-              _selectedProfileIndex == 2 ? _childProfileFile?.path : null,
+          'imagePath': imagePath,
+          'patientType': patientType,
         },
       },
     );
@@ -219,7 +381,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
       border: Border.all(color: borderColor),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.02), // FIXED
+          color: Colors.black.withValues(alpha: 0.02),
           blurRadius: 5,
           offset: const Offset(0, 2),
         ),
@@ -239,10 +401,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              lightGreenBg, // USED HERE
+              lightGreenBg,
               Colors.white,
               Colors.white,
-              Color(0xFFE8F5E9), // Very Light Green
+              Color(0xFFE8F5E9),
             ],
             stops: [0.0, 0.3, 0.7, 1.0],
           ),
@@ -254,7 +416,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 10, 24, 100),
+                  // FIX: Increased bottom padding to 160 to clear bottom sheet + keyboard
+                  padding: const EdgeInsets.fromLTRB(24, 10, 24, 160),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -270,7 +433,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                                 value: 0.5,
                                 backgroundColor: primaryGreen.withValues(
                                   alpha: 0.1,
-                                ), // FIXED
+                                ),
                                 valueColor: const AlwaysStoppedAnimation<Color>(
                                   primaryGreen,
                                 ),
@@ -295,24 +458,32 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // --- ADD / CUSTOM OPTION ---
                           _buildOptionItem(
                             index: 0,
-                            label: "Add",
-                            content: const Icon(
-                              Icons.add,
-                              color: primaryGreen,
-                              size: 30,
-                            ),
-                            bgColor: lightGreenBg, // USED HERE
-                            onTap: () {
-                              _clearFormForChild();
-                              setState(() {
-                                _selectedProfileIndex = 0;
-                                _childProfileFile = null;
-                              });
-                            },
+                            label: _customCategoryLabel,
+                            content:
+                                (_selectedProfileIndex == 0 &&
+                                        _newPatientImage != null)
+                                    ? Image.file(
+                                      _newPatientImage!,
+                                      fit: BoxFit.cover,
+                                    )
+                                    : Icon(
+                                      _customCategoryLabel == "Add"
+                                          ? Icons.add
+                                          : Icons.person_add,
+                                      color: primaryGreen,
+                                      size: 30,
+                                    ),
+                            bgColor: lightGreenBg,
+                            onTap: () => _switchToMode(0),
+                            onAvatarTap: _pickImage,
+                            showEditIcon: _selectedProfileIndex == 0,
                           ),
                           const SizedBox(width: 16),
+
+                          // --- SELF OPTION ---
                           _buildOptionItem(
                             index: 1,
                             label: "My Self",
@@ -327,32 +498,29 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                                       color: Colors.grey[400],
                                       size: 30,
                                     ),
-                            onTap: () {
-                              _fetchUserProfile();
-                              setState(() => _selectedProfileIndex = 1);
-                            },
+                            onTap: () => _switchToMode(1),
                           ),
                           const SizedBox(width: 16),
+
+                          // --- CHILD OPTION ---
                           _buildOptionItem(
                             index: 2,
                             label: "My child",
                             content:
-                                _childProfileFile != null
+                                (_selectedProfileIndex == 2 &&
+                                        _newPatientImage != null)
                                     ? Image.file(
-                                      _childProfileFile!,
+                                      _newPatientImage!,
                                       fit: BoxFit.cover,
                                     )
                                     : Icon(
-                                      Icons.camera_alt,
+                                      Icons.child_care,
                                       color: Colors.grey[400],
-                                      size: 24,
+                                      size: 32,
                                     ),
-                            onTap: () {
-                              _clearFormForChild();
-                              setState(() => _selectedProfileIndex = 2);
-                            },
-                            onAvatarTap: _pickChildImage,
-                            showEditIcon: true,
+                            onTap: () => _switchToMode(2),
+                            onAvatarTap: _pickImage,
+                            showEditIcon: _selectedProfileIndex == 2,
                           ),
                         ],
                       ),
@@ -360,12 +528,12 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
                       // 3. Form Fields
                       _buildLabel("Patient's Name"),
-                      _buildTextField(_nameController, "Abdullah Mamun"),
+                      _buildTextField(_nameController, "Name"),
 
                       _buildLabel("Age"),
                       Row(
                         children: [
-                          // DAY (Flex 3 - Increased for breathing room)
+                          // DAY
                           Expanded(
                             flex: 3,
                             child: _buildDropdown(
@@ -376,7 +544,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // MONTH (Flex 4)
+                          // MONTH
                           Expanded(
                             flex: 4,
                             child: _buildDropdown(
@@ -400,7 +568,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // YEAR (Flex 3 - Increased to match Day)
+                          // YEAR
                           Expanded(
                             flex: 3,
                             child: _buildDropdown(
@@ -435,10 +603,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                       ),
 
                       _buildLabel("Email"),
-                      _buildTextField(
-                        _emailController,
-                        "itsmemamun1@gmail.com",
-                      ),
+                      _buildTextField(_emailController, "email@example.com"),
                     ],
                   ),
                 ),
@@ -448,29 +613,34 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         ),
       ),
       bottomSheet: Container(
-        padding: const EdgeInsets.all(24),
         decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(top: BorderSide(color: Color(0xFFF0F0F0))),
         ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: ElevatedButton(
-            onPressed: _handleContinue,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 0,
-            ),
-            child: const Text(
-              "Continue",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+        // Fix: Wrapped in SafeArea to prevent cut-off on modern phones
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: _handleContinue,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryGreen,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  "Continue",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ),
@@ -499,7 +669,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                 border: Border.all(color: Colors.grey.shade200),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05), // FIXED
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 5,
                     offset: const Offset(0, 2),
                   ),
@@ -542,8 +712,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         GestureDetector(
           onTap: () {
             onTap();
-            if (showEditIcon && _childProfileFile == null) {
-              onAvatarTap?.call();
+            if (isSelected && onAvatarTap != null && _newPatientImage == null) {
+              onAvatarTap();
             }
           },
           child: Stack(
@@ -560,7 +730,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05), // FIXED
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -587,7 +757,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1), // FIXED
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 4,
                           ),
                         ],
@@ -648,7 +818,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     );
   }
 
-  // --- PREMIUM DROPDOWN (Short, Consistent, Aligned) ---
   Widget _buildDropdown(
     String hint,
     List<String> items,
@@ -660,8 +829,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
       decoration: _boxDecoration(),
       child: DropdownButtonHideUnderline(
         child: ButtonTheme(
-          alignedDropdown:
-              true, // Forces text to align with start of container (like TextField)
+          alignedDropdown: true,
           child: DropdownButton<String>(
             value: value,
             isExpanded: true,
@@ -679,21 +847,16 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
               size: 24,
             ),
             style: _inputStyle,
-
-            // --- Premium Short Menu ---
             elevation: 4,
-            menuMaxHeight: 200, // Shortened as requested
+            menuMaxHeight: 200,
             borderRadius: BorderRadius.circular(12),
             dropdownColor: Colors.white,
-
             items:
                 items
                     .map(
                       (e) => DropdownMenuItem(
                         value: e,
-                        alignment:
-                            AlignmentDirectional
-                                .centerStart, // ENSURES TEXT IS LEFT ALIGNED
+                        alignment: AlignmentDirectional.centerStart,
                         child: Text(
                           e,
                           style: _inputStyle,

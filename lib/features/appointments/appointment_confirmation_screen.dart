@@ -31,8 +31,8 @@ class _AppointmentConfirmationScreenState
   static const Color textDark = Color(0xFF1A1A1A);
   static const Color textGrey = Color(0xFF9E9E9E);
   static const Color textLight = Color(0xFF626F8D);
-  static const Color lightGreenBg = Color(0xFFE0F7FA); // Now used
   static const Color borderColor = Color(0xFFE0E0E0);
+  static const Color lightGreenBg = Color(0xFFE0F7FA);
 
   final TextStyle _sectionHeaderStyle = const TextStyle(
     fontSize: 18,
@@ -90,7 +90,6 @@ class _AppointmentConfirmationScreenState
           final filteredBookings = List<Map<String, dynamic>>.from(
             bookingRes,
           ).where((b) {
-            // Unblock current slot if rescheduling
             if (widget.appointmentId != null &&
                 b['id'] == widget.appointmentId) {
               return false;
@@ -110,9 +109,7 @@ class _AppointmentConfirmationScreenState
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -179,9 +176,7 @@ class _AppointmentConfirmationScreenState
     setState(() => _isLoading = true);
     final client = Supabase.instance.client;
     final userId = client.auth.currentUser?.id;
-    if (userId == null) {
-      return;
-    }
+    if (userId == null) return;
 
     final slotString = slots[_selectedTimeSlotIndex];
     final times = slotString.split(' - ');
@@ -205,13 +200,11 @@ class _AppointmentConfirmationScreenState
 
     try {
       if (widget.appointmentId != null) {
-        debugPrint("Updating ID: ${widget.appointmentId}");
         await client
             .from('appointments')
             .update(data)
             .eq('id', widget.appointmentId!);
       } else {
-        debugPrint("Inserting New");
         await client.from('appointments').insert(data);
       }
 
@@ -232,10 +225,13 @@ class _AppointmentConfirmationScreenState
   void _showSuccessDialog(String startTime24h) {
     final timeObj = DateFormat("HH:mm").parse(startTime24h);
     final timeStr = DateFormat("hh:mm a").format(timeObj);
+    final dateStr = DateFormat("MMMM d").format(_selectedDate);
+    final doctorName = widget.doctor['full_name'] ?? "Doctor";
     final isReschedule = widget.appointmentId != null;
 
     showDialog(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder:
           (context) => Dialog(
@@ -272,18 +268,36 @@ class _AppointmentConfirmationScreenState
                       color: textDark,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Text(
-                    "Time: $timeStr",
-                    style: const TextStyle(fontSize: 16, color: textLight),
+                    isReschedule
+                        ? "Appointment Updated Successfully"
+                        : "Your Appointment Successful",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: textLight,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    "You have booked with $doctorName on $dateStr, at $timeStr",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: textGrey,
+                      height: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 30),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        context.pop();
-                        context.pop(true);
+                        Navigator.of(context).pop();
+                        // Redirect logic remains the same
+                        context.go('/appointments', extra: {'refresh': true});
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryGreen,
@@ -321,11 +335,12 @@ class _AppointmentConfirmationScreenState
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              lightGreenBg, // USED HERE
+              lightGreenBg,
+              Colors.white,
               Colors.white,
               Color(0xFFE8F5E9),
             ],
-            stops: [0.0, 0.5, 1.0],
+            stops: [0.0, 0.3, 0.7, 1.0],
           ),
         ),
         child: SafeArea(
@@ -356,12 +371,15 @@ class _AppointmentConfirmationScreenState
                             Expanded(
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
-                                child: const LinearProgressIndicator(
+                                child: LinearProgressIndicator(
                                   value: 1.0,
-                                  backgroundColor: lightGreenBg, // USED HERE
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    primaryGreen,
+                                  backgroundColor: primaryGreen.withValues(
+                                    alpha: 0.1,
                                   ),
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                        primaryGreen,
+                                      ),
                                   minHeight: 6,
                                 ),
                               ),
@@ -420,11 +438,19 @@ class _AppointmentConfirmationScreenState
             onTap: () => context.pop(),
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              padding: const EdgeInsets.all(8),
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: borderColor),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: const Icon(
                 Icons.arrow_back_ios_new,
@@ -437,7 +463,7 @@ class _AppointmentConfirmationScreenState
             isReschedule ? "Reschedule" : "Appointment",
             style: _sectionHeaderStyle.copyWith(fontSize: 20),
           ),
-          const SizedBox(width: 40),
+          const SizedBox(width: 44),
         ],
       ),
     );
@@ -448,9 +474,10 @@ class _AppointmentConfirmationScreenState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -593,30 +620,33 @@ class _AppointmentConfirmationScreenState
           final isSelected = selectedIndex == index;
           return Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: Material(
-              color: isSelected ? primaryGreen : Colors.white,
-              shape: const CircleBorder(),
-              child: InkWell(
-                onTap: () => onTap(index),
-                customBorder: const CircleBorder(),
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: isSelected ? null : Border.all(color: borderColor),
-                  ),
-                  child: Center(
-                    child: Text(
-                      isTime
-                          ? _formatSlotDisplay(items[index])
-                          : "${items[index]}\nMinit",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : primaryGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
+            child: GestureDetector(
+              onTap: () => onTap(index),
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: isSelected ? primaryGreen : Colors.white,
+                  shape: BoxShape.circle,
+                  border: isSelected ? null : Border.all(color: borderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 5,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    isTime
+                        ? _formatSlotDisplay(items[index])
+                        : "${items[index]}\nMinit",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : primaryGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -658,7 +688,9 @@ class _AppointmentConfirmationScreenState
                     ),
                   )
                   : Text(
-                    widget.appointmentId != null ? "Update" : "Confirm",
+                    widget.appointmentId != null
+                        ? "Update Appointment"
+                        : "Confirm",
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
