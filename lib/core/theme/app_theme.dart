@@ -2,39 +2,59 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_colors.dart';
 
 class AppTheme {
-  // We define the colors here so we can change them easily later
-  static const primaryColor = Color(0xFF00C689);
   static const scaffoldBackgroundColor = Colors.white;
 
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
+      scaffoldBackgroundColor: AppColors.scaffoldBackground,
 
-      // 1. Set the Background Color
-      scaffoldBackgroundColor: scaffoldBackgroundColor,
-
-      // 2. Define the Color Scheme
+      // Color Scheme
       colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryColor,
-        primary: primaryColor,
-        // You can add secondary/tertiary colors here if needed
+        seedColor: AppColors.primaryGreen,
+        primary: AppColors.primaryGreen,
+        surface: AppColors.scaffoldBackground,
       ),
 
-      // 3. Apply Poppins Font Globally
-      // This automatically applies Poppins to all Text widgets in the app
+      // Typography
       textTheme: GoogleFonts.poppinsTextTheme(),
 
-      // 4. (Optional) Set Default Button Styles
+      // Elevated Button Theme
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
+          backgroundColor: AppColors.primaryGreen,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
           elevation: 0,
+          textStyle: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+      ),
+
+      // Input Decoration Theme
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        hintStyle: GoogleFonts.poppins(
+            color: AppColors.hintText, fontSize: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primaryGreen),
         ),
       ),
     );

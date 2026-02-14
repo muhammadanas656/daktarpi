@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import '../../features/menu/custom_drawer.dart';
-import '../../features/doctors/doctors_screen.dart';
+import '../../features/menu/presentation/widgets/custom_drawer.dart';
+import '../../features/doctors/presentation/screens/doctors_screen.dart';
 
 class MainWrapper extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -236,8 +236,8 @@ class _MainWrapperState extends State<MainWrapper>
                               children: [
                                 const DoctorsScreen(),
                                 Container(
-                                  color: drawerBgColor.withValues(
-                                    alpha: (0.8 * _drawerController.value)
+                                  color: drawerBgColor.withValues(alpha: 
+                                    (0.8 * _drawerController.value)
                                         .clamp(0.0, 1.0),
                                   ),
                                 ),

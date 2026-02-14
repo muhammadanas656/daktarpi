@@ -1,30 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../constants/app_routes.dart';
 
-// --- IMPORTS ---
-import '../../features/splash/splash_screen.dart';
-import '../../features/auth/login_screen.dart';
-import '../../features/auth/signup_screen.dart';
-import '../../features/home/home_screen.dart';
-import '../../features/profile/profile_screen.dart';
-import '../../features/profile/profileview_screen.dart';
+import '../../features/splash/presentation/screens/splash_screen.dart';
+import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/signup_screen.dart';
+import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/profile/presentation/screens/profileview_screen.dart';
 import '../../core/main_wrapper/main_wrapper.dart';
 
 // --- COMMON IMPORTS ---
-import '../../features/common/enable_location_screen.dart';
+import '../../features/common/presentation/screens/enable_location_screen.dart'; // Assume moved or check
 
 // --- NEW IMPORTS: Privacy Policy & Appointments ---
-import '../../features/menu/privacy_policy_screen.dart';
-import '../../features/appointments/my_appointments_screen.dart';
-import '../../features/appointments/appointment_confirmation_screen.dart';
-import '../../features/appointments/patient_details_screen.dart';
+import '../../features/menu/presentation/screens/privacy_policy_screen.dart';
+import '../../features/appointments/presentation/screens/my_appointments_screen.dart';
+import '../../features/appointments/presentation/screens/appointment_confirmation_screen.dart';
+import '../../features/appointments/presentation/screens/patient_details_screen.dart';
 
 // --- DOCTOR SCREENS ---
-import '../../features/doctors/popular_doctors_screen.dart';
-import '../../features/doctors/feature_doctors_screen.dart';
-import '../../features/doctors/doctor_details_screen.dart';
-import '../../features/doctors/specialty_doctors_screen.dart';
-import '../../features/doctors/doctors_screen.dart';
+import '../../features/doctors/presentation/screens/popular_doctors_screen.dart';
+import '../../features/doctors/presentation/screens/featured_doctors_screen.dart';
+import '../../features/doctors/presentation/screens/doctor_details_screen.dart';
+import '../../features/doctors/presentation/screens/specialty_doctors_screen.dart';
+import '../../features/doctors/presentation/screens/doctors_screen.dart';
 
 // --- NAVIGATOR KEYS ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -45,38 +45,35 @@ final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/',
   routes: [
-    // 1. PUBLIC ROUTES
-    GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
-    GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-    GoRoute(path: '/signup', builder: (context, state) => const SignUpScreen()),
+    GoRoute(path: AppRoutes.splash, builder: (context, state) => const SplashScreen()),
+    GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginScreen()),
+    GoRoute(path: AppRoutes.signup, builder: (context, state) => const SignUpScreen()),
 
-    // --- Privacy Policy Route ---
     GoRoute(
-      path: '/privacy_policy',
-      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      path: AppRoutes.privacyPolicy,
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const PrivacyPolicyScreen(),
     ),
 
-    // --- Location Permission Route ---
     GoRoute(
-      path: '/location_permission',
-      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      path: AppRoutes.locationPermission,
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const EnableLocationScreen(),
     ),
 
-    // 2. DOCTOR & DETAILS ROUTES (Cover Bottom Bar)
     GoRoute(
-      path: '/popular_doctors',
+      path: AppRoutes.popularDoctors,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const PopularDoctorsScreen(),
     ),
+
     GoRoute(
-      path: '/feature_doctors',
+      path: AppRoutes.featuredDoctors,
       parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => const FeatureDoctorsScreen(),
+      builder: (context, state) => const FeaturedDoctorsScreen(),
     ),
     GoRoute(
-      path: '/doctor_details/:id',
+      path: '${AppRoutes.doctorDetails}/:id',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final doctorId = state.pathParameters['id']!;
@@ -84,22 +81,22 @@ final appRouter = GoRouter(
       },
     ),
 
-    // Appointment patient booking details entry page
     GoRoute(
-      path: '/appointment_booking',
-      parentNavigatorKey: _rootNavigatorKey, // Covers bottom bar
+      path: AppRoutes.appointmentBooking,
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final extra = state.extra as Map<String, dynamic>;
         return PatientDetailsScreen(
           doctor: extra['doctor'],
           clinic: extra['clinic'],
           initialDate: extra['initialDate'],
+          timeSlot: extra['timeSlot'],
         );
       },
     ),
 
     GoRoute(
-      path: '/payment_method', // Kept name for compatibility with previous step
+      path: AppRoutes.paymentMethod,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final extra = state.extra as Map<String, dynamic>;
@@ -107,21 +104,20 @@ final appRouter = GoRouter(
           doctor: extra['doctor'],
           clinic: extra['clinic'],
           patientDetails: extra['patientDetails'],
-          initialDate: extra['appointmentDate'], // Mapped from previous step
+          initialDate: extra['appointmentDate'],
           appointmentId: extra['appointmentId'],
+          timeSlot: extra['timeSlot'],
         );
       },
     ),
 
-    // --- Specialty Doctors Route ---
     GoRoute(
-      path: '/specialty_doctors/:id',
+      path: '${AppRoutes.specialtyDoctors}/:id',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final id = state.pathParameters['id']!;
         final extra = state.extra as Map<String, dynamic>?;
         final name = extra?['name'] as String? ?? 'Doctors';
-
         return SpecialtyDoctorsScreen(specialtyId: id, specialtyName: name);
       },
     ),
@@ -132,43 +128,39 @@ final appRouter = GoRouter(
         return MainWrapper(navigationShell: navigationShell);
       },
       branches: [
-        // HOME
         StatefulShellBranch(
           navigatorKey: _shellNavigatorHomeKey,
           routes: [
             GoRoute(
-              path: '/home',
+              path: AppRoutes.home,
               builder: (context, state) => const HomeScreen(),
             ),
           ],
         ),
-        // DOCTORS
         StatefulShellBranch(
           navigatorKey: _shellNavigatorDoctorsKey,
           routes: [
             GoRoute(
-              path: '/doctors',
+              path: AppRoutes.doctors,
               builder: (context, state) => const DoctorsScreen(),
             ),
+
           ],
         ),
-        // APPOINTMENTS
         StatefulShellBranch(
           navigatorKey: _shellNavigatorAppointmentsKey,
           routes: [
             GoRoute(
-              path: '/appointments',
-              // UPDATED: Now points to the real Appointments Screen
+              path: AppRoutes.appointments,
               builder: (context, state) => const MyAppointmentsScreen(),
             ),
           ],
         ),
-        // PROFILE
         StatefulShellBranch(
           navigatorKey: _shellNavigatorProfileKey,
           routes: [
             GoRoute(
-              path: '/profile',
+              path: AppRoutes.profile,
               builder: (context, state) => const ProfileViewScreen(),
               routes: [
                 GoRoute(
