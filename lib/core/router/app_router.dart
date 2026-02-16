@@ -24,6 +24,7 @@ import '../../features/doctors/presentation/screens/popular_doctors_screen.dart'
 import '../../features/doctors/presentation/screens/featured_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/doctor_details_screen.dart';
 import '../../features/doctors/presentation/screens/specialty_doctors_screen.dart';
+import '../../features/doctors/presentation/screens/clinic_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/doctors_screen.dart';
 
 // --- NAVIGATOR KEYS ---
@@ -119,6 +120,17 @@ final appRouter = GoRouter(
         final extra = state.extra as Map<String, dynamic>?;
         final name = extra?['name'] as String? ?? 'Doctors';
         return SpecialtyDoctorsScreen(specialtyId: id, specialtyName: name);
+      },
+    ),
+
+    GoRoute(
+      path: '${AppRoutes.clinicDoctors}/:id',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) {
+        final id = state.pathParameters['id']!;
+        final extra = state.extra as Map<String, dynamic>?;
+        final name = extra?['name'] as String? ?? 'Clinic Doctors';
+        return ClinicDoctorsScreen(clinicId: int.parse(id), clinicName: name);
       },
     ),
 

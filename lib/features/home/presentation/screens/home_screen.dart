@@ -139,14 +139,21 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(24, 70, 24, 30),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF00C689), Color(0xFF00A975)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF00C689), Color(0xFF008FA0)], // Richer Gradient
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x33008FA0),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,8 +210,19 @@ class _HomeScreenState extends State<HomeScreen> {
         width: double.infinity,
         height: 160,
         decoration: BoxDecoration(
-          color: const Color(0xFF008FA0),
-          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF008FA0), Color(0xFF00C689)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20), // Premium Radius
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF008FA0).withValues(alpha: 0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Stack(
           children: [
@@ -252,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: EdgeInsets.symmetric(horizontal: 24),
           child: Text(
             "Specialities most relevant to you",
-            style: AppTextStyles.h3.copyWith(fontSize: 16),
+            style: AppTextStyles.h2.copyWith(fontSize: 18),
           ),
         ),
         const SizedBox(height: 16),
@@ -281,9 +299,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 60,
                         height: 60,
                         padding: const EdgeInsets.all(12),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFE0F7FA),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child:
                             item['icon_url'] != null

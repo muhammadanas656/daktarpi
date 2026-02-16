@@ -32,10 +32,11 @@ class PrimaryButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor,
           foregroundColor: Colors.white,
+          shadowColor: backgroundColor.withValues(alpha: 0.4),
+          elevation: 8, // Elevated Premium Look
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(borderRadius),
+            borderRadius: BorderRadius.circular(20), // Premium Radius
           ),
-          elevation: 0,
         ),
         child:
             isLoading

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/theme/app_colors.dart';
 
 class DoctorTimingList extends StatelessWidget {
   final List<dynamic> schedules;
@@ -28,8 +29,16 @@ class DoctorTimingList extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             width: 118,
             decoration: BoxDecoration(
-              color: const Color(0xFFF4F6F8),
-              borderRadius: BorderRadius.circular(10),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20), // Premium Radius
+              border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1C222E).withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

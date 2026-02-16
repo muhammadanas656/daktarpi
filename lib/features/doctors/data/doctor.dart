@@ -8,6 +8,7 @@ class Doctor {
   final int reviewsCount;
   final int experienceYears;
   final int patientsServed;
+  final int viewsCount;
   final int visitPrice;
   final String? about;
   final String? phoneNumber;
@@ -21,6 +22,7 @@ class Doctor {
     this.reviewsCount = 0,
     this.experienceYears = 0,
     this.patientsServed = 0,
+    this.viewsCount = 0,
     this.visitPrice = 0,
     this.about,
     this.phoneNumber,
@@ -41,6 +43,7 @@ class Doctor {
       reviewsCount: (json['reviews_count'] as num?)?.toInt() ?? 0,
       experienceYears: (json['experience_years'] as num?)?.toInt() ?? 0,
       patientsServed: (json['patients_served'] as num?)?.toInt() ?? 0,
+      viewsCount: (json['views_count'] as num?)?.toInt() ?? 0,
       visitPrice: (json['hourly_rate'] as num?)?.toInt() ?? 0,
       about: json['about'] as String?,
       phoneNumber: json['phone_number'] as String?,
@@ -57,6 +60,7 @@ class Doctor {
       'reviews_count': reviewsCount,
       'experience_years': experienceYears,
       'patients_served': patientsServed,
+      'views_count': viewsCount,
       'hourly_rate': visitPrice,
       'about': about,
       'phone_number': phoneNumber,

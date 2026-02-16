@@ -22,6 +22,7 @@ class AppRoutes {
   static const featuredDoctors = '/featured_doctors';
   static const doctorDetails = '/doctor_details'; // append /:id
   static const specialtyDoctors = '/specialty_doctors'; // append /:id
+  static const clinicDoctors = '/clinic_doctors'; // append /:id
 
   // Appointments flow
   static const appointmentBooking = '/appointment_booking';
@@ -36,4 +37,7 @@ class AppRoutes {
 
   /// Helper for parameterised specialty doctors route.
   static String specialtyDoctorsById(String id) => '/specialty_doctors/$id';
+
+  /// Helper for parameterised clinic doctors route.
+  static String clinicDoctorsById(String id) => '/clinic_doctors/$id';
 }

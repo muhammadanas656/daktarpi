@@ -34,7 +34,7 @@ class AppTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(16);
+    final radius = BorderRadius.circular(20); // Premium Radius
     final bool singleLine = maxLines == 1;
 
     return Column(
@@ -68,9 +68,9 @@ class AppTextField extends StatelessWidget {
             borderRadius: radius,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+                color: const Color(0xFF1C222E).withValues(alpha: 0.05), // Soft Premium Shadow
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),

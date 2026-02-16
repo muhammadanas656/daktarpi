@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'doctor.dart';
+import 'package:geolocator/geolocator.dart';
 
 class DoctorRepository {
   final SupabaseClient _client;
@@ -46,23 +47,77 @@ class DoctorRepository {
   // ─── Doctor Lists ────────────────────────────────────────────
 
   /// Fetches all doctors with optional search and sort.
+  /// Fetches all doctors with optional search and sort.
   Future<List<Map<String, dynamic>>> fetchAllDoctors({
     String? query,
     String sortBy = 'rating',
     bool ascending = false,
+    double? userLat,
+    double? userLng,
   }) async {
     try {
-      var dbQuery = _client.from('doctors').select('*, specialties(name)');
+      // 1. Fetch doctors AND their clinics to get location data
+      var dbQuery = _client.from('doctors').select('''
+        *, 
+        specialties(name),
+        doctor_clinics(
+          clinics(latitude, longitude)
+        )
+      ''');
 
       if (query != null && query.isNotEmpty) {
         dbQuery = dbQuery.ilike('full_name', '%$query%');
       }
 
-      final response = await dbQuery.order(sortBy, ascending: ascending);
-      return List<Map<String, dynamic>>.from(response);
+      // If sorting by distance, we fetch generic list first, then sort in Dart.
+      // Otherwise, we let Supabase sort.
+      final isSortingByDistance = userLat != null && userLng != null;
+
+      if (!isSortingByDistance) {
+        // Standard DB Sort
+        final response = await dbQuery.order(sortBy, ascending: ascending);
+        return List<Map<String, dynamic>>.from(response);
+      } else {
+        // Nearest Filter: Fetch unsorted, then sort by distance client-side
+        final response = await dbQuery;
+        var data = List<Map<String, dynamic>>.from(response);
+
+        data.sort((a, b) {
+          final distA = _getMinDistance(a, userLat, userLng);
+          final distB = _getMinDistance(b, userLat, userLng);
+          return distA.compareTo(distB);
+        });
+
+        return data;
+      }
     } catch (e) {
       throw Exception('Failed to fetch doctors: $e');
     }
+  }
+
+  /// Helper to find the nearest clinic distance for a doctor
+  double _getMinDistance(Map<String, dynamic> doctor, double userLat, double userLng) {
+    final clinicsJunction = doctor['doctor_clinics'] as List<dynamic>? ?? [];
+    if (clinicsJunction.isEmpty) return double.maxFinite;
+
+    double minParamsDiff = double.maxFinite;
+
+    for (var junction in clinicsJunction) {
+      final clinic = junction['clinics'];
+      if (clinic != null && clinic['latitude'] != null && clinic['longitude'] != null) {
+        final double lat = (clinic['latitude'] as num).toDouble();
+        final double lng = (clinic['longitude'] as num).toDouble();
+        
+        final double distanceInMeters = Geolocator.distanceBetween(
+          userLat, userLng, lat, lng
+        );
+        
+        if (distanceInMeters < minParamsDiff) {
+          minParamsDiff = distanceInMeters;
+        }
+      }
+    }
+    return minParamsDiff;
   }
 
   /// Fetches popular doctors (is_popular = true).
@@ -183,6 +238,29 @@ class DoctorRepository {
 
   // ─── Specialties ─────────────────────────────────────────────
 
+  /// Fetches doctors by clinic ID.
+  Future<List<Map<String, dynamic>>> fetchDoctorsByClinic(
+    int clinicId, {
+    String? query,
+  }) async {
+    try {
+      var dbQuery = _client
+          .from('doctors')
+          .select('*, specialties(name), doctor_clinics!inner(*)')
+          .eq('doctor_clinics.clinic_id', clinicId);
+
+      if (query != null && query.isNotEmpty) {
+        dbQuery = dbQuery.ilike('full_name', '%$query%');
+      }
+
+      final response = await dbQuery;
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw Exception('Failed to fetch doctors for clinic: $e');
+    }
+  }
+
   /// Fetches the list of specialties for the home screen.
   /// Uses in-memory cache if available and [forceRefresh] is false.
   Future<List<Map<String, dynamic>>> fetchSpecialties({
@@ -248,10 +326,43 @@ class DoctorRepository {
       
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      debugPrint("Error fetching schedules: $e");
+      throw Exception('Failed to fetch schedules: $e');
+    }
+  }
+
+  // ─── Hospitals & Clinics ─────────────────────────────────────
+
+  /// Fetches facilities from the `clinics` table filtered by [type].
+  /// Default types: 'hospital', 'clinic'.
+  Future<List<Map<String, dynamic>>> fetchFacilities({
+    required String type,
+    String? query,
+  }) async {
+    try {
+      var dbQuery = _client.from('clinics').select().eq('type', type);
+
+      if (query != null && query.isNotEmpty) {
+        dbQuery = dbQuery.ilike('name', '%$query%');
+      }
+
+      final response = await dbQuery;
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint("Error fetching facilities (type=$type): $e");
       return [];
     }
   }
+
+  /// Fetches clinics with type 'hospital'.
+  Future<List<Map<String, dynamic>>> fetchHospitals({String? query}) async {
+    return fetchFacilities(type: 'hospital', query: query);
+  }
+
+  /// Fetches clinics with type 'clinic'.
+  Future<List<Map<String, dynamic>>> fetchClinicsList({String? query}) async {
+    return fetchFacilities(type: 'clinic', query: query);
+  }
+
 
   /// Fetches schedules filtered by both doctor and clinic.
   Future<List<Map<String, dynamic>>> fetchSchedulesByClinic(

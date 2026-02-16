@@ -135,7 +135,7 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
         ),
         title: Text(
           "Featured Doctors",
-          style: AppTextStyles.h3.copyWith(fontSize: 20),
+          style: AppTextStyles.h1.copyWith(fontSize: 22),
         ),
       ),
       body: Container(

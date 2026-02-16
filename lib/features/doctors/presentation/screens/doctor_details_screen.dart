@@ -875,7 +875,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                     const SizedBox(height: 14),
 
                     DoctorStatsRow(
-                      patients: _doctor!['patients_count']?.toString() ?? '100',
+                      patients: _doctor!['patients_served']?.toString() ?? '100',
                       experience:
                           _doctor!['experience_years']?.toString() ?? '5',
                       rating: _doctor!['rating']?.toString() ?? '0.0',

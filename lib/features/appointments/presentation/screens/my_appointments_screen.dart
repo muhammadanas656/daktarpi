@@ -7,6 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../data/appointment_repository.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../appointment_notifier.dart';
+import '../../../../presentation/widgets/appointment_card.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
@@ -403,7 +404,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           const SizedBox(width: 20),
           Text(
             "My Appointments",
-            style: AppTextStyles.h3.copyWith(fontSize: 20),
+            style: AppTextStyles.h1,
           ),
         ],
       ),
@@ -474,143 +475,21 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                   ? doctor['specialties']['name']
                   : "Specialist";
 
-          return _buildAppointmentCard(
-            appointment: apt,
+          return AppointmentCard(
             name: doctor['full_name'] ?? "Unknown Doctor",
             specialty: specialty,
             date: _formatDate(apt['schedule_date']),
             time: _formatTimeRange(apt['start_time'], apt['end_time']),
             imageUrl: doctor['profile_picture_url'] ?? "",
+            onTap: () {}, // No detail screen yet
+            onMoreTap: () => _showActionSheet(apt),
           );
         },
       ),
     );
   }
 
-  Widget _buildAppointmentCard({
-    required Map<String, dynamic> appointment,
-    required String name,
-    required String specialty,
-    required String date,
-    required String time,
-    required String imageUrl,
-  }) {
-    return GestureDetector(
-      onLongPress: () => _showActionSheet(appointment),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1C222E).withValues(alpha: 0.06),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: Colors.grey[100],
-                    image:
-                        imageUrl.isNotEmpty
-                            ? DecorationImage(
-                              image: NetworkImage(imageUrl),
-                              fit: BoxFit.cover,
-                            )
-                            : null,
-                  ),
-                  child:
-                      imageUrl.isEmpty
-                          ? const Icon(
-                            Icons.person,
-                            size: 40,
-                            color: Colors.grey,
-                          )
-                          : null,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        specialty,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textLight,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.more_vert, color: AppColors.textLight),
-                  onPressed: () => _showActionSheet(appointment),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInfoItem(Icons.calendar_today_outlined, date),
-                ),
-                Expanded(
-                  child: _buildInfoItem(
-                    Icons.access_time_rounded,
-                    time,
-                    alignRight: true,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _buildInfoItem(IconData icon, String text, {bool alignRight = false}) {
-    return Row(
-      mainAxisAlignment:
-          alignRight ? MainAxisAlignment.end : MainAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: AppColors.textLight),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: AppColors.textLight,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
 
   String _formatDate(String? d) {
     if (d == null) return "";

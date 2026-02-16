@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_styles.dart';
+
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_text_styles.dart';
 
 class FeaturedDoctorCard extends StatelessWidget {
   final int id;
@@ -30,12 +31,20 @@ class FeaturedDoctorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: AppStyles.cardRadius,
-        boxShadow: AppStyles.cardShadow,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20), // Premium Radius
+        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1C222E).withValues(alpha: 0.06), // Soft Shadow
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onCardTap,
           borderRadius: BorderRadius.circular(16),
@@ -87,11 +96,7 @@ class FeaturedDoctorCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textDark,
-                              ),
+                              style: AppTextStyles.h3.copyWith(fontSize: 16),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -107,7 +112,7 @@ class FeaturedDoctorCard extends StatelessWidget {
                                 isFavorite
                                     ? Icons.favorite
                                     : Icons.favorite_border,
-                                color: isFavorite ? Colors.red : Colors.grey,
+                                color: isFavorite ? AppColors.dangerRed : Colors.grey,
                                 size: 22,
                               ),
                             ),
@@ -117,10 +122,8 @@ class FeaturedDoctorCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         specialty,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w400,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textLight,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -132,8 +135,7 @@ class FeaturedDoctorCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             rating,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
+                            style: AppTextStyles.bodyBold.copyWith(
                               fontSize: 12,
                             ),
                           ),
@@ -141,18 +143,17 @@ class FeaturedDoctorCard extends StatelessWidget {
                           RichText(
                             text: TextSpan(
                               children: [
-                                const TextSpan(
+                                TextSpan(
                                   text: "\$ ",
-                                  style: TextStyle(
+                                  style: AppTextStyles.bodyBold.copyWith(
                                     color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                   ),
                                 ),
                                 TextSpan(
                                   text: "$price/hour",
-                                  style: const TextStyle(
-                                    color: Colors.grey,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.textLight,
                                     fontSize: 12,
                                   ),
                                 ),
