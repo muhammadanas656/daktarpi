@@ -95,8 +95,12 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             child: CustomSearchBar(
               controller: _searchController,
+              hintText: "Search doctors...",
+              showClearIcon: true,
               onClear: () {
                 _searchController.clear();
+                // Trigger search update
+                _fetchDoctors();
                 FocusScope.of(context).unfocus();
               },
             ),
