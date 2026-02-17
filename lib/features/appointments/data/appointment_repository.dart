@@ -42,7 +42,7 @@ class AppointmentRepository {
             )
           ''')
           .eq('user_id', userId)
-          .neq('status', 'cancelled')
+          .eq('status', 'confirmed')
           .order('schedule_date', ascending: true);
 
       final List<dynamic> data = response as List<dynamic>;
@@ -63,6 +63,18 @@ class AppointmentRepository {
           .eq('id', appointmentId);
     } catch (e) {
       throw Exception('Failed to cancel appointment: $e');
+    }
+  }
+
+  /// Marks an appointment as completed.
+  Future<void> completeAppointment(int appointmentId) async {
+    try {
+      await _client
+          .from('appointments')
+          .update({'status': 'completed'})
+          .eq('id', appointmentId);
+    } catch (e) {
+      throw Exception('Failed to complete appointment: $e');
     }
   }
 

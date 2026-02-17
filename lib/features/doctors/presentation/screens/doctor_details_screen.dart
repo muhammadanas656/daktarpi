@@ -601,10 +601,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     );
   }
 
-  Future<void> _toggleFavorite() async {
+  void _toggleFavorite() {
     final docIdInt = int.tryParse(widget.doctorId);
     if (docIdInt == null) return;
-    await _favNotifier.toggle(docIdInt);
+    _favNotifier.toggle(docIdInt);
   }
 
   // _showSnack removed in favor of CustomSnackbar

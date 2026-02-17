@@ -26,6 +26,10 @@ import '../../features/doctors/presentation/screens/doctor_details_screen.dart';
 import '../../features/doctors/presentation/screens/specialty_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/clinic_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/doctors_screen.dart';
+import '../../features/doctors/presentation/screens/my_doctors_screen.dart';
+import '../../features/medical_records/presentation/screens/medical_records_screen.dart';
+import '../../features/medical_records/presentation/screens/add_record_screen.dart';
+import '../../features/medical_records/data/medical_record.dart';
 
 // --- NAVIGATOR KEYS ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -131,6 +135,26 @@ final appRouter = GoRouter(
         final extra = state.extra as Map<String, dynamic>?;
         final name = extra?['name'] as String? ?? 'Clinic Doctors';
         return ClinicDoctorsScreen(clinicId: int.parse(id), clinicName: name);
+      },
+    ),
+
+    GoRoute(
+      path: AppRoutes.myDoctors,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const MyDoctorsScreen(),
+    ),
+
+    GoRoute(
+      path: AppRoutes.medicalRecords,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const MedicalRecordsScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.addMedicalRecord,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) {
+        final record = state.extra as MedicalRecord?;
+        return AddRecordScreen(recordToEdit: record);
       },
     ),
 

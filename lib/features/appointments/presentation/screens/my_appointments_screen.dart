@@ -83,6 +83,20 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     }
   }
 
+  Future<void> _completeAppointment(int id) async {
+    try {
+      await _appointmentNotifier.completeAppointment(id);
+
+      if (mounted) {
+        CustomSnackbar.showSuccess(context, "Appointment marked as completed");
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showError(context, "Could not complete appointment.");
+      }
+    }
+  }
+
   Future<void> _handleReschedule(Map<String, dynamic> appointment) async {
     final doctor = appointment['doctors'];
     final clinic = appointment['clinics'];
@@ -185,6 +199,45 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           const SizedBox(width: 16),
                           const Text(
                             "Reschedule",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Divider(color: AppColors.borderColor),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _completeAppointment(appointment['id']);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check_circle_outline,
+                              color: Color(0xFF2196F3),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Text(
+                            "Mark as Completed",
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 16,

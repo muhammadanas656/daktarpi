@@ -13,6 +13,9 @@ class AppRoutes {
   // Main tabs (shell routes)
   static const home = '/home';
   static const doctors = '/doctors';
+  static const myDoctors = '/my_doctors';
+  static const medicalRecords = '/medical_records';
+  static const addMedicalRecord = '/add_medical_record';
   static const appointments = '/appointments';
   static const profile = '/profile';
   static const profileEdit = '/profile/edit';

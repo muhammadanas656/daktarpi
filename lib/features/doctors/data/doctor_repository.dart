@@ -415,7 +415,7 @@ class DoctorRepository {
     }
   }
 
-  Future<void> toggleFavorite(String doctorId, String userId, bool isFavorite) async {
+  Future<void> toggleFavorite(int doctorId, String userId, bool isFavorite) async {
     try {
       if (isFavorite) {
          await _client.from('favorite_doctors').delete().match({
@@ -430,6 +430,62 @@ class DoctorRepository {
       }
     } catch (e) {
       throw Exception('Failed to toggle favorite: $e');
+    }
+  }
+
+  /// Fetches full doctor details for all favorites of the current user.
+  Future<List<Map<String, dynamic>>> fetchFavoriteDoctors() async {
+    final userId = currentUserId;
+    if (userId == null) return [];
+
+    try {
+      final response = await _client
+          .from('favorite_doctors')
+          .select('doctors(*, specialties(name))')
+          .eq('user_id', userId);
+
+      // The response is a list of { "doctors": { ... } }
+      // We need to flatten it to a list of doctors.
+      return List<Map<String, dynamic>>.from(
+        response.map((e) => e['doctors']),
+      );
+    } catch (e) {
+      debugPrint('Error fetching favorite doctors: $e');
+      return [];
+    }
+  }
+
+  /// Fetches recent doctors from completed appointments for the current user.
+  Future<List<Map<String, dynamic>>> fetchRecentDoctors() async {
+    final userId = currentUserId;
+    if (userId == null) return [];
+
+    try {
+      // Fetch completed appointments, order by date desc
+      final response = await _client
+          .from('appointments')
+          .select('doctors(*, specialties(name))')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+          .order('schedule_date', ascending: false);
+
+      // Deduplicate by doctor ID
+      final seenIds = <int>{};
+      final uniqueDoctors = <Map<String, dynamic>>[];
+
+      for (var item in response) {
+        final doctor = item['doctors'] as Map<String, dynamic>;
+        final id = doctor['id'] as int;
+        if (!seenIds.contains(id)) {
+          seenIds.add(id);
+          uniqueDoctors.add(doctor);
+        }
+      }
+
+      return uniqueDoctors;
+    } catch (e) {
+      debugPrint('Error fetching recent doctors: $e');
+      return [];
     }
   }
 

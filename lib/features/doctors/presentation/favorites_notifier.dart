@@ -60,7 +60,7 @@ class FavoritesNotifier extends ChangeNotifier {
     try {
       // 2. Database sync
       await _doctorRepo.toggleFavorite(
-        doctorId.toString(), userId, wasFavorite,
+        doctorId, userId, wasFavorite,
       );
     } catch (e) {
       debugPrint('FavoritesNotifier: error toggling favorite: $e');

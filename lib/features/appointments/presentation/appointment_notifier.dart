@@ -56,6 +56,20 @@ class AppointmentNotifier extends ChangeNotifier {
     }
   }
 
+  /// Mark an appointment as completed and update local state.
+  Future<void> completeAppointment(int appointmentId) async {
+    try {
+      await _appointmentRepo.completeAppointment(appointmentId);
+
+      // Remove locally to update UI instantly
+      _appointments.removeWhere((app) => app.id == appointmentId);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("AppointmentNotifier Complete Error: $e");
+      rethrow;
+    }
+  }
+
   /// Add a newly created appointment to the list (optional, if we want immediate feedback)
   void addAppointment(Appointment appointment) {
     _appointments.add(appointment);

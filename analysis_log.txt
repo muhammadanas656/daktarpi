@@ -1,0 +1,4 @@
+﻿Analyzing daktarpi...                                           
+
+   info - The private field _selectedImages could be 'final' - lib\features\medical_records\presentation\screens\add_record_screen.dart:26:14 - prefer_final_fields
+

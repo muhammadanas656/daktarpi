@@ -12,4 +12,5 @@ class AppColors {
   static const Color lightGreenBg = Color(0xFFE0F7FA);
   static const Color hintText = Color(0xFFC4C4C4);
   static const Color textGrey = Color(0xFF9E9E9E);
+  static const Color infoBlue = Color(0xFF2979FF);
 }

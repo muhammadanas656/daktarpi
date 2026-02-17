@@ -177,9 +177,11 @@ class _CustomDrawerState extends State<CustomDrawer> {
               children: [
                 _buildDrawerItem(Icons.person, "My Doctors", () {
                   widget.onClose();
-                }, isSelected: true),
+                  context.push(AppRoutes.myDoctors);
+                }),
                 _buildDrawerItem(Icons.assignment, "Medical Records", () {
                   widget.onClose();
+                  context.push(AppRoutes.medicalRecords);
                 }),
                 _buildDrawerItem(Icons.calendar_today, "My Appointments", () {
                   widget.onClose();

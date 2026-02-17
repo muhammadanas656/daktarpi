@@ -25,7 +25,10 @@ class DoctorListCard extends StatelessWidget {
     required this.isFavorite,
     required this.onFavoriteTap,
     required this.onCardTap,
+    this.trailingWidget,
   });
+
+  final Widget? trailingWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -109,22 +112,24 @@ class DoctorListCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          GestureDetector(
-                            onTap: onFavoriteTap,
-                            child: Padding(
-                              padding: const EdgeInsets.only(
-                                left: 8.0,
-                                bottom: 4.0,
+                          // 4. Favorite / Custom Action
+                          trailingWidget ??
+                              Material(
+                                color: const Color(0xFFF2F4F7), // Neutral background
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  onTap: onFavoriteTap,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Icon(
+                                      isFavorite ? Icons.favorite : Icons.favorite_border,
+                                      color: isFavorite ? AppColors.dangerRed : const Color(0xFF9CA3AF),
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              child: Icon(
-                                isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                color: isFavorite ? AppColors.dangerRed : Colors.grey,
-                                size: 22,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
