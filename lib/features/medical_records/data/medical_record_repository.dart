@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'medical_record.dart';
 
+class Requires2FAException implements Exception {}
+
 class MedicalRecordRepository {
   final SupabaseClient _client;
 
@@ -12,8 +14,19 @@ class MedicalRecordRepository {
 
   /// Fetches medical records for the current user.
   Future<List<MedicalRecord>> fetchRecords() async {
-    final userId = currentUserId;
+    final user = _client.auth.currentUser;
+    final userId = user?.id;
     if (userId == null) return [];
+
+    // --- 2FA SESSION CHECK ---
+    final is2FAEnabled = user?.appMetadata['is_2fa_enabled'] == true;
+    final aal = user?.appMetadata['aal'];
+
+    // If 2FA is enabled but session is only Level 1 (Password), block access.
+    // This handles the "Session Expired" edge case.
+    if (is2FAEnabled && (aal == 'aal1' || aal == null)) {
+      throw Requires2FAException();
+    }
 
     try {
       final response = await _client

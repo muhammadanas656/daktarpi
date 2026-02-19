@@ -26,7 +26,24 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (session != null) {
-      context.go(AppRoutes.home);
+      // --- 2FA CHECK (Enforcement on Restart) ---
+      /* 
+       * 2FA CHECK REMOVED: 
+       * We rely on sensitive features (Medical Records) to enforce AAL2 check individually.
+       * This prevents the "Verify / Lost Phone" screen from appearing on every app launch.
+       */
+
+      if (!mounted) return;
+
+      // Check Profile
+      final userMetadata = Supabase.instance.client.auth.currentUser?.userMetadata;
+      final hasDob = userMetadata?['dob'] != null && userMetadata!['dob'].toString().isNotEmpty;
+
+      if (!hasDob) {
+        context.go(AppRoutes.profileEdit);
+      } else {
+        context.go(AppRoutes.home);
+      }
     } else {
       context.go(AppRoutes.login);
     }

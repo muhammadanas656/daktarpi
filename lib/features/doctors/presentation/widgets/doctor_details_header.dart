@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../profile/presentation/profile_notifier.dart';
 
 class DoctorDetailsHeader extends StatelessWidget {
   final Map<String, dynamic> doctor;
@@ -89,7 +90,7 @@ class DoctorDetailsHeader extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      "${'\u09F3'}$displayPrice/visit",
+                      "${ProfileNotifier.instance.currencySymbol} $displayPrice/visit",
                       style: const TextStyle(
                         color: AppColors.primaryGreen,
                         fontWeight: FontWeight.w700,

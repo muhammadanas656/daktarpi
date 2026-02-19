@@ -9,6 +9,7 @@ class AppRoutes {
   static const splash = '/';
   static const login = '/login';
   static const signup = '/signup';
+  static const verify2fa = '/verify-2fa';
 
   // Main tabs (shell routes)
   static const home = '/home';
@@ -34,6 +35,10 @@ class AppRoutes {
   // Other
   static const privacyPolicy = '/privacy_policy';
   static const locationPermission = '/location_permission';
+  static const settings = '/settings';
+  static const String helpCenter = '/help-center';
+  static const String linkedAccounts = '/linked-accounts';
+  static const termsOfService = '/terms_of_service';
 
   /// Helper for parameterised doctor details route.
   static String doctorDetailsById(String id) => '/doctor_details/$id';

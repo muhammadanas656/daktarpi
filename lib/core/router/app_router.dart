@@ -5,6 +5,7 @@ import '../constants/app_routes.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
+import '../../features/auth/presentation/screens/verify_2fa_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profileview_screen.dart';
@@ -15,9 +16,13 @@ import '../../features/common/presentation/screens/enable_location_screen.dart';
 
 // --- NEW IMPORTS: Privacy Policy & Appointments ---
 import '../../features/menu/presentation/screens/privacy_policy_screen.dart';
+import '../../features/menu/presentation/screens/settings_screen.dart';
+import '../../features/support/presentation/screens/help_center_screen.dart';
+import '../../features/legal/presentation/screens/terms_of_service_screen.dart';
 import '../../features/appointments/presentation/screens/my_appointments_screen.dart';
 import '../../features/appointments/presentation/screens/appointment_confirmation_screen.dart';
 import '../../features/appointments/presentation/screens/patient_details_screen.dart';
+import '../../features/menu/presentation/screens/linked_accounts_screen.dart';
 
 // --- DOCTOR SCREENS ---
 import '../../features/doctors/presentation/screens/popular_doctors_screen.dart';
@@ -53,11 +58,36 @@ final appRouter = GoRouter(
     GoRoute(path: AppRoutes.splash, builder: (context, state) => const SplashScreen()),
     GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginScreen()),
     GoRoute(path: AppRoutes.signup, builder: (context, state) => const SignUpScreen()),
+    GoRoute(path: AppRoutes.verify2fa, builder: (context, state) => const Verify2FAScreen()),
 
     GoRoute(
       path: AppRoutes.privacyPolicy,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const PrivacyPolicyScreen(),
+    ),
+
+    GoRoute(
+      path: AppRoutes.settings,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const SettingsScreen(),
+    ),
+    
+    GoRoute(
+      path: AppRoutes.linkedAccounts,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const LinkedAccountsScreen(),
+    ),
+
+    GoRoute(
+      path: AppRoutes.helpCenter,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const HelpCenterScreen(),
+    ),
+
+    GoRoute(
+      path: AppRoutes.termsOfService,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const TermsOfServiceScreen(),
     ),
 
     GoRoute(

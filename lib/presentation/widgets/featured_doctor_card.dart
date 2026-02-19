@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../features/profile/presentation/profile_notifier.dart';
 
 class FeaturedDoctorCard extends StatelessWidget {
   final int id;
@@ -144,7 +145,7 @@ class FeaturedDoctorCard extends StatelessWidget {
                             text: TextSpan(
                               children: [
                                 TextSpan(
-                                  text: "\$ ",
+                                  text: "${ProfileNotifier.instance.currencySymbol} ",
                                   style: AppTextStyles.bodyBold.copyWith(
                                     color: AppColors.primaryGreen,
                                     fontSize: 14,

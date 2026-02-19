@@ -187,15 +187,9 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   widget.onClose();
                   widget.onNavigateToTab(2);
                 }),
-                _buildDrawerItem(Icons.security, "Privacy & Policy", () {
-                  widget.onClose();
-                  context.push(AppRoutes.privacyPolicy);
-                }),
-                _buildDrawerItem(Icons.help_outline, "Help Center", () {
-                  widget.onClose();
-                }),
                 _buildDrawerItem(Icons.settings, "Settings", () {
                   widget.onClose();
+                  context.push(AppRoutes.settings);
                 }),
               ],
             ),

@@ -19,6 +19,16 @@ class ProfileNotifier extends ChangeNotifier {
   String? get avatarUrl => _profile?.profilePictureUrl;
   String? get phoneNumber => _profile?.phoneNumber;
 
+  String get currencySymbol {
+    final loc = _profile?.location?.toLowerCase() ?? '';
+    if (loc.contains('bangladesh') || loc.contains(' bd')) return '৳';
+    if (loc.contains('pakistan') || loc.contains(' pk')) return 'Rs';
+    if (loc.contains('india') || loc.contains(' in')) return '₹';
+    if (loc.contains('united kingdom') || loc.contains(' uk')) return '£';
+    if (loc.contains('euro') || loc.contains('germany') || loc.contains('france') || loc.contains('italy') || loc.contains('spain')) return '€';
+    return '\$';
+  }
+
   /// Load profile from database. Safe to call multiple times.
   Future<void> loadProfile() async {
     final userId = _profileRepo.currentUserId;

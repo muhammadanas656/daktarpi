@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -7,143 +8,68 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.scaffoldBackground, // Very light cyan/white
-              Colors.white,
-              AppColors.primaryGreen.withValues(alpha: 0.05), // Light cyan for bottom corner
-            ],
-            stops: [0.0, 0.4, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Custom App Bar
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 5,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new,
-                          size: 18,
-                          color: Colors.grey,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    const Text(
-                      "Privacy policy",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Scrollable Content
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Doctor Hunt Apps Privacy Policy",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        "There are many variations of passages of Lorem Ipsum available, but the majority have suffered alteration in some form, by injected humour, or randomised words believable. It is a long established fact that reader will distracted by the readable content of a page when looking at its layout. The point of using Lorem Ipsum is that it has a morelt is a long established fact that reader will distracted by the readable content of a page when looking at its layout. The point of using Lorem Ipsum is that it has a more",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          height: 1.6,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      _buildBulletPoint(
-                        "The standard chunk of lorem Ipsum used since 1500s is reproduced below for those interested.",
-                      ),
-                      _buildBulletPoint(
-                        "Sections 1.10.32 and 1.10.33 from \"de Finibus Bonorum et Malorum. The point of using.",
-                      ),
-                      _buildBulletPoint(
-                        "Lorem Ipsum is that it has a morelt is a long established fact that reader will distracted.",
-                      ),
-                      _buildBulletPoint(
-                        "The point of using Lorem Ipsum is that it has a morelt is a long established fact that reader will distracted.",
-                      ),
-
-                      const SizedBox(height: 20),
-                      const Text(
-                        "It is a long established fact that reader distracted by the readable content of a page when looking at its layout. The point of using Lorem Ipsum is that it has a morelt is a long established.",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          height: 1.6,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Privacy Policy", style: TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: const BackButton(color: AppColors.textDark),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Last Updated: February 19, 2026", style: AppTextStyles.bodySmall.copyWith(color: Colors.grey)),
+            const SizedBox(height: 20),
+            
+            _buildSection("1. Information We Collect", 
+              "We collect information you provide directly to us, such as when you create an account, update your profile, book an appointment, or communicate with us. This may include your name, email address, phone number, date of birth, and medical history (if you choose to upload it)."),
+            
+            _buildSection("2. How We Use Your Information", 
+              "We use your information to provide, maintain, and improve our services, including processing transactions, sending you appointment reminders, and facilitating communication with doctors."),
+              
+            _buildSection("3. Data Security", 
+              "We implement appropriate technical and organizational measures to protect your personal data against unauthorized access, alteration, disclosure, or destruction. We use industry-standard encryption for sensitive data."),
+              
+            _buildSection("4. Sharing of Information", 
+              "We do not share your personal information with third parties except as described in this policy, such as with doctors you book appointments with, or to comply with the law."),
+              
+            _buildSection("5. Your Choices", 
+              "You may update or correct your account information at any time by logging into your account settings. You may also delete your account via the Settings menu."),
+              
+            _buildSection("6. Contact Us", 
+              "If you have any questions about this Privacy Policy, please contact us at privacy@daktarpai.com."),
+              
+            const SizedBox(height: 40),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildBulletPoint(String text) {
+  Widget _buildSection(String title, String content) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: CircleAvatar(radius: 4, backgroundColor: Color(0xFF00C689)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.grey,
-                height: 1.5,
-                fontSize: 14,
-              ),
+          const SizedBox(height: 8),
+          Text(
+            content,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.6,
+              color: AppColors.textLight,
             ),
           ),
         ],

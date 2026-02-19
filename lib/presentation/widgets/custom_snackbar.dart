@@ -1,107 +1,167 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
 class CustomSnackbar {
+  static OverlayEntry? _overlayEntry;
+  static Timer? _timer;
+
   static void showSuccess(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.primaryGreen,
-        behavior: SnackBarBehavior.floating,
-        elevation: 6,
-        margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-      ),
-    );
+    _show(context, message, AppColors.primaryGreen, Icons.check_circle_rounded);
   }
 
   static void showError(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.dangerRed,
-        behavior: SnackBarBehavior.floating,
-        elevation: 6,
-        margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-      ),
-    );
+    _show(context, message, AppColors.dangerRed, Icons.error_outline_rounded);
   }
+
   static void showInfo(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.info_outline_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+    _show(context, message, AppColors.infoBlue, Icons.info_outline_rounded);
+  }
+
+  static void _show(
+    BuildContext context,
+    String message,
+    Color color,
+    IconData icon,
+  ) {
+    _cleanup();
+
+    final overlayState = Overlay.of(context);
+    _overlayEntry = OverlayEntry(
+      builder:
+          (context) => _SnackbarOverlay(
+            message: message,
+            color: color,
+            icon: icon,
+            onDismiss: _cleanup,
+          ),
+    );
+
+    overlayState.insert(_overlayEntry!);
+
+    _timer = Timer(const Duration(seconds: 4), _cleanup);
+  }
+
+  static void _cleanup() {
+    _timer?.cancel();
+    if (_overlayEntry != null) {
+      try {
+        _overlayEntry?.remove();
+      } catch (_) {}
+      _overlayEntry = null;
+    }
+  }
+}
+
+class _SnackbarOverlay extends StatefulWidget {
+  final String message;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onDismiss;
+
+  const _SnackbarOverlay({
+    required this.message,
+    required this.color,
+    required this.icon,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_SnackbarOverlay> createState() => _SnackbarOverlayState();
+}
+
+class _SnackbarOverlayState extends State<_SnackbarOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;  // opacity requires double
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutBack,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller, 
+      curve: Curves.easeIn,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+      left: 20,
+      right: 20,
+      child: Material(
+        color: Colors.transparent,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: ScaleTransition(
+            scale: _scaleAnimation,
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: GestureDetector(
+                onTap: widget.onDismiss, // Dismiss on tap
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    borderRadius: BorderRadius.circular(50),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(widget.icon, color: Colors.white, size: 22),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          widget.message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
-        backgroundColor: AppColors.infoBlue,
-        behavior: SnackBarBehavior.floating,
-        elevation: 6,
-        margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
       ),
     );
   }

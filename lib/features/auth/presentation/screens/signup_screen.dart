@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/gestures.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/auth_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
@@ -134,7 +135,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'You can search course, apply course and find\nscholarship for abroad studies',
+                          'Connect with top doctors and manage your health journey',
                           textAlign: TextAlign.center,
                           style: AppTextStyles.body.copyWith(height: 1.5),
                         ),
@@ -142,26 +143,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         const SizedBox(height: 35),
 
                         // --- SOCIAL BUTTONS ---
-                        Row(
-                          children: [
-                            Expanded(
-                              child: SocialButton(
-                                label: "Google",
-                                icon: Icons.g_mobiledata,
-                                iconColor: Colors.red,
-                                onTap: () {},
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: SocialButton(
-                                label: "Facebook",
-                                icon: Icons.facebook,
-                                iconColor: Color(0xFF1877F2),
-                                onTap: () {},
-                              ),
-                            ),
-                          ],
+                        SocialButton(
+                          label: "Continue with Google",
+                          icon: Icons.g_mobiledata,
+                          iconColor: Colors.red,
+                          onTap: () {},
                         ),
 
                         const SizedBox(height: 35),
@@ -219,9 +205,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: Text(
-                                'I agree with the Terms of Service & Privacy Policy',
+                              child: RichText(
+                                text: TextSpan(
                                   style: AppTextStyles.bodySmall,
+                                  children: [
+                                    const TextSpan(text: 'I agree with the '),
+                                    TextSpan(
+                                      text: 'Terms of Service',
+                                      style: const TextStyle(
+                                        color: AppColors.primaryGreen,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () => context.push(AppRoutes.termsOfService),
+                                    ),
+                                    const TextSpan(text: ' & '),
+                                    TextSpan(
+                                      text: 'Privacy Policy',
+                                      style: const TextStyle(
+                                        color: AppColors.primaryGreen,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () => context.push(AppRoutes.privacyPolicy),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],

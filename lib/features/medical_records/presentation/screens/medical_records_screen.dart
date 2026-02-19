@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:open_filex/open_filex.dart'; // New
+import 'package:path_provider/path_provider.dart'; // New
+import 'package:http/http.dart' as http; // New
+// import 'package:url_launcher/url_launcher.dart'; // Removed/Commented out if not used elsewhere, but kept safe.
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -22,6 +26,13 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   List<MedicalRecord> _records = [];
   bool _isLoading = true;
   String? _errorMessage;
+
+  // Helper to remove timestamp prefix from display name
+  String _getCleanFileName(String path) {
+    String name = path.split('/').last;
+    // Regex matches starts with digits followed by underscore
+    return name.replaceFirst(RegExp(r'^\d+_'), '');
+  }
 
   @override
   void initState() {
@@ -45,6 +56,40 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        if (e is Requires2FAException) {
+          // Session expired or insufficient AAL -> Show Dialog
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              title: const Row(
+                children: [
+                   Icon(Icons.security, color: AppColors.primaryGreen),
+                   SizedBox(width: 10),
+                   Text("Verification Required"),
+                ],
+              ),
+              content: const Text(
+                "For your security, please verify your identity to access sensitive medical records.",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push(AppRoutes.verify2fa);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen),
+                  child: const Text("Verify Now", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
         setState(() {
           _errorMessage = e.toString();
           _isLoading = false;
@@ -97,22 +142,68 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   Future<void> _viewFile(MedicalRecord record) async {
     if (record.fileUrls.isEmpty) return;
 
-    Future<void> launchPath(String path) async {
+    Future<void> openPath(String path) async {
       try {
+        final isImage = ['jpg','jpeg','png'].contains(path.split('.').last.toLowerCase());
+
+        // 1. Get Signed URL
         final url = await _repository.getSignedUrl(path);
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } else {
-          if (mounted) CustomSnackbar.showError(context, "Could not open file.");
+
+        // A. Image -> Show In-App Dialog
+        if (isImage) {
+           if (!mounted) return;
+           await showDialog(
+            context: context,
+            builder: (_) => Dialog(
+              backgroundColor: Colors.transparent,
+              child: Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  InteractiveViewer(
+                    child: Image.network(
+                      url,
+                      loadingBuilder: (_, child, progress) {
+                        return progress == null ? child : const Center(child: CircularProgressIndicator());
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+          );
+          return;
         }
+
+        // B. Document -> Download & Open Native
+        if (mounted) CustomSnackbar.showInfo(context, "Opening file...");
+        
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode != 200) {
+          throw Exception('Failed to download file: ${response.statusCode}');
+        }
+        
+        final dir = await getTemporaryDirectory();
+        final fileName = _getCleanFileName(path);
+        final file = File('${dir.path}/$fileName');
+        
+        await file.writeAsBytes(response.bodyBytes);
+        
+        final result = await OpenFilex.open(file.path);
+        if (result.type != ResultType.done) {
+          if (mounted) CustomSnackbar.showError(context, "Could not open file: ${result.message}");
+        }
+        
       } catch (e) {
         if (mounted) CustomSnackbar.showError(context, "Error opening file: $e");
       }
     }
 
     if (record.fileUrls.length == 1) {
-      launchPath(record.fileUrls.first);
+      openPath(record.fileUrls.first);
     } else {
       showModalBottomSheet(
         context: context,
@@ -126,15 +217,19 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               Text("Attached Files", style: AppTextStyles.h3),
               const SizedBox(height: 16),
               ...record.fileUrls.asMap().entries.map((entry) {
-                final index = entry.key;
                 final path = entry.value;
+                final isImage = ['jpg','jpeg','png'].contains(path.split('.').last.toLowerCase());
+                
                 return ListTile(
-                  leading: const Icon(Icons.description, color: AppColors.primaryGreen),
-                  title: Text("Document ${index + 1}"),
+                  leading: Icon(
+                    isImage ? Icons.image : Icons.description, 
+                    color: AppColors.primaryGreen
+                  ),
+                  title: Text(_getCleanFileName(path)),
                   trailing: const Icon(Icons.open_in_new, size: 18),
                   onTap: () {
                     Navigator.pop(context);
-                    launchPath(path);
+                    openPath(path);
                   },
                 );
               }),

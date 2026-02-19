@@ -8,6 +8,8 @@ import '../../../../presentation/widgets/auth_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/social_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
@@ -21,10 +23,13 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  // GoogleSignIn is a singleton in v7+
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _isInputValid = true;
+
 
   // --- TIMER STATE ---
   Timer? _timer;
@@ -34,6 +39,14 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _emailController.addListener(_onEmailChanged);
+    _initializeGoogleSignIn();
+  }
+
+  Future<void> _initializeGoogleSignIn() async {
+    // In v7+, we configure via initialize
+    await _googleSignIn.initialize(
+       serverClientId: dotenv.env['GOOGLE_WEB_CLIENT_ID'],
+    );
   }
 
   @override
@@ -109,6 +122,21 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         final user = Supabase.instance.client.auth.currentUser;
         final metadata = user?.userMetadata;
+        final appMetadata = user?.appMetadata;
+
+        // --- 2FA CHECK ---
+        final aal = appMetadata?['aal'] as String?;
+        final is2FAEnabled = appMetadata?['is_2fa_enabled'] == true; // Checked against app_metadata (Secure)
+        // final factors = await Supabase.instance.client.auth.mfa.listFactors();
+        // final hasVerifiedFactor = factors.all.any((factor) => factor.status == FactorStatus.verified); // Removed unused variable
+
+        if (!mounted) return;
+
+        // If 2FA is enabled in app_metadata, and we are at AAL1, enforce AAL2.
+        if (is2FAEnabled && (aal == 'aal1' || aal == null)) {
+           context.go(AppRoutes.verify2fa);
+           return;
+        }
 
         // Check if profile is complete (using DOB as the flag)
         final hasDob =
@@ -126,6 +154,69 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) CustomSnackbar.showError(context, e.message);
     } catch (e) {
       if (mounted) CustomSnackbar.showError(context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      // google_sign_in v7 requires one-time explicit initialization.
+      if (!_googleSignIn.supportsAuthenticate()) {
+        throw UnsupportedError(
+          'Google Sign-In interactive flow is not supported on this platform.',
+        );
+      }
+
+      final googleUser = await _googleSignIn.authenticate();
+      final googleAuth = googleUser.authentication;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw 'No ID Token found.';
+      }
+
+      // 2. Sign in to Supabase
+      await Supabase.instance.client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+      );
+
+      // 3. Post-Login Checks
+       if (mounted) {
+        final user = Supabase.instance.client.auth.currentUser;
+        final metadata = user?.userMetadata;
+        
+        // Note: OAuth logins typically bypass 2FA unless configured otherwise in Supabase.
+        
+        // Check Profile
+        final hasDob =
+            metadata?['dob'] != null && metadata!['dob'].toString().isNotEmpty;
+
+        if (!hasDob) {
+          context.go(AppRoutes.profileEdit);
+        } else {
+          context.go(AppRoutes.home);
+        }
+      }
+
+    } on AuthException catch (e) {
+      if (mounted) CustomSnackbar.showError(context, e.message);
+    } on PlatformException catch (e) {
+      if (e.code == 'sign_in_canceled') {
+        // User canceled, do nothing or show info
+        return;
+      }
+      if (mounted) CustomSnackbar.showError(context, 'Google Sign-In error: ${e.message}');
+    } catch (e) {
+      if (mounted) {
+        // Check for common cancellation messages in string
+        if (e.toString().contains('canceled') || e.toString().contains('cancelled')) {
+           return;
+        }
+        CustomSnackbar.showError(context, 'Google Sign-In failed. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -168,31 +259,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'You can search course, apply course and find\nscholarship for abroad studies',
+                          'Manage your appointments and medical records securely',
                           textAlign: TextAlign.center,
                           style: AppTextStyles.body.copyWith(height: 1.5),
                         ),
                         const SizedBox(height: 35),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: SocialButton(
-                                label: "Google",
-                                icon: Icons.g_mobiledata,
-                                iconColor: Colors.red,
-                                onTap: () {},
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: SocialButton(
-                                label: "Facebook",
-                                icon: Icons.facebook,
-                                iconColor: Color(0xFF1877F2),
-                                onTap: () {},
-                              ),
-                            ),
-                          ],
+                        SocialButton(
+                          label: "Continue with Google",
+                          icon: Icons.g_mobiledata,
+                          iconColor: Colors.red,
+                          onTap: _signInWithGoogle,
                         ),
                         const SizedBox(height: 35),
                         // --- EMAIL ---
@@ -245,22 +321,22 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 Text(
                                   'Forgot password',
-                                    style: AppTextStyles.body.copyWith(
-                                      color:
-                                          _resendCountdown > 0
-                                              ? Colors.grey
-                                              : AppColors.primaryGreen,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                  style: AppTextStyles.body.copyWith(
+                                    color:
+                                        _resendCountdown > 0
+                                            ? Colors.grey
+                                            : AppColors.primaryGreen,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                                 if (_resendCountdown > 0) ...[
                                   const SizedBox(width: 8),
                                   Text(
                                     "Wait 00:${_resendCountdown.toString().padLeft(2, '0')}",
-                                      style: AppTextStyles.bodySmall.copyWith(
-                                        color: AppColors.dangerRed,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: AppColors.dangerRed,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -275,19 +351,19 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               Text(
                                 "Don't have an account? ",
-                                  style: AppTextStyles.body.copyWith(
-                                    color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                style: AppTextStyles.body.copyWith(
+                                  color: AppColors.primaryGreen,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                               GestureDetector(
                                 onTap: () => context.go(AppRoutes.signup),
                                 child: Text(
                                   'Join us',
-                                    style: AppTextStyles.body.copyWith(
-                                      color: AppColors.primaryGreen,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.primaryGreen,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ],
@@ -330,8 +406,6 @@ class _ForgotPasswordSheetContentState
   final _newPassController = TextEditingController();
   final _confirmPassController = TextEditingController();
 
-  OverlayEntry? _errorOverlay;
-
   @override
   void dispose() {
     _emailController.dispose();
@@ -343,73 +417,15 @@ class _ForgotPasswordSheetContentState
     for (var f in _otpFocusNodes) {
       f.dispose();
     }
-    _errorOverlay?.remove();
     super.dispose();
   }
 
-  void _showTopError(String message) {
-    _errorOverlay?.remove();
-    _errorOverlay = OverlayEntry(
-      builder:
-          (context) => Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            left: 20,
-            right: 20,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE53935),
-                  borderRadius: BorderRadius.circular(50),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.15),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.error_outline_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: Text(
-                        message,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-    );
 
-    Overlay.of(context).insert(_errorOverlay!);
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        _errorOverlay?.remove();
-        _errorOverlay = null;
-      }
-    });
-  }
 
   Future<void> _pasteOtpCode() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+
     if (data != null && data.text != null) {
       String clipboardText = data.text!.trim();
       String digits = clipboardText.replaceAll(RegExp(r'[^0-9]'), '');
@@ -420,17 +436,23 @@ class _ForgotPasswordSheetContentState
         }
         if (mounted) FocusScope.of(context).unfocus();
       } else {
-        _showTopError("Clipboard must contain exactly 8 digits.");
+        CustomSnackbar.showError(context, "Clipboard must contain exactly 8 digits.");
       }
     } else {
-      _showTopError("Clipboard is empty.");
+      CustomSnackbar.showError(context, "Clipboard is empty.");
     }
   }
 
   Future<void> _sendResetCode() async {
     final email = _emailController.text.trim();
-    if (email.isEmpty) return _showTopError("Please enter your email.");
-    if (!email.contains('@')) return _showTopError("Invalid email format.");
+    if (email.isEmpty) { 
+       CustomSnackbar.showError(context, "Please enter your email.");
+       return;
+    }
+    if (!email.contains('@')) {
+       CustomSnackbar.showError(context, "Invalid email format.");
+       return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -446,23 +468,26 @@ class _ForgotPasswordSheetContentState
       if (mounted) {
         setState(() => _isLoading = false);
         if (e.message.contains("Rate limit")) {
-          _showTopError("Too many attempts. Wait 60s.");
+          CustomSnackbar.showError(context, "Too many attempts. Wait 60s.");
           if (widget.onCodeSent != null) widget.onCodeSent!();
         } else {
-          _showTopError(e.message);
+          CustomSnackbar.showError(context, e.message);
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showTopError("Network error. Try again.");
+        CustomSnackbar.showError(context, "Network error. Try again.");
       }
     }
   }
 
   Future<void> _verifyOtp() async {
     String code = _otpControllers.map((c) => c.text).join();
-    if (code.length != 8) return _showTopError("Enter all 8 digits.");
+    if (code.length != 8) {
+       CustomSnackbar.showError(context, "Enter all 8 digits.");
+       return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -485,7 +510,7 @@ class _ForgotPasswordSheetContentState
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showTopError("Invalid code or expired.");
+        CustomSnackbar.showError(context, "Invalid code or expired.");
       }
     }
   }
@@ -495,8 +520,14 @@ class _ForgotPasswordSheetContentState
     final confirmPass = _confirmPassController.text.trim();
     final email = _emailController.text.trim();
 
-    if (newPass.length < 6) return _showTopError("Password too short (min 6).");
-    if (newPass != confirmPass) return _showTopError("Passwords do not match.");
+    if (newPass.length < 6) {
+       CustomSnackbar.showError(context, "Password too short (min 6).");
+       return;
+    }
+    if (newPass != confirmPass) {
+       CustomSnackbar.showError(context, "Passwords do not match.");
+       return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -508,7 +539,7 @@ class _ForgotPasswordSheetContentState
 
       if (mounted) {
         setState(() => _isLoading = false);
-        _showTopError("You cannot use your previous password.");
+        CustomSnackbar.showError(context, "You cannot use your previous password.");
       }
       return;
     } catch (e) {
@@ -560,7 +591,7 @@ class _ForgotPasswordSheetContentState
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showTopError("Failed to update password.");
+        CustomSnackbar.showError(context, "Failed to update password.");
       }
     }
   }

@@ -59,4 +59,57 @@ class AppTheme {
       ),
     );
   }
+  static ThemeData get darkTheme {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: const Color(0xFF121212), // Standard dark background
+
+      // Color Scheme
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primaryGreen,
+        brightness: Brightness.dark,
+        surface: const Color(0xFF121212),
+      ),
+
+      // Typography
+      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+
+      // Elevated Button Theme
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryGreen,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 0,
+          textStyle: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+      ),
+
+      // Input Decoration Theme
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF1E1E1E), // Darker surface
+        hintStyle: GoogleFonts.poppins(
+            color: Colors.grey, fontSize: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.grey),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.grey),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primaryGreen),
+        ),
+      ),
+    );
+  }
 }

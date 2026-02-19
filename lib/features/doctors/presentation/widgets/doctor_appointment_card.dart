@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
+import '../../../profile/presentation/profile_notifier.dart';
 
 class DoctorAppointmentCard extends StatelessWidget {
   final List<Map<String, dynamic>> clinics;
@@ -77,7 +78,7 @@ class DoctorAppointmentCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  "${'\u09F3'}${_formatPrice(price)}",
+                  "${ProfileNotifier.instance.currencySymbol} ${_formatPrice(price)}",
                   style: const TextStyle(
                     color: Color(0xFF2B7A74),
                     fontWeight: FontWeight.w700,

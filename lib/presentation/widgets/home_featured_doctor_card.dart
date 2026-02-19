@@ -3,6 +3,7 @@ import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/profile/presentation/profile_notifier.dart';
 
 class HomeFeaturedDoctorCard extends StatelessWidget {
   final int id;
@@ -95,7 +96,7 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  "\$ $price/hour",
+                  "${ProfileNotifier.instance.currencySymbol} $price/hour",
                   style: const TextStyle(
                     color: AppColors.primaryGreen,
                     fontSize: 10,

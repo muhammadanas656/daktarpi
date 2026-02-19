@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/menu/presentation/widgets/custom_drawer.dart';
 import '../../features/doctors/presentation/screens/doctors_screen.dart';
+import '../../features/settings/presentation/settings_notifier.dart';
 
 class MainWrapper extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -46,6 +47,10 @@ class _MainWrapperState extends State<MainWrapper>
   }
 
   Future<void> _runIntroTutorial() async {
+    // Check setting before running hint
+    await SettingsNotifier.instance.loadSettings(); 
+    if (!SettingsNotifier.instance.showDrawerHint) return;
+
     if (widget.navigationShell.currentIndex != 0) return;
 
     await Future.delayed(const Duration(milliseconds: 3500));
@@ -83,7 +88,6 @@ class _MainWrapperState extends State<MainWrapper>
   }
 
   void _toggleDrawer() {
-    // Optional: Only toggle on home screen if desired, but button usually implies global access
     if (_drawerController.isDismissed) {
       _drawerController.forward();
     } else {
@@ -98,7 +102,7 @@ class _MainWrapperState extends State<MainWrapper>
 
   void _onDragUpdate(DragUpdateDetails details) {
     // FIX: Only allow drawer drag on Home Screen (index 0)
-    // This prevents blocking vertical scrolls on other screens (like Doctors list)
+    // User requested to remove global swipe
     if (widget.navigationShell.currentIndex != 0) return;
 
     double delta = details.primaryDelta! / _maxSlide;
@@ -120,7 +124,8 @@ class _MainWrapperState extends State<MainWrapper>
     // 1. Handle Drawer Snap Logic
     if (_isDraggingDrawer || _drawerController.value > 0.0) {
       // If moving fast, snap based on direction
-      if (velocity.abs() > 400) {
+      // REDUCED THRESHOLD: 400 -> 200 for easier sensitivity
+      if (velocity.abs() > 200) { 
         if (velocity > 0) {
           _drawerController.forward();
         } else {
@@ -147,13 +152,15 @@ class _MainWrapperState extends State<MainWrapper>
           _goToBranch(currentIndex + 1);
         }
       } else {
-        // Swipe Right -> Previous Tab (or Open Drawer if on Home)
-        if (currentIndex == 0) {
-          // On Home, Swipe Right opens drawer
-          _drawerController.forward();
+        // Swipe Right -> Open Drawer (on any screen if at edge, or previous tab)
+        // Improved logic: If user swipes right significantly, we prioritized drawer above.
+        // But if drawer detected no drag (e.g. started in middle), we handle tabs.
+        
+        if (currentIndex > 0) { 
+           _goToBranch(currentIndex - 1);
         } else {
-          // On other tabs, Swipe Right goes to previous tab
-          _goToBranch(currentIndex - 1);
+           // On Home, swipe right opens drawer (handled by drag update usually, but fallback here)
+           _drawerController.forward();
         }
       }
     }
