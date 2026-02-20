@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -16,76 +17,214 @@ class Verify2FAScreen extends StatefulWidget {
   State<Verify2FAScreen> createState() => _Verify2FAScreenState();
 }
 
-class _Verify2FAScreenState extends State<Verify2FAScreen> {
+class _Verify2FAScreenState extends State<Verify2FAScreen>
+    with WidgetsBindingObserver {
   final _codeController = TextEditingController();
   final _recoveryController = TextEditingController();
-  
+
   bool _isLoading = false;
-  bool _isRecoveryMode = false; // Toggle state
+  bool _isRecoveryMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkClipboardAndPaste();
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _codeController.dispose();
     _recoveryController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboardAndPaste();
+    }
+  }
+
+  Future<void> _checkClipboardAndPaste() async {
+    if (_isLoading) {
+      return;
+    }
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) {
+        return;
+      }
+
+      final cleanText = text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
+      if (!_isRecoveryMode &&
+          cleanText.length == 6 &&
+          RegExp(r'^[0-9]+$').hasMatch(cleanText)) {
+        if (_codeController.text != cleanText) {
+          setState(() {
+            _codeController.text = cleanText;
+          });
+          _verify();
+        }
+      } else if (_isRecoveryMode && cleanText.length == 8) {
+        final formattedCode =
+            '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
+        if (_recoveryController.text != formattedCode) {
+          setState(() {
+            _recoveryController.text = formattedCode;
+          });
+          _verify();
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _verify() async {
-    final code = _isRecoveryMode 
-        ? _recoveryController.text.trim()
-        : _codeController.text.trim();
+    final code =
+        _isRecoveryMode
+            ? _recoveryController.text.trim()
+            : _codeController.text.trim();
 
     if (code.isEmpty) {
-      CustomSnackbar.showError(context, "Please enter the code.");
+      return;
+    }
+    if (!_isRecoveryMode && code.length != 6) {
+      CustomSnackbar.showError(context, "Please enter all 6 digits.");
       return;
     }
 
-    // Basic format validation
-    if (!_isRecoveryMode && code.length != 6) {
-       CustomSnackbar.showError(context, "TOTP Code must be 6 digits.");
-       return;
-    }
-
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
 
     try {
       if (_isRecoveryMode) {
-        // --- RECOVERY MODE ---
         final success = await Supabase.instance.client.rpc(
-          'use_recovery_code', 
-          params: {'input_code': code}
+          'use_recovery_code',
+          params: {'input_code': code},
         );
 
         if (success == true) {
+          await Supabase.instance.client.auth.refreshSession();
+
           if (mounted) {
-            CustomSnackbar.showSuccess(context, "Access recovered! 2FA has been disabled.");
-            context.go(AppRoutes.home);
+            await showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder:
+                  (ctx) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    title: const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: AppColors.primaryGreen),
+                        SizedBox(width: 10),
+                        Text("Access Recovered"),
+                      ],
+                    ),
+                    content: const Text(
+                      "Your backup code was accepted.\n\nFor your security, your account is currently unprotected. We highly recommend re-enabling 2FA in your settings soon.",
+                      style: TextStyle(height: 1.5, color: AppColors.textDark),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          context.go(AppRoutes.home);
+                        },
+                        child: const Text(
+                          "Continue to App",
+                          style: TextStyle(
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+            );
           }
         } else {
-          throw "Invalid recovery code.";
+          throw "That backup code didn't match. Please try another one.";
         }
       } else {
-        // --- TOTP MODE ---
+        final factors = await Supabase.instance.client.auth.mfa.listFactors();
+        final verifiedFactor = factors.totp.firstWhere(
+          (factor) => factor.status == FactorStatus.verified,
+          orElse:
+              () =>
+                  throw "No verified authenticator found. Please use a backup code.",
+        );
+
         await Supabase.instance.client.auth.mfa.challengeAndVerify(
-          factorId: (await Supabase.instance.client.auth.mfa.listFactors()).all.first.id,
+          factorId: verifiedFactor.id,
           code: code,
         );
 
         if (mounted) {
-           context.go(AppRoutes.home);
+          context.go(AppRoutes.home);
         }
       }
-    } on AuthException catch (e) {
-      if (mounted) CustomSnackbar.showError(context, e.message);
+    } on AuthException catch (_) {
+      if (mounted) {
+        CustomSnackbar.showError(
+          context,
+          "That code didn't match. Please try again.",
+        );
+        _codeController.clear();
+      }
     } catch (e) {
-      if (mounted) CustomSnackbar.showError(context, e.toString().replaceAll("Exception: ", ""));
+      if (mounted) {
+        CustomSnackbar.showError(
+          context,
+          e.toString().replaceAll("Exception: ", ""),
+        );
+        if (!_isRecoveryMode) {
+          _codeController.clear();
+        }
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final defaultPinTheme = PinTheme(
+      width: 56,
+      height: 64,
+      textStyle: const TextStyle(
+        fontSize: 24,
+        color: AppColors.textDark,
+        fontWeight: FontWeight.bold,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderColor),
+      ),
+    );
+
+    final focusedPinTheme = defaultPinTheme.copyWith(
+      decoration: defaultPinTheme.decoration!.copyWith(
+        border: Border.all(color: AppColors.primaryGreen, width: 2),
+      ),
+    );
+
+    final errorPinTheme = defaultPinTheme.copyWith(
+      decoration: defaultPinTheme.decoration!.copyWith(
+        border: Border.all(color: Colors.redAccent, width: 2),
+      ),
+    );
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       body: Container(
@@ -95,132 +234,186 @@ class _Verify2FAScreenState extends State<Verify2FAScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Container(
-                 padding: const EdgeInsets.all(32),
-                 decoration: BoxDecoration(
-                   color: Colors.white,
-                   borderRadius: BorderRadius.circular(24),
-                   boxShadow: [
-                     BoxShadow(
-                       color: Colors.black.withValues(alpha: 0.1),
-                       blurRadius: 20,
-                       offset: const Offset(0, 10),
-                     ),
-                   ],
-                 ),
-                 child: Column(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: _isRecoveryMode 
-                            ? Colors.red.withValues(alpha: 0.1)
-                            : AppColors.primaryGreen.withValues(alpha: 0.1),
+                        color:
+                            _isRecoveryMode
+                                ? Colors.orange.withValues(alpha: 0.1)
+                                : AppColors.primaryGreen.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        _isRecoveryMode ? Icons.lock_open : Icons.security, 
-                        size: 40, 
-                        color: _isRecoveryMode ? Colors.red : AppColors.primaryGreen
+                        _isRecoveryMode
+                            ? Icons.healing_outlined
+                            : Icons.lock_outline,
+                        size: 40,
+                        color:
+                            _isRecoveryMode
+                                ? Colors.orange
+                                : AppColors.primaryGreen,
                       ),
                     ),
                     const SizedBox(height: 24),
-                    
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
                       child: Text(
-                        _isRecoveryMode ? "Enter Backup Code" : "Two-Factor Authentication", 
+                        _isRecoveryMode ? "Account Recovery" : "Security Check",
                         key: ValueKey(_isRecoveryMode),
-                        style: AppTextStyles.h2, 
-                        textAlign: TextAlign.center
+                        style: AppTextStyles.h2,
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                    
                     const SizedBox(height: 12),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
                       child: Text(
-                        _isRecoveryMode 
-                            ? "Enter one of your 8-character backup codes to disable 2FA and login."
-                            : "Enter the 6-digit code from your authenticator app to continue.",
+                        _isRecoveryMode
+                            ? "Enter one of your 8-character backup codes to securely regain access to your account."
+                            : "We sent a challenge to your authenticator app. Please enter the 6-digit code below.",
                         key: ValueKey(_isRecoveryMode),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textLight, fontSize: 14),
+                        style: const TextStyle(
+                          color: AppColors.textLight,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 32),
-                    
-                    // INPUT TOGGLE
+
                     AnimatedCrossFade(
-                      firstChild: TextField(
-                        controller: _codeController,
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.center,
-                        maxLength: 6,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: InputDecoration(
-                          counterText: "",
-                          hintText: "000000",
-                          hintStyle: TextStyle(color: Colors.grey[300]),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderColor)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderColor)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryGreen, width: 2)),
-                        ),
+                      firstChild: LayoutBuilder(
+                        builder: (context, constraints) {
+                          double boxWidth = (constraints.maxWidth - 40) / 6;
+                          boxWidth = boxWidth.clamp(30.0, 56.0);
+
+                          return Pinput(
+                            length: 6,
+                            controller: _codeController,
+                            defaultPinTheme: defaultPinTheme.copyWith(
+                              width: boxWidth,
+                              height: boxWidth + 10,
+                            ),
+                            focusedPinTheme: focusedPinTheme.copyWith(
+                              width: boxWidth,
+                              height: boxWidth + 10,
+                            ),
+                            errorPinTheme: errorPinTheme.copyWith(
+                              width: boxWidth,
+                              height: boxWidth + 10,
+                            ),
+                            autofocus: true,
+                            showCursor: true,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ], // Only numbers allowed
+                            onCompleted: (pin) => _verify(),
+                          );
+                        },
                       ),
                       secondChild: TextField(
                         controller: _recoveryController,
                         keyboardType: TextInputType.text,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [
+                          BackupCodeFormatter(),
+                        ], // AUTO-FORMATTER
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2, fontFamily: 'monospace'),
-                        decoration: InputDecoration(
-                          hintText: "XXXX-XXXX-XXXX",
-                          hintStyle: TextStyle(color: Colors.grey[300]),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderColor)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderColor)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red, width: 2)),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                          fontFamily: 'monospace',
                         ),
+                        decoration: InputDecoration(
+                          hintText: "XXXX-XXXX",
+                          hintStyle: TextStyle(color: Colors.grey[300]),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderColor,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderColor,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Colors.orange,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        onSubmitted: (val) => _verify(),
                       ),
-                      crossFadeState: _isRecoveryMode ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                      crossFadeState:
+                          _isRecoveryMode
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
                       duration: const Duration(milliseconds: 300),
                     ),
-                    
+
                     const SizedBox(height: 32),
-            
                     PrimaryButton(
                       label: _isRecoveryMode ? "Unlock Account" : "Verify",
                       onTap: _verify,
                       isLoading: _isLoading,
-                      backgroundColor: _isRecoveryMode ? Colors.red : AppColors.primaryGreen,
+                      backgroundColor:
+                          _isRecoveryMode
+                              ? Colors.orange
+                              : AppColors.primaryGreen,
+                    ),
+                    const SizedBox(height: 24),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _isRecoveryMode = !_isRecoveryMode;
+                          _codeController.clear();
+                          _recoveryController.clear();
+                        });
+                      },
+                      child: Text(
+                        _isRecoveryMode
+                            ? "I found my authenticator app"
+                            : "Can't access your authenticator?",
+                        style: const TextStyle(
+                          color: AppColors.primaryGreen,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    
-                    // TOGGLE BUTTON
-                    TextButton(
-                       onPressed: () {
-                         setState(() {
-                           _isRecoveryMode = !_isRecoveryMode;
-                           _codeController.clear();
-                           _recoveryController.clear();
-                         });
-                       },
-                       child: Text(
-                         _isRecoveryMode ? "Use Authenticator App" : "Lost your phone? Use Backup Code",
-                         style: TextStyle(
-                           color: _isRecoveryMode ? AppColors.primaryGreen : Colors.grey[700], 
-                           fontWeight: FontWeight.bold
-                         )
-                       ),
-                    ),
-                    
-                    const SizedBox(height: 8),
                     TextButton(
                       onPressed: () {
                         Supabase.instance.client.auth.signOut();
                         context.go(AppRoutes.login);
                       },
-                      child: const Text("Cancel & Logout", style: TextStyle(color: Colors.grey)),
-                    )
+                      child: const Text(
+                        "Cancel & Return to Login",
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -228,6 +421,31 @@ class _Verify2FAScreenState extends State<Verify2FAScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// --- NEW MAGIC AUTO-FORMATTER CLASS ---
+class BackupCodeFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    String cleanText = newValue.text.toUpperCase().replaceAll(
+      RegExp(r'[^A-Z0-9]'),
+      '',
+    );
+    if (cleanText.length > 8) {
+      cleanText = cleanText.substring(0, 8);
+    }
+    String formattedText = cleanText;
+    if (cleanText.length > 4) {
+      formattedText = '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
+    }
+    return TextEditingValue(
+      text: formattedText,
+      selection: TextSelection.collapsed(offset: formattedText.length),
     );
   }
 }

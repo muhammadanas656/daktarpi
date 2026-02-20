@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../../core/constants/app_routes.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
+import 'package:pinput/pinput.dart';
+import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../../presentation/widgets/primary_button.dart';
 import '../../../profile/presentation/profile_notifier.dart';
-import '../../../../presentation/widgets/auth_text_field.dart'; // Reusing AuthTextField for consistent style
+import '../../../../presentation/widgets/auth_text_field.dart';
 import '../../../settings/presentation/settings_notifier.dart';
-import '../../../../core/localization/app_localizations.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -20,55 +21,104 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   bool _isLoading = false;
   bool _is2FAEnabled = false;
+  String? _verifiedFactorId;
+  bool _hasRecoveryCodes = false;
+
+  TextEditingController? _activePinController;
+  VoidCallback? _activePinSubmit;
 
   @override
   void initState() {
     super.initState();
-    // Ensure settings are loaded when entering screen
+    WidgetsBinding.instance.addObserver(this);
     SettingsNotifier.instance.loadSettings();
     _check2FAStatus();
   }
 
-  String? _verifiedFactorId;
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
-  bool _hasRecoveryCodes = false;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _activePinController != null) {
+      _checkClipboardAndPaste();
+    }
+  }
+
+  Future<void> _checkClipboardAndPaste() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) {
+        return;
+      }
+
+      final cleanText = text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
+      // Check if it's a 6 digit number
+      if (cleanText.length == 6 && RegExp(r'^[0-9]+$').hasMatch(cleanText)) {
+        if (_activePinController!.text != cleanText) {
+          setState(() {
+            _activePinController!.text = cleanText;
+          });
+          if (_activePinSubmit != null) {
+            _activePinSubmit!();
+          }
+        }
+      }
+      // Check if it's an 8 char backup code
+      else if (cleanText.length == 8) {
+        final formattedCode =
+            '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
+        if (_activePinController!.text != formattedCode) {
+          setState(() {
+            _activePinController!.text = formattedCode;
+          });
+          if (_activePinSubmit != null) {
+            _activePinSubmit!();
+          }
+        }
+      }
+    } catch (_) {}
+  }
 
   Future<void> _check2FAStatus() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       final factors = await Supabase.instance.client.auth.mfa.listFactors();
-      
-      // Check for recovery codes (RPC)
+
       bool hasCodes = false;
       try {
-        hasCodes = await Supabase.instance.client.rpc('user_has_recovery_codes');
-      } catch (_) {
-         // RPC might not exist yet or error, default to false
-      }
+        hasCodes = await Supabase.instance.client.rpc(
+          'user_has_recovery_codes',
+        );
+      } catch (_) {}
 
       if (mounted) {
         setState(() {
-          // Check if we have a verified factor AND if the flag (app_metadata) is set
           final totpFactors = factors.totp;
           final hasFactor = totpFactors.isNotEmpty;
-          final isEnabledInMetadata = user?.appMetadata['is_2fa_enabled'] == true;
-          
+          final isEnabledInMetadata =
+              user?.appMetadata['is_2fa_enabled'] == true;
+
           _is2FAEnabled = hasFactor && isEnabledInMetadata;
           _hasRecoveryCodes = hasCodes;
-          
+
           if (hasFactor) {
-            // Store the ID of the first verified factor (or just the first one if we assume single factor support)
-            // Ideally we check for status == verified, but listFactors returns all.
             final verifiedFactor = totpFactors.firstWhere(
               (f) => f.status == FactorStatus.verified,
-              orElse: () => totpFactors.first, // Fallback
+              orElse: () => totpFactors.first,
             );
             _verifiedFactorId = verifiedFactor.id;
           } else {
-             _verifiedFactorId = null;
+            _verifiedFactorId = null;
           }
         });
       }
@@ -77,92 +127,1073 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _toggle2FA(bool value) async {
-    // If turning ON
-    if (value) {
-      setState(() => _isLoading = true);
-      try {
-        final factors = await Supabase.instance.client.auth.mfa.listFactors();
-        
-        // 2. Check for VERIFIED factor (State recovery)
-        if (factors.totp.isNotEmpty) {
-           if (mounted) CustomSnackbar.showInfo(context, "2FA is already enrolled.");
-           await _check2FAStatus(); // Refresh status
-           return;
-        }
-
-        // 3. Cleanup UNVERIFIED factors (Prevent "already exists" error)
-        final unverifiedTotp = factors.all.where((f) => 
-          f.factorType == FactorType.totp && f.status != FactorStatus.verified
-        ).toList();
-
-        for (final factor in unverifiedTotp) {
-          await Supabase.instance.client.auth.mfa.unenroll(factor.id);
-        }
-
-        // 4. Enroll
-        // Note: The backend trigger (Smart Sync) will set app_metadata['is_2fa_enabled'] = true
-        await _setup2FA();
-
-      } catch (e) {
-        if (mounted) CustomSnackbar.showError(context, "Error toggling 2FA: $e");
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
-      }
-    } else {
-      // Turning OFF
-      // Just unenroll the factor. The Smart Sync trigger handles the flag update.
-      if (_verifiedFactorId != null) {
-         await _disable2FA(_verifiedFactorId!);
-      } else {
-         // Should not happen if UI is correct, but safe fallback
-         CustomSnackbar.showError(context, "No active 2FA factor found to disable.");
-         await _check2FAStatus();
-      }
-    }
-  }
-
-  Future<void> _disable2FA(String factorId) async {
-     setState(() => _isLoading = true);
-     try {
-       // Deleting the factor triggers the backend to update app_metadata
-       await Supabase.instance.client.auth.mfa.unenroll(factorId);
-
-       await _check2FAStatus();
-       if (mounted) {
-         CustomSnackbar.showSuccess(context, "2FA Disabled");
-       }
-     } catch (e) {
-       if (mounted) CustomSnackbar.showError(context, "Failed to disable 2FA: $e");
-     } finally {
-       if (mounted) setState(() => _isLoading = false);
-     }
-  }
-
-  // --- CHANGE PASSWORD LOGIC ---
-  Future<void> _showChangePasswordDialog() async {
-    final newPassController = TextEditingController();
-    final confirmPassController = TextEditingController();
+  Future<void> _start2FASetupWizard() async {
+    int currentStep = 0;
     bool isDialogLoading = false;
+    String? qrCodeSvg, secretKey, factorId;
+    List<String> generatedCodes = [];
+    bool hasSavedCodes = false;
+
+    final codeController = TextEditingController();
+    _activePinController = codeController;
 
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) {
+      builder: (dialogCtx) {
         return StatefulBuilder(
-          builder: (dialogCtx, setDialogState) {
+          builder: (ctx, setDialogState) {
+            _activePinSubmit = () async {
+              setDialogState(() {
+                isDialogLoading = true;
+              });
+              try {
+                await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                  factorId: factorId!,
+                  code: codeController.text,
+                );
+                generatedCodes = _generateLocalCodes();
+                await Supabase.instance.client.rpc(
+                  'save_recovery_codes',
+                  params: {'codes': generatedCodes},
+                );
+                setDialogState(() {
+                  currentStep = 2;
+                  isDialogLoading = false;
+                });
+              } catch (e) {
+                setDialogState(() {
+                  isDialogLoading = false;
+                  codeController.clear();
+                });
+                if (ctx.mounted) {
+                  CustomSnackbar.showError(
+                    ctx,
+                    "That code didn't match. Please try again.",
+                  );
+                }
+              }
+            };
+
+            Widget buildInfoStep() {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.security,
+                    size: 50,
+                    color: AppColors.primaryGreen,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Protect your account",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "Add an extra layer of security to your medical records using an authenticator app.\n\nYou'll need:\n• Google Authenticator or Authy\n• 30 seconds to setup",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textLight,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  PrimaryButton(
+                    isLoading: isDialogLoading,
+                    label: "Get Started",
+                    onTap: () async {
+                      setDialogState(() {
+                        isDialogLoading = true;
+                      });
+                      try {
+                        final factors =
+                            await Supabase.instance.client.auth.mfa
+                                .listFactors();
+                        for (final f in factors.all.where(
+                          (f) => f.status != FactorStatus.verified,
+                        )) {
+                          await Supabase.instance.client.auth.mfa.unenroll(
+                            f.id,
+                          );
+                        }
+                        final response = await Supabase.instance.client.auth.mfa
+                            .enroll(
+                              factorType: FactorType.totp,
+                              issuer: 'DaktarPai',
+                              friendlyName:
+                                  'DaktarPai (${Supabase.instance.client.auth.currentUser?.email})',
+                            );
+                        factorId = response.id;
+                        qrCodeSvg = response.totp?.qrCode;
+                        secretKey = response.totp?.secret;
+                        setDialogState(() {
+                          currentStep = 1;
+                          isDialogLoading = false;
+                        });
+                      } catch (e) {
+                        setDialogState(() {
+                          isDialogLoading = false;
+                        });
+                        if (ctx.mounted) {
+                          CustomSnackbar.showError(
+                            ctx,
+                            "Failed to start setup. Please try again.",
+                          );
+                        }
+                      }
+                    },
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            Widget buildQRStep() {
+              final defaultPinTheme = PinTheme(
+                width: 36,
+                height: 46,
+                textStyle: const TextStyle(
+                  fontSize: 18,
+                  color: AppColors.textDark,
+                  fontWeight: FontWeight.bold,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.borderColor),
+                ),
+              );
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Scan QR Code",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Scan this with your authenticator app:",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: AppColors.textLight),
+                  ),
+                  const SizedBox(height: 16),
+                  if (qrCodeSvg != null)
+                    SizedBox(
+                      height: 160,
+                      width: 160,
+                      child: SvgPicture.string(qrCodeSvg!),
+                    ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "Or enter this key manually:",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  SelectableText(
+                    secretKey ?? "",
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    "Enter the 6-digit code:",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Pinput(
+                    length: 6,
+                    controller: codeController,
+                    defaultPinTheme: defaultPinTheme,
+                    autofocus: true,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    focusedPinTheme: defaultPinTheme.copyWith(
+                      decoration: defaultPinTheme.decoration!.copyWith(
+                        border: Border.all(
+                          color: AppColors.primaryGreen,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    onCompleted: (code) {
+                      if (_activePinSubmit != null) {
+                        _activePinSubmit!();
+                      }
+                    },
+                  ),
+
+                  if (isDialogLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primaryGreen,
+                      ),
+                    ),
+                ],
+              );
+            }
+
+            Widget buildBackupStep() {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.vpn_key_outlined,
+                    size: 40,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "Save Backup Codes",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "If you lose your device, these codes are the ONLY way to log in. Each code works once.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textLight,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children:
+                          generatedCodes
+                              .map(
+                                (c) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(
+                                      color: Colors.grey[300]!,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    c,
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(
+                        ClipboardData(text: generatedCodes.join('\n')),
+                      );
+                      CustomSnackbar.showSuccess(
+                        context,
+                        "Codes copied to clipboard",
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text("Copy Codes"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    value: hasSavedCodes,
+                    onChanged: (val) {
+                      setDialogState(() {
+                        hasSavedCodes = val == true;
+                      });
+                    },
+                    title: const Text(
+                      "I have safely stored these codes",
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    activeColor: AppColors.primaryGreen,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  PrimaryButton(
+                    label: "Finish Setup",
+                    onTap:
+                        hasSavedCodes
+                            ? () {
+                              setDialogState(() {
+                                currentStep = 3;
+                              });
+                            }
+                            : () {},
+                    backgroundColor:
+                        hasSavedCodes ? AppColors.primaryGreen : Colors.grey,
+                  ),
+                ],
+              );
+            }
+
+            Widget buildSuccessStep() {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    size: 60,
+                    color: AppColors.primaryGreen,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Setup Complete",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Your account is now protected with Two-Factor Authentication.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: AppColors.textLight),
+                  ),
+                  const SizedBox(height: 32),
+                  PrimaryButton(
+                    label: "Done",
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await Supabase.instance.client.auth.refreshSession();
+                      _check2FAStatus();
+                    },
+                  ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              contentPadding: const EdgeInsets.all(24),
+              content: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child:
+                    [
+                      buildInfoStep(),
+                      buildQRStep(),
+                      buildBackupStep(),
+                      buildSuccessStep(),
+                    ][currentStep],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    _activePinController = null;
+    _activePinSubmit = null;
+  }
+
+  Future<void> _showDisable2FADialog() async {
+    final otpController = TextEditingController();
+    final recoveryController = TextEditingController();
+    bool isDialogLoading = false;
+    bool isRecoveryMode = false;
+
+    // We start by tracking the OTP controller
+    _activePinController = otpController;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            _activePinSubmit = () async {
+              final code =
+                  isRecoveryMode
+                      ? recoveryController.text.trim()
+                      : otpController.text.trim();
+
+              if (isRecoveryMode && code.isEmpty) {
+                CustomSnackbar.showError(ctx, "Please enter a backup code.");
+                return;
+              } else if (!isRecoveryMode && code.length != 6) {
+                CustomSnackbar.showError(ctx, "Please enter the 6-digit code.");
+                return;
+              }
+
+              setDialogState(() {
+                isDialogLoading = true;
+              });
+
+              try {
+                if (isRecoveryMode) {
+                  final rpcSuccess = await Supabase.instance.client.rpc(
+                    'use_recovery_code',
+                    params: {'input_code': code},
+                  );
+                  if (rpcSuccess != true) {
+                    throw "Invalid backup code.";
+                  }
+                } else {
+                  await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                    factorId: _verifiedFactorId!,
+                    code: code,
+                  );
+                  await Supabase.instance.client.auth.mfa.unenroll(
+                    _verifiedFactorId!,
+                  );
+                }
+
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+                await _check2FAStatus();
+                if (mounted) {
+                  CustomSnackbar.showSuccess(context, "2FA has been disabled.");
+                }
+              } catch (e) {
+                setDialogState(() {
+                  isDialogLoading = false;
+                });
+                otpController.clear();
+                recoveryController.clear();
+                if (ctx.mounted) {
+                  CustomSnackbar.showError(
+                    ctx,
+                    isRecoveryMode
+                        ? "Invalid backup code."
+                        : "Verification failed. Invalid code.",
+                  );
+                }
+              }
+            };
+
+            final defaultPinTheme = PinTheme(
+              width: 36,
+              height: 46,
+              textStyle: const TextStyle(
+                fontSize: 18,
+                color: AppColors.textDark,
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.borderColor),
+              ),
+            );
+
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    isRecoveryMode
+                        ? Icons.lock_open
+                        : Icons.warning_amber_rounded,
+                    color: isRecoveryMode ? Colors.orange : Colors.red,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(isRecoveryMode ? "Use Backup Code" : "Disable 2FA?"),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isRecoveryMode
+                          ? "Enter an 8-character backup code to turn off Two-Factor Authentication."
+                          : "Your account will be less secure. To confirm this action, please enter a final authenticator code.",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textLight,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    AnimatedCrossFade(
+                      firstChild: Pinput(
+                        length: 6,
+                        controller: otpController,
+                        autofocus: true,
+                        defaultPinTheme: defaultPinTheme,
+                        focusedPinTheme: defaultPinTheme.copyWith(
+                          decoration: defaultPinTheme.decoration!.copyWith(
+                            border: Border.all(color: Colors.red, width: 2),
+                          ),
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onCompleted: (pin) {
+                          if (_activePinSubmit != null) {
+                            _activePinSubmit!();
+                          }
+                        },
+                      ),
+                      secondChild: TextField(
+                        controller: recoveryController,
+                        keyboardType: TextInputType.text,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [BackupCodeFormatter()],
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                          fontFamily: 'monospace',
+                        ),
+                        decoration: InputDecoration(
+                          hintText: "XXXX-XXXX",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderColor,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Colors.orange,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        onSubmitted: (val) {
+                          if (_activePinSubmit != null) {
+                            _activePinSubmit!();
+                          }
+                        },
+                      ),
+                      crossFadeState:
+                          isRecoveryMode
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
+                      duration: const Duration(milliseconds: 300),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                TextButton(
+                  onPressed:
+                      isDialogLoading
+                          ? null
+                          : () {
+                            setDialogState(() {
+                              isRecoveryMode = !isRecoveryMode;
+                              _activePinController =
+                                  isRecoveryMode
+                                      ? recoveryController
+                                      : otpController;
+                              otpController.clear();
+                              recoveryController.clear();
+                            });
+                          },
+                  child: Text(
+                    isRecoveryMode ? "Use Authenticator" : "Use Backup Code",
+                    style: TextStyle(
+                      color:
+                          isRecoveryMode
+                              ? AppColors.primaryGreen
+                              : Colors.orange,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    _activePinController = null;
+    _activePinSubmit = null;
+  }
+
+  List<String> _generateLocalCodes() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rnd = Random();
+    return List.generate(
+      10,
+      (_) =>
+          '${List.generate(4, (_) => chars[rnd.nextInt(chars.length)]).join()}-${List.generate(4, (_) => chars[rnd.nextInt(chars.length)]).join()}',
+    );
+  }
+
+  void _handleRecoveryCodesTap() {
+    if (_hasRecoveryCodes) {
+      _showRegenerateConfirmation();
+    } else {
+      CustomSnackbar.showInfo(
+        context,
+        "Please disable and re-enable 2FA to generate new codes.",
+      );
+    }
+  }
+
+  Future<void> _showRegenerateConfirmation() async {
+    await showDialog(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text(
+              "Regenerate Codes?",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              "This will invalidate your existing backup codes.\n\nAre you sure you want to generate new ones?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  "Cancel",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _generateAndShowCodes();
+                },
+                child: const Text(
+                  "Regenerate",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _generateAndShowCodes() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    List<String> codes = [];
+    try {
+      codes = _generateLocalCodes();
+      await Supabase.instance.client.rpc(
+        'save_recovery_codes',
+        params: {'codes': codes},
+      );
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        CustomSnackbar.showError(context, "Failed to generate codes: $e");
+      }
+      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        bool isCheckboxChecked = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
               title: const Text(
-                "Change Password",
+                "New Backup Codes",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              content: Column(
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey[200]!),
+                        ),
+                        child: Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.center,
+                          children:
+                              codes
+                                  .map(
+                                    (code) => Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: Colors.grey[300]!,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        code,
+                                        style: const TextStyle(
+                                          fontFamily: 'monospace',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(
+                            ClipboardData(text: codes.join('\n')),
+                          );
+                          CustomSnackbar.showSuccess(
+                            context,
+                            "Codes copied to clipboard",
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 18),
+                        label: const Text("Copy Codes"),
+                      ),
+                      const SizedBox(height: 16),
+                      CheckboxListTile(
+                        value: isCheckboxChecked,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            isCheckboxChecked = val == true;
+                          });
+                        },
+                        title: const Text(
+                          "I have securely saved these codes.",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        activeColor: AppColors.primaryGreen,
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      isCheckboxChecked ? () => Navigator.pop(ctx) : null,
+                  child: Text(
+                    "Done",
+                    style: TextStyle(
+                      color:
+                          isCheckboxChecked
+                              ? AppColors.primaryGreen
+                              : Colors.grey,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (mounted) {
+      await _check2FAStatus();
+    }
+  }
+
+  Future<void> _showChangePasswordDialog() async {
+    int currentStep = _is2FAEnabled ? 0 : 1;
+    bool isDialogLoading = false;
+    bool isRecoveryMode = false;
+
+    final otpController = TextEditingController();
+    final recoveryController = TextEditingController();
+    final newPassController = TextEditingController();
+    final confirmPassController = TextEditingController();
+
+    if (_is2FAEnabled) {
+      _activePinController = otpController;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final defaultPinTheme = PinTheme(
+              width: 36,
+              height: 46,
+              textStyle: const TextStyle(
+                fontSize: 18,
+                color: AppColors.textDark,
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.borderColor),
+              ),
+            );
+
+            _activePinSubmit = () async {
+              if (currentStep == 0) {
+                final code =
+                    isRecoveryMode
+                        ? recoveryController.text.trim()
+                        : otpController.text.trim();
+
+                if (isRecoveryMode && code.isEmpty) {
+                  CustomSnackbar.showError(ctx, "Please enter a backup code.");
+                  return;
+                } else if (!isRecoveryMode && code.length != 6) {
+                  CustomSnackbar.showError(
+                    ctx,
+                    "Please enter the 6-digit code.",
+                  );
+                  return;
+                }
+
+                setDialogState(() {
+                  isDialogLoading = true;
+                });
+
+                try {
+                  if (isRecoveryMode) {
+                    final rpcSuccess = await Supabase.instance.client.rpc(
+                      'use_recovery_code',
+                      params: {'input_code': code},
+                    );
+                    if (rpcSuccess != true) {
+                      throw "Invalid backup code.";
+                    }
+                  } else {
+                    await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                      factorId: _verifiedFactorId!,
+                      code: code,
+                    );
+                  }
+
+                  await Supabase.instance.client.auth.refreshSession();
+                  setDialogState(() {
+                    isDialogLoading = false;
+                    currentStep = 1;
+                  });
+                } catch (e) {
+                  setDialogState(() {
+                    isDialogLoading = false;
+                  });
+                  otpController.clear();
+                  recoveryController.clear();
+
+                  if (!ctx.mounted) {
+                    return;
+                  }
+                  CustomSnackbar.showError(
+                    ctx,
+                    isRecoveryMode
+                        ? "Invalid backup code."
+                        : "Verification failed. Invalid code.",
+                  );
+                }
+              }
+            };
+
+            Widget buildAuthStep() {
+              return Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    isRecoveryMode
+                        ? "Enter an 8-character backup code to verify your identity before changing your password."
+                        : "To change your password, please verify your identity with your 6-digit authenticator code.",
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textLight,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  AnimatedCrossFade(
+                    firstChild: Center(
+                      child: Pinput(
+                        length: 6,
+                        controller: otpController,
+                        autofocus: true,
+                        defaultPinTheme: defaultPinTheme,
+                        focusedPinTheme: defaultPinTheme.copyWith(
+                          decoration: defaultPinTheme.decoration!.copyWith(
+                            border: Border.all(
+                              color: AppColors.primaryGreen,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onCompleted: (pin) {
+                          if (_activePinSubmit != null) {
+                            _activePinSubmit!();
+                          }
+                        },
+                      ),
+                    ),
+                    secondChild: Center(
+                      child: TextField(
+                        controller: recoveryController,
+                        keyboardType: TextInputType.text,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [BackupCodeFormatter()],
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                          fontFamily: 'monospace',
+                        ),
+                        decoration: InputDecoration(
+                          hintText: "XXXX-XXXX",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderColor,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Colors.orange,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        onSubmitted: (val) {
+                          if (_activePinSubmit != null) {
+                            _activePinSubmit!();
+                          }
+                        },
+                      ),
+                    ),
+                    crossFadeState:
+                        isRecoveryMode
+                            ? CrossFadeState.showSecond
+                            : CrossFadeState.showFirst,
+                    duration: const Duration(milliseconds: 300),
+                  ),
+                  if (isDialogLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }
+
+            Widget buildPasswordStep() {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_is2FAEnabled) ...[
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.verified,
+                          color: AppColors.primaryGreen,
+                          size: 16,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          "Identity verified.",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   const Text(
                     "Enter your new password below.",
                     style: TextStyle(fontSize: 14, color: Colors.grey),
@@ -179,93 +1210,235 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     hintText: "Confirm Password",
                     isPassword: true,
                   ),
+                  if (isDialogLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    currentStep == 0
+                        ? (isRecoveryMode ? Icons.lock_open : Icons.security)
+                        : Icons.lock_outline,
+                    color:
+                        currentStep == 0 && isRecoveryMode
+                            ? Colors.orange
+                            : AppColors.primaryGreen,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    currentStep == 0
+                        ? (isRecoveryMode
+                            ? "Account Recovery"
+                            : "Security Check")
+                        : "Change Password",
+                  ),
                 ],
               ),
+              content: SingleChildScrollView(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child:
+                      currentStep == 0 ? buildAuthStep() : buildPasswordStep(),
+                ),
+              ),
               actions: [
-                TextButton(
-                  onPressed: isDialogLoading ? null : () => Navigator.pop(dialogCtx),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
+                if (currentStep == 0) ...[
+                  TextButton(
+                    onPressed:
+                        isDialogLoading ? null : () => Navigator.pop(dialogCtx),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ),
-                ),
-                TextButton(
-                  onPressed: isDialogLoading
-                      ? null
-                      : () async {
-                          final newPass = newPassController.text.trim();
-                          final confirmPass = confirmPassController.text.trim();
+                  TextButton(
+                    onPressed:
+                        isDialogLoading
+                            ? null
+                            : () {
+                              setDialogState(() {
+                                isRecoveryMode = !isRecoveryMode;
+                                _activePinController =
+                                    isRecoveryMode
+                                        ? recoveryController
+                                        : otpController;
+                                otpController.clear();
+                                recoveryController.clear();
+                              });
+                            },
+                    child: Text(
+                      isRecoveryMode ? "Use Authenticator" : "Use Backup Code",
+                      style: TextStyle(
+                        color:
+                            isRecoveryMode
+                                ? AppColors.primaryGreen
+                                : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  TextButton(
+                    onPressed:
+                        isDialogLoading ? null : () => Navigator.pop(dialogCtx),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed:
+                        isDialogLoading
+                            ? null
+                            : () async {
+                              final newPass = newPassController.text.trim();
+                              final confirmPass =
+                                  confirmPassController.text.trim();
 
-                          if (newPass.length < 6) {
-                            // Use dialogCtx for Snackbar within dialog if possible, or parent context
-                            // But usually best to use parent context for SnackBar
-                            CustomSnackbar.showError(context, "Password must be at least 6 characters");
-                            return;
-                          }
-                          if (newPass != confirmPass) {
-                            CustomSnackbar.showError(context, "Passwords do not match");
-                            return;
-                          }
+                              if (newPass.length < 6) {
+                                CustomSnackbar.showError(
+                                  ctx,
+                                  "Password must be at least 6 characters",
+                                );
+                                return;
+                              }
+                              if (newPass != confirmPass) {
+                                CustomSnackbar.showError(
+                                  ctx,
+                                  "Passwords do not match",
+                                );
+                                return;
+                              }
 
-                          setDialogState(() => isDialogLoading = true);
+                              setDialogState(() {
+                                isDialogLoading = true;
+                              });
 
-                          try {
-                            await Supabase.instance.client.auth.updateUser(
-                              UserAttributes(password: newPass),
-                            );
-                            if (mounted) {
-                              // ignore: use_build_context_synchronously
-                              Navigator.pop(dialogCtx); // Close dialog
-                              // ignore: use_build_context_synchronously
-                              CustomSnackbar.showSuccess(
-                                  context, "Password updated successfully!");
-                            }
-                          } on AuthException catch (e) {
-                             if (mounted) CustomSnackbar.showError(context, e.message);
-                          } catch (e) {
-                             if (mounted) CustomSnackbar.showError(context, "Failed to update password");
-                          } finally {
-                            // Check if dialog is still mounted before setting state
-                            // Difficult to check 'dialogCtx.mounted' directly safely in some versions
-                            // But we closed it in success case.
-                            // Only set state if we didn't close it (failure case)
-                            if (isDialogLoading && mounted) {
-                               setDialogState(() => isDialogLoading = false);
-                            }
-                          }
-                        },
-                  child: isDialogLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(
-                          "Update",
-                          style: TextStyle(
-                            color: AppColors.primaryGreen,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
+                              try {
+                                await Supabase.instance.client.auth.updateUser(
+                                  UserAttributes(password: newPass),
+                                );
+
+                                if (!dialogCtx.mounted) {
+                                  return;
+                                }
+                                Navigator.pop(dialogCtx);
+
+                                if (!mounted) {
+                                  return;
+                                }
+                                CustomSnackbar.showSuccess(
+                                  context,
+                                  "Password updated successfully!",
+                                );
+                              } catch (e) {
+                                setDialogState(() {
+                                  isDialogLoading = false;
+                                });
+
+                                if (!ctx.mounted) {
+                                  return;
+                                }
+                                CustomSnackbar.showError(
+                                  ctx,
+                                  "Failed to update password",
+                                );
+                              }
+                            },
+                    child: const Text(
+                      "Update",
+                      style: TextStyle(
+                        color: AppColors.primaryGreen,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             );
           },
         );
       },
     );
+
+    _activePinController = null;
+    _activePinSubmit = null;
   }
 
-  // --- DELETE ACCOUNT LOGIC ---
   Future<void> _showDeleteConfirmation(BuildContext context) async {
     final confirmController = TextEditingController();
-    
+    final otpController = TextEditingController();
+    bool isDialogLoading = false;
+
+    if (_is2FAEnabled) {
+      _activePinController = otpController;
+    }
+
     await showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             bool canDelete = confirmController.text == "DELETE";
+
+            _activePinSubmit = () async {
+              if (!canDelete) {
+                CustomSnackbar.showError(ctx, "Please type DELETE to confirm.");
+                return;
+              }
+              if (_is2FAEnabled && otpController.text.length != 6) {
+                CustomSnackbar.showError(
+                  ctx,
+                  "Please enter the 6-digit authenticator code.",
+                );
+                return;
+              }
+
+              setDialogState(() {
+                isDialogLoading = true;
+              });
+
+              try {
+                if (_is2FAEnabled && _verifiedFactorId != null) {
+                  await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                    factorId: _verifiedFactorId!,
+                    code: otpController.text,
+                  );
+                }
+
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+                _executeAccountDeletion();
+              } catch (e) {
+                setDialogState(() {
+                  isDialogLoading = false;
+                });
+                if (ctx.mounted) {
+                  CustomSnackbar.showError(
+                    ctx,
+                    "Verification failed. Invalid code.",
+                  );
+                }
+              }
+            };
 
             return AlertDialog(
               backgroundColor: Colors.white,
@@ -274,59 +1447,148 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               title: const Row(
                 children: [
-                   Icon(Icons.warning_amber_rounded, color: Colors.red),
-                   SizedBox(width: 8),
-                   Text("Delete Account", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "This action is irreversible. All your data, medical records, and appointments will be permanently removed.",
-                    style: TextStyle(fontSize: 14, color: AppColors.textDark),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "Type DELETE to confirm:",
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: confirmController,
-                    decoration: InputDecoration(
-                      hintText: "DELETE",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    onChanged: (val) {
-                      setDialogState(() {});
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed: canDelete
-                      ? () {
-                          Navigator.pop(ctx);
-                          _executeAccountDeletion();
-                        }
-                      : null, // Disabled until matches
-                  child: Text(
-                    "Delete",
+                  Icon(Icons.warning_amber_rounded, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text(
+                    "Delete Account",
                     style: TextStyle(
-                      color: canDelete ? Colors.red : Colors.red.withValues(alpha: 0.5),
+                      color: Colors.red,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "This action is irreversible. All your data, medical records, and appointments will be permanently removed.",
+                      style: TextStyle(fontSize: 14, color: AppColors.textDark),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Type DELETE to confirm:",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: confirmController,
+                      decoration: InputDecoration(
+                        hintText: "DELETE",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {});
+                      },
+                    ),
+
+                    if (_is2FAEnabled) ...[
+                      const SizedBox(height: 24),
+                      const Text(
+                        "Authenticator Code:",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Pinput(
+                        length: 6,
+                        controller: otpController,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        defaultPinTheme: PinTheme(
+                          width: 36,
+                          height: 46,
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.borderColor),
+                          ),
+                        ),
+                        focusedPinTheme: PinTheme(
+                          width: 36,
+                          height: 46,
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red, width: 2),
+                          ),
+                        ),
+                        onCompleted: (pin) {
+                          if (canDelete && _activePinSubmit != null) {
+                            _activePinSubmit!();
+                          }
+                        },
+                        onChanged: (val) {
+                          setDialogState(() {});
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                TextButton(
+                  onPressed:
+                      (canDelete && !isDialogLoading)
+                          ? () {
+                            if (_activePinSubmit != null) {
+                              _activePinSubmit!();
+                            }
+                          }
+                          : null,
+                  child:
+                      isDialogLoading
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.red,
+                            ),
+                          )
+                          : Text(
+                            "Delete",
+                            style: TextStyle(
+                              color:
+                                  canDelete
+                                      ? Colors.red
+                                      : Colors.red.withValues(alpha: 0.5),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                 ),
               ],
             );
@@ -334,435 +1596,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
+
+    _activePinController = null;
+    _activePinSubmit = null;
   }
 
   Future<void> _executeAccountDeletion() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw "No active session";
-
-      // 1. DELETE STORAGE FILES (Client-side)
-      // Note: This relies on Policies allowing user to list/delete own files
+      if (user == null) {
+        throw "No active session";
+      }
       try {
         final List<FileObject> objects = await Supabase.instance.client.storage
             .from('medical_docs')
             .list(path: user.id);
-        
         if (objects.isNotEmpty) {
-           final List<String> paths = objects.map((e) => '${user.id}/${e.name}').toList();
-           await Supabase.instance.client.storage
-             .from('medical_docs')
-             .remove(paths);
+          final List<String> paths =
+              objects.map((e) => '${user.id}/${e.name}').toList();
+          await Supabase.instance.client.storage
+              .from('medical_docs')
+              .remove(paths);
         }
       } catch (e) {
         debugPrint("Storage cleanup error (continuing): $e");
       }
 
-      // 2. TRIGGER DB DELETION (RPC)
       await Supabase.instance.client.rpc('delete_user_account');
-
-      // 3. SIGN OUT LOCALLY
       await Supabase.instance.client.auth.signOut();
 
-      // 4. NAVIGATE TO LOGIN
       if (mounted) {
         context.go(AppRoutes.login);
         CustomSnackbar.showSuccess(context, "Account deleted successfully.");
       }
-
     } catch (e) {
       if (mounted) {
-        CustomSnackbar.showError(context, "Account deletion failed: ${e.toString()}");
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  // --- 2FA ENROLLMENT LOGIC ---
-  Future<void> _setup2FA() async {
-    try {
-      setState(() => _isLoading = true);
-      final response = await Supabase.instance.client.auth.mfa.enroll(
-        factorType: FactorType.totp,
-        issuer: 'DaktarPi',
-        friendlyName: 'DaktarPi (${Supabase.instance.client.auth.currentUser?.email})',
-      );
-      final factorId = response.id;
-      final totp = response.totp;
-      if (totp == null) {
-         throw "TOTP data not returned from Supabase";
-      }
-      final qrCode = totp.qrCode;
-      final secret = totp.secret;
-
-      if (!mounted) return;
-
-      // Show Dialog with QR Code and Verify Input
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogCtx) {
-          final codeController = TextEditingController();
-          bool isVerifying = false;
-          String? errorMsg;
-
-          return StatefulBuilder(
-            builder: (ctx, setDialogState) {
-              return AlertDialog(
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                title: const Text("Enable 2FA", style: TextStyle(fontWeight: FontWeight.bold)),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        "Scan this QR code with your authenticator app:",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 16),
-                      // SVG Display
-                      SizedBox(
-                        height: 200,
-                        width: 200,
-                        child: SvgPicture.string(qrCode),
-                      ),
-                      const SizedBox(height: 16),
-                      SelectableText(
-                        "Secret: $secret", 
-                        style: const TextStyle(fontSize: 12, color: AppColors.textLight, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Enter the 6-digit code to verify:",
-                        style: TextStyle(fontSize: 14, color: AppColors.textDark),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: codeController,
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.center,
-                        maxLength: 6,
-                        style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 4),
-                         decoration: InputDecoration(
-                           hintText: "000000",
-                           counterText: "",
-                           errorText: errorMsg,
-                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: isVerifying ? null : () => Navigator.pop(dialogCtx),
-                    child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
-                  ),
-                  TextButton(
-                    onPressed: isVerifying 
-                      ? null 
-                      : () async {
-                        final code = codeController.text.trim();
-                        if (code.length != 6) {
-                          setDialogState(() => errorMsg = "Invalid code");
-                          return;
-                        }
-                        
-                        setDialogState(() {
-                          isVerifying = true;
-                          errorMsg = null;
-                        });
-
-                        try {
-                          // 1. Verify Code
-                          await Supabase.instance.client.auth.mfa.challengeAndVerify(
-                            factorId: factorId, 
-                            code: code
-                          );
-                          
-                          // 2. Update Metadata (Handled by Backend Trigger on verification)
-                          // await Supabase.instance.client.auth.updateUser(...) -> REMOVED
-                          
-                          // 3. Pop Dialog
-                          if (dialogCtx.mounted) {
-                            Navigator.pop(dialogCtx);
-                          }
-
-                          // 4. Show Success & Refresh (using parent context)
-                          if (mounted) {
-                            CustomSnackbar.showSuccess(context, "2FA Enabled Successfully!");
-                            // Wait a moment for trigger to fire/propagate if needed, mostly redundant but safe
-                            await Future.delayed(const Duration(milliseconds: 500));
-                            // Refresh Token to get new claims (app_metadata)
-                            await Supabase.instance.client.auth.refreshSession();
-                            _check2FAStatus();
-                          }
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            setDialogState(() {
-                               isVerifying = false;
-                               errorMsg = "Verification failed";
-                            });
-                          }
-                        }
-                      },
-                    child: isVerifying 
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
-                      : const Text("Verify & Enable", style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              );
-            }
-          );
-        }
-      );
-
-    } catch (e) {
-      if (mounted) CustomSnackbar.showError(context, "Failed to start 2FA enrollment: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  // --- RECOVERY CODES LOGIC ---
-  List<String> _generateLocalCodes() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final rnd = Random();
-    return List.generate(
-      10,
-      (_) =>
-          '${List.generate(4, (_) => chars[rnd.nextInt(chars.length)]).join()}-'
-          '${List.generate(4, (_) => chars[rnd.nextInt(chars.length)]).join()}',
-    );
-  }
-
-  void _handleRecoveryCodesTap() {
-    if (_hasRecoveryCodes) {
-      _showRegenerateConfirmation();
-    } else {
-      _generateAndShowCodes();
-    }
-  }
-
-  Future<void> _showRegenerateConfirmation() async {
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Regenerate Codes?", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text(
-          "This will invalidate your existing backup codes. Any saved codes you have will no longer work.\n\nAre you sure you want to generate new ones?",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-             onPressed: () {
-               Navigator.pop(ctx);
-               _generateAndShowCodes();
-             },
-             child: const Text("Regenerate", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
-  }
-
-  Future<void> _generateAndShowCodes() async {
-    // 1. Generate & Save Logic
-    setState(() => _isLoading = true);
-    List<String> codes = [];
-    try {
-      codes = _generateLocalCodes();
-      // Save to Supabase (Hash them server-side via RPC)
-      await Supabase.instance.client.rpc('save_recovery_codes', params: {
-        'codes': codes,
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) CustomSnackbar.showError(context, "Failed to generate codes: $e");
-      return;
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-    
-    if (!mounted) return;
-
-    // 2. Show Enhanced Dialog
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        bool isCheckboxChecked = false;
-        
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Row(
-                children: [
-                   Icon(Icons.lock_person_outlined, color: AppColors.primaryGreen),
-                   SizedBox(width: 10),
-                   Text("Save Backup Codes", style: TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Warning Banner
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
-                        ),
-                        child: const Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                             Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
-                             SizedBox(width: 8),
-                             Expanded(
-                               child: Text(
-                                 "Keep these safe! If you lose your phone, these codes are the ONLY way to access your DaktarPi account.",
-                                 style: TextStyle(fontSize: 12, color: AppColors.textDark, height: 1.4),
-                               ),
-                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      // Grid of Codes
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey[200]!),
-                        ),
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.center,
-                          children: codes.map((code) => Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                             decoration: BoxDecoration(
-                               color: Colors.white,
-                               borderRadius: BorderRadius.circular(8),
-                               border: Border.all(color: Colors.grey[300]!),
-                             ),
-                             child: Text(
-                               code,
-                               style: const TextStyle(
-                                 fontFamily: 'monospace',
-                                 fontWeight: FontWeight.bold,
-                                 fontSize: 14,
-                                 letterSpacing: 1.0,
-                                 color: AppColors.textDark,
-                               ),
-                             ),
-                          )).toList(),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Action Buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Clipboard.setData(ClipboardData(text: codes.join('\n')));
-                                CustomSnackbar.showSuccess(context, "Codes copied to clipboard");
-                              },
-                              icon: const Icon(Icons.copy, size: 18),
-                              label: const Text("Copy Codes"),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.primaryGreen,
-                                side: const BorderSide(color: AppColors.primaryGreen),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                CustomSnackbar.showInfo(context, "Save to File: Coming Soon");
-                                // Implement saving to file logic here if needed
-                              },
-                              icon: const Icon(Icons.download, size: 18),
-                              label: const Text("Save as .txt"),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.textDark,
-                                side: const BorderSide(color: Colors.grey),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      Divider(color: Colors.grey[200]),
-                      const SizedBox(height: 8),
-
-                      // Gatekeeper Checkbox
-                      CheckboxListTile(
-                        value: isCheckboxChecked,
-                        onChanged: (val) {
-                          setDialogState(() => isCheckboxChecked = val == true);
-                        },
-                        title: const Text(
-                          "I have securely saved these codes.",
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        activeColor: AppColors.primaryGreen,
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isCheckboxChecked 
-                    ? () => Navigator.pop(ctx)
-                    : null, // Disabled until checked
-                  child: Text(
-                    "Done",
-                    style: TextStyle(
-                      color: isCheckboxChecked ? AppColors.primaryGreen : Colors.grey,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+        CustomSnackbar.showError(
+          context,
+          "Account deletion failed: ${e.toString()}",
         );
-      },
-    );
-    
-    // Refresh status after dialog closes
-    if (mounted) await _check2FAStatus();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -787,7 +1671,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- SECTION 1: ACCOUNT & SECURITY ---
                 _buildSectionHeader("Account & Security"),
                 _buildSettingsTile(
                   context,
@@ -802,161 +1685,216 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: "Facebook, Google",
                   onTap: () => context.push(AppRoutes.linkedAccounts),
                 ),
-                SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  tileColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  secondary: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.security, color: AppColors.primaryGreen, size: 20),
+
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  title: const Text(
-                    "Two-Factor Authentication",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textDark,
+                  child: SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    secondary: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.security,
+                        color: AppColors.primaryGreen,
+                        size: 20,
+                      ),
                     ),
+                    title: const Text(
+                      "Two-Factor Authentication",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    subtitle: Text(
+                      _is2FAEnabled ? "Enabled via Authenticator" : "Disabled",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            _is2FAEnabled
+                                ? AppColors.primaryGreen
+                                : AppColors.textLight,
+                      ),
+                    ),
+                    value: _is2FAEnabled,
+                    activeColor: AppColors.primaryGreen,
+                    onChanged: (val) {
+                      if (val) {
+                        _start2FASetupWizard();
+                      } else {
+                        _showDisable2FADialog();
+                      }
+                    },
                   ),
-                  value: _is2FAEnabled,
-                  activeColor: AppColors.primaryGreen,
-                  onChanged: _toggle2FA,
                 ),
+
                 if (_is2FAEnabled)
                   Padding(
                     padding: const EdgeInsets.only(left: 16, top: 4),
                     child: _buildSettingsTile(
                       context,
                       icon: Icons.key_off_outlined,
-                      title: _hasRecoveryCodes ? "Regenerate Recovery Codes" : "Generate Recovery Codes",
-                      subtitle: _hasRecoveryCodes 
-                          ? "You have active backup codes" 
-                          : "Get backup codes for account recovery",
+                      title:
+                          _hasRecoveryCodes
+                              ? "Regenerate Recovery Codes"
+                              : "Generate Recovery Codes",
+                      subtitle:
+                          _hasRecoveryCodes
+                              ? "You have active backup codes"
+                              : "Get backup codes for account recovery",
                       onTap: _handleRecoveryCodesTap,
                     ),
                   ),
+
                 _buildSettingsTile(
                   context,
                   icon: Icons.delete_forever,
-                  title: AppLocalizations.of(context).translate('delete'),
+                  title: "Delete Account",
                   isDestructive: true,
                   onTap: () => _showDeleteConfirmation(context),
                 ),
                 const SizedBox(height: 32),
 
-                // --- SECTION 2: PREFERENCES ---
-                _buildSectionHeader(AppLocalizations.of(context).translate('settings_preferences')),
+                _buildSectionHeader("Preferences"),
                 _buildSettingsTile(
                   context,
                   icon: Icons.notifications_none,
-                  title: AppLocalizations.of(context).translate('tile_notifications'),
-                  onTap: () => CustomSnackbar.showInfo(context, "Notifications: Coming Soon"),
-                ),
-                _buildSettingsTile(
-                  context,
-                  icon: Icons.language,
-                  title: AppLocalizations.of(context).translate('tile_language'),
-                  value: _getLanguageName(SettingsNotifier.instance.locale.languageCode),
-                  onTap: () async {
-                    await showDialog(
-                      context: context,
-                      builder: (context) => SimpleDialog(
-                        title: Text(AppLocalizations.of(context).translate('select_language')),
-                        children: [
-                          _buildLanguageOption(context, 'en', 'English'),
-                          _buildLanguageOption(context, 'bn', 'বাংলা'),
-                          _buildLanguageOption(context, 'es', 'Español'),
-                          _buildLanguageOption(context, 'fr', 'Français'),
-                          _buildLanguageOption(context, 'hi', 'हिन्दी'),
-                          _buildLanguageOption(context, 'ar', 'العربية'),
-                        ],
+                  title: "Notifications",
+                  onTap:
+                      () => CustomSnackbar.showInfo(
+                        context,
+                        "Notifications: Coming Soon",
                       ),
-                    );
-                    setState(() {});
-                  },
                 ),
                 _buildSettingsTile(
                   context,
                   icon: Icons.attach_money,
-                  title: AppLocalizations.of(context).translate('tile_currency'),
-                  value: "${ProfileNotifier.instance.currencySymbol} - ${AppLocalizations.of(context).translate('tile_currency')}",
-                  onTap: () => CustomSnackbar.showInfo(context, "Currency is automatic based on location"),
+                  title: "Currency",
+                  value: ProfileNotifier.instance.currencySymbol,
+                  subtitle: "Set automatically by location",
+                  onTap:
+                      () => CustomSnackbar.showInfo(
+                        context,
+                        "Currency is automatically configured based on your profile location.",
+                      ),
                 ),
                 _buildSettingsTile(
                   context,
                   icon: Icons.dark_mode_outlined,
-                  title: AppLocalizations.of(context).translate('tile_appearance'),
-                  value: _getThemeName(SettingsNotifier.instance.themeMode, AppLocalizations.of(context)),
+                  title: "Appearance",
+                  value: _getThemeName(SettingsNotifier.instance.themeMode),
                   onTap: () async {
-                     await showModalBottomSheet(
-                       context: context,
-                       shape: const RoundedRectangleBorder(
-                         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                       ),
-                       builder: (context) {
-                         final loc = AppLocalizations.of(context);
-                         return Padding(
-                           padding: const EdgeInsets.all(16.0),
-                           child: Column(
-                             mainAxisSize: MainAxisSize.min,
-                             children: [
-                               Text(loc.translate('tile_appearance'), style: AppTextStyles.h3),
-                               const SizedBox(height: 16),
-                               ListTile(
-                                 leading: const Icon(Icons.brightness_auto),
-                                 title: Text(loc.translate('theme_system')),
-                                 trailing: SettingsNotifier.instance.themeMode == ThemeMode.system 
-                                     ? const Icon(Icons.check, color: AppColors.primaryGreen) : null,
-                                 onTap: () {
-                                   SettingsNotifier.instance.updateThemeMode(ThemeMode.system);
-                                   Navigator.pop(context);
-                                 },
-                               ),
-                               ListTile(
-                                 leading: const Icon(Icons.light_mode),
-                                 title: Text(loc.translate('theme_light')),
-                                 trailing: SettingsNotifier.instance.themeMode == ThemeMode.light 
-                                     ? const Icon(Icons.check, color: AppColors.primaryGreen) : null,
-                                 onTap: () {
-                                   SettingsNotifier.instance.updateThemeMode(ThemeMode.light);
-                                   Navigator.pop(context);
-                                 },
-                               ),
-                               ListTile(
-                                 leading: const Icon(Icons.dark_mode),
-                                 title: Text(loc.translate('theme_dark')),
-                                 trailing: SettingsNotifier.instance.themeMode == ThemeMode.dark 
-                                     ? const Icon(Icons.check, color: AppColors.primaryGreen) : null,
-                                 onTap: () {
-                                   SettingsNotifier.instance.updateThemeMode(ThemeMode.dark);
-                                   Navigator.pop(context);
-                                 },
-                               ),
-                             ],
-                           ),
-                         );
-                       },
-                     );
-                     setState(() {});
+                    await showModalBottomSheet(
+                      context: context,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
+                      ),
+                      builder: (context) {
+                        return Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text("Appearance", style: AppTextStyles.h3),
+                              const SizedBox(height: 16),
+                              ListTile(
+                                leading: const Icon(Icons.brightness_auto),
+                                title: const Text("System Default"),
+                                trailing:
+                                    SettingsNotifier.instance.themeMode ==
+                                            ThemeMode.system
+                                        ? const Icon(
+                                          Icons.check,
+                                          color: AppColors.primaryGreen,
+                                        )
+                                        : null,
+                                onTap: () {
+                                  SettingsNotifier.instance.updateThemeMode(
+                                    ThemeMode.system,
+                                  );
+                                  Navigator.pop(context);
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.light_mode),
+                                title: const Text("Light"),
+                                trailing:
+                                    SettingsNotifier.instance.themeMode ==
+                                            ThemeMode.light
+                                        ? const Icon(
+                                          Icons.check,
+                                          color: AppColors.primaryGreen,
+                                        )
+                                        : null,
+                                onTap: () {
+                                  SettingsNotifier.instance.updateThemeMode(
+                                    ThemeMode.light,
+                                  );
+                                  Navigator.pop(context);
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.dark_mode),
+                                title: const Text("Dark"),
+                                trailing:
+                                    SettingsNotifier.instance.themeMode ==
+                                            ThemeMode.dark
+                                        ? const Icon(
+                                          Icons.check,
+                                          color: AppColors.primaryGreen,
+                                        )
+                                        : null,
+                                onTap: () {
+                                  SettingsNotifier.instance.updateThemeMode(
+                                    ThemeMode.dark,
+                                  );
+                                  Navigator.pop(context);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                    setState(() {});
                   },
                 ),
-                
+
                 AnimatedBuilder(
                   animation: SettingsNotifier.instance,
                   builder: (context, child) {
                     return SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
                       secondary: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: AppColors.primaryGreen.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.animation, color: AppColors.primaryGreen, size: 20),
+                        child: const Icon(
+                          Icons.animation,
+                          color: AppColors.primaryGreen,
+                          size: 20,
+                        ),
                       ),
                       title: const Text(
                         "Menu Drawer Hint",
@@ -966,18 +1904,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           color: AppColors.textDark,
                         ),
                       ),
-                      subtitle: const Text("Show animation on startup", style: TextStyle(fontSize: 12, color: AppColors.textLight)),
+                      subtitle: const Text(
+                        "Show animation on startup",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textLight,
+                        ),
+                      ),
                       value: SettingsNotifier.instance.showDrawerHint,
                       activeColor: AppColors.primaryGreen,
                       onChanged: (val) {
-                         SettingsNotifier.instance.updateShowDrawerHint(val);
+                        SettingsNotifier.instance.updateShowDrawerHint(val);
                       },
                     );
                   },
                 ),
                 const SizedBox(height: 32),
 
-                // --- SECTION 3: SUPPORT & LEGAL ---
                 _buildSectionHeader("Support & Legal"),
                 _buildSettingsTile(
                   context,
@@ -1009,8 +1952,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-        
-        // --- LOADING OVERLAY ---
         if (_isLoading)
           Container(
             color: Colors.black.withValues(alpha: 0.5),
@@ -1065,9 +2006,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: isDestructive
-                ? Colors.red.withValues(alpha: 0.1)
-                : AppColors.primaryGreen.withValues(alpha: 0.1),
+            color:
+                isDestructive
+                    ? Colors.red.withValues(alpha: 0.1)
+                    : AppColors.primaryGreen.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -1084,9 +2026,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             color: isDestructive ? Colors.red : AppColors.textDark,
           ),
         ),
-        subtitle: subtitle != null
-            ? Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textLight))
-            : null,
+        subtitle:
+            subtitle != null
+                ? Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textLight,
+                  ),
+                )
+                : null,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1095,48 +2044,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.only(right: 8),
                 child: Text(
                   value,
-                  style: const TextStyle(fontSize: 14, color: AppColors.textLight),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textLight,
+                  ),
                 ),
               ),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textLight),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 14,
+              color: AppColors.textLight,
+            ),
           ],
         ),
       ),
     );
   }
-  // Helper to get display name for language code
-  String _getLanguageName(String code) {
-    switch (code) {
-      case 'en': return "English";
-      case 'bn': return "বাংলা";
-      case 'es': return "Español";
-      case 'fr': return "Français";
-      case 'hi': return "हिन्दी";
-      case 'ar': return "العربية";
-      default: return "English";
-    }
-  }
 
-  // Helper to get display name for theme mode
-  String _getThemeName(ThemeMode mode, AppLocalizations loc) {
+  String _getThemeName(ThemeMode mode) {
     switch (mode) {
-      case ThemeMode.system: return loc.translate('theme_system');
-      case ThemeMode.light: return loc.translate('theme_light');
-      case ThemeMode.dark: return loc.translate('theme_dark');
+      case ThemeMode.system:
+        return "System Default";
+      case ThemeMode.light:
+        return "Light";
+      case ThemeMode.dark:
+        return "Dark";
     }
   }
+}
 
-  // Helper to build language option
-  Widget _buildLanguageOption(BuildContext context, String code, String name) {
-    return SimpleDialogOption(
-      onPressed: () {
-        SettingsNotifier.instance.updateLocale(Locale(code));
-        Navigator.pop(context);
-      },
-      child: Text(name, style: TextStyle(
-        fontWeight: SettingsNotifier.instance.locale.languageCode == code ? FontWeight.bold : FontWeight.normal,
-        color: SettingsNotifier.instance.locale.languageCode == code ? AppColors.primaryGreen : Colors.black87,
-      )),
+class BackupCodeFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    String cleanText = newValue.text.toUpperCase().replaceAll(
+      RegExp(r'[^A-Z0-9]'),
+      '',
+    );
+    if (cleanText.length > 8) {
+      cleanText = cleanText.substring(0, 8);
+    }
+    String formattedText = cleanText;
+    if (cleanText.length > 4) {
+      formattedText = '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
+    }
+    return TextEditingValue(
+      text: formattedText,
+      selection: TextSelection.collapsed(offset: formattedText.length),
     );
   }
 }

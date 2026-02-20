@@ -1,16 +1,23 @@
-# daktarpi
+# DaktarPi
 
-A new Flutter project.
+Flutter application for doctor discovery, appointment booking, medical records, and account security flows.
 
-## Getting Started
+## Documentation
 
-This project is a starting point for a Flutter application.
+Comprehensive technical documentation is available at:
 
-A few resources to get you started if this is your first Flutter project:
+- `docs/COMPREHENSIVE_CODEBASE_DOCUMENTATION.md`
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Quick Start
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. Install Flutter SDK and mobile toolchains.
+2. Create `.env` with required keys:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `GOOGLE_WEB_CLIENT_ID`
+3. Run:
+
+```bash
+flutter pub get
+flutter run
+```
