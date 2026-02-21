@@ -14,7 +14,9 @@ class MedicalRecordRepository {
   String? get currentUserId => _client.auth.currentUser?.id;
 
   /// Fetches medical records for the current user.
-  Future<List<MedicalRecord>> fetchRecords() async {
+  Future<List<MedicalRecord>> fetchRecords({
+    bool allowAal1Bypass = false,
+  }) async {
     final user = _client.auth.currentUser;
     final userId = user?.id;
     if (userId == null) return [];
@@ -25,7 +27,7 @@ class MedicalRecordRepository {
 
     // If 2FA is enabled but session is only Level 1 (Password), block access.
     // This handles the "Session Expired" edge case.
-    if (is2FAEnabled && (aal == 'aal1' || aal == null)) {
+    if (!allowAal1Bypass && is2FAEnabled && (aal == 'aal1' || aal == null)) {
       throw Requires2FAException();
     }
 

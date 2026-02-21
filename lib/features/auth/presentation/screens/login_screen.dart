@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../../core/constants/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
@@ -12,8 +13,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../data/auth_entry_route_service.dart';
 import '../../data/auth_repository.dart';
-import '../../data/auth_route_resolver.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,6 +29,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   final AuthRepository _authRepository = AuthRepository();
+  late final AuthEntryRouteService _authEntryRouteService =
+      AuthEntryRouteService(authRepository: _authRepository);
+
+  bool _isGoogleInitialized = false;
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
@@ -40,6 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _emailController.addListener(_onEmailChanged);
+    unawaited(_initializeGoogleSignIn());
   }
 
   @override
@@ -74,6 +80,24 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     });
+  }
+
+  Future<void> _initializeGoogleSignIn() async {
+    if (_isGoogleInitialized) {
+      return;
+    }
+
+    try {
+      final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID']?.trim();
+      await _googleSignIn.initialize(
+        // Must be the Web OAuth client ID, not Android/iOS client IDs.
+        serverClientId:
+            webClientId != null && webClientId.isNotEmpty ? webClientId : null,
+      );
+      _isGoogleInitialized = true;
+    } catch (_) {
+      _isGoogleInitialized = false;
+    }
   }
 
   void _showForgotPasswordSheet() {
@@ -114,10 +138,10 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authRepository.signIn(email: email, password: password);
 
       if (mounted) {
-        final route =
-            AuthRouteResolver(
-              AuthRepositoryRouteProvider(_authRepository),
-            ).resolvePostAuthRoute();
+        final route = await _authEntryRouteService.resolvePostAuthRoute();
+        if (!mounted) {
+          return;
+        }
         context.go(route);
       }
     } on AuthException catch (e) {
@@ -146,6 +170,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      await _initializeGoogleSignIn();
+
       if (!_googleSignIn.supportsAuthenticate()) {
         throw UnsupportedError(
           'Google Sign-In interactive flow is not supported on this platform.',
@@ -165,31 +191,66 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authRepository.signInWithGoogleIdToken(idToken: idToken);
 
       if (mounted) {
-        final route =
-            AuthRouteResolver(
-              AuthRepositoryRouteProvider(_authRepository),
-            ).resolvePostAuthRoute();
+        final route = await _authEntryRouteService.resolvePostAuthRoute();
+        if (!mounted) {
+          return;
+        }
         context.go(route);
       }
     } on AuthException catch (e) {
       if (mounted) {
         CustomSnackbar.showError(context, e.message);
       }
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted ||
+          e.code == GoogleSignInExceptionCode.uiUnavailable) {
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      if (e.code == GoogleSignInExceptionCode.clientConfigurationError ||
+          e.code == GoogleSignInExceptionCode.providerConfigurationError) {
+        CustomSnackbar.showError(
+          context,
+          'Google Sign-In is not configured correctly. Use GOOGLE_WEB_CLIENT_ID as serverClientId and verify app SHA-1 in Google Cloud for release builds.',
+        );
+        return;
+      }
+
+      CustomSnackbar.showError(
+        context,
+        'Google Sign-In failed. Please try again.',
+      );
     } on PlatformException catch (e) {
-      if (e.code == 'sign_in_canceled') {
+      if (e.code == 'sign_in_canceled' ||
+          e.code == 'canceled' ||
+          e.code == 'cancelled') {
         return;
       }
       if (mounted) {
-        CustomSnackbar.showError(context, 'Google Sign-In error: ${e.message}');
+        CustomSnackbar.showError(
+          context,
+          'Google Sign-In failed. Please try again.',
+        );
       }
     } catch (e) {
       if (mounted) {
-        if (e.toString().contains('canceled') ||
-            e.toString().contains('cancelled')) {
+        final message = e.toString().toLowerCase();
+        if (message.contains('signincancelederror') ||
+            message.contains('sign_in_canceled') ||
+            message.contains('signin canceled') ||
+            message.contains('canceled') ||
+            message.contains('cancelled')) {
           return;
         }
-        // Exposing the exact error for debugging instead of hiding it
-        CustomSnackbar.showError(context, 'Google Error: ${e.toString()}');
+        CustomSnackbar.showError(
+          context,
+          'Google Sign-In failed. Please try again.',
+        );
       }
     } finally {
       if (mounted) {

@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:pinput/pinput.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/errors/app_failure.dart';
+import '../../../../core/security/sensitive_action_step_up_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
@@ -33,6 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   String? _verifiedFactorId;
   bool _hasRecoveryCodes = false;
   final SettingsRepository _settingsRepository = SettingsRepository();
+  final SensitiveActionStepUpService _stepUpService =
+      SensitiveActionStepUpService();
 
   TextEditingController? _activePinController;
   VoidCallback? _activePinSubmit;
@@ -1038,7 +1041,17 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _showChangePasswordDialog() async {
-    int currentStep = _is2FAEnabled ? 0 : 1;
+    bool usedTrustedBiometric = false;
+    if (_is2FAEnabled) {
+      usedTrustedBiometric = await _stepUpService.authenticateIfTrusted(
+        localizedReason: 'Use biometrics to change your password',
+      );
+      if (!mounted) {
+        return;
+      }
+    }
+
+    int currentStep = (_is2FAEnabled && !usedTrustedBiometric) ? 0 : 1;
     bool isDialogLoading = false;
     bool isRecoveryMode = false;
 
@@ -1047,8 +1060,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     final newPassController = TextEditingController();
     final confirmPassController = TextEditingController();
 
-    if (_is2FAEnabled) {
+    if (currentStep == 0) {
       _activePinController = otpController;
+    } else {
+      _activePinController = null;
     }
 
     await showDialog(
@@ -1413,6 +1428,37 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 CustomSnackbar.showSuccess(
                                   context,
                                   "Password updated successfully!",
+                                );
+                              } on AppFailure catch (failure) {
+                                if (failure.isRequiresRecentMfa) {
+                                  setDialogState(() {
+                                    isDialogLoading = false;
+                                    currentStep = 0;
+                                    isRecoveryMode = false;
+                                    _activePinController = otpController;
+                                    otpController.clear();
+                                    recoveryController.clear();
+                                  });
+
+                                  if (ctx.mounted) {
+                                    CustomSnackbar.showInfo(
+                                      ctx,
+                                      "Authenticator verification is required for this password change.",
+                                    );
+                                  }
+                                  return;
+                                }
+
+                                setDialogState(() {
+                                  isDialogLoading = false;
+                                });
+
+                                if (!ctx.mounted) {
+                                  return;
+                                }
+                                CustomSnackbar.showError(
+                                  ctx,
+                                  failure.userMessage,
                                 );
                               } catch (e) {
                                 setDialogState(() {

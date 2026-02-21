@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../data/appointment.dart';
 import '../data/appointment_repository.dart';
 import '../data/appointment_secure_cache_repository.dart';
+import '../../../core/services/appointment_notification_service.dart';
 
 /// Singleton ChangeNotifier that manages the state of user appointments.
 /// Centralizes fetching and updates (cancellation) to ensure UI consistency.
@@ -13,6 +14,7 @@ class AppointmentNotifier extends ChangeNotifier {
 
   final _appointmentRepo = AppointmentRepository();
   final _cacheRepo = AppointmentSecureCacheRepository();
+  final _notificationService = AppointmentNotificationService.instance;
 
   List<Appointment> _appointments = [];
   bool _isLoading = false;
@@ -49,7 +51,15 @@ class AppointmentNotifier extends ChangeNotifier {
     }
 
     try {
-      _appointments = await _appointmentRepo.fetchAppointments(userId);
+      final previousIds = _appointments.map((a) => a.id).toSet();
+      final freshAppointments = await _appointmentRepo.fetchAppointments(userId);
+      final nextIds = freshAppointments.map((a) => a.id).toSet();
+
+      for (final removedId in previousIds.difference(nextIds)) {
+        unawaited(_notificationService.cancelReminder(removedId));
+      }
+
+      _appointments = freshAppointments;
       await _cacheRepo.saveAppointments(_appointments);
     } catch (e) {
       _error = e.toString();
@@ -67,6 +77,7 @@ class AppointmentNotifier extends ChangeNotifier {
 
     try {
       await _appointmentRepo.cancelAppointment(appointmentId);
+      await _notificationService.cancelReminder(appointmentId);
 
       // Remove locally to update UI instantly without full refetch
       _appointments.removeWhere((app) => app.id == appointmentId);
@@ -82,6 +93,7 @@ class AppointmentNotifier extends ChangeNotifier {
   Future<void> completeAppointment(int appointmentId) async {
     try {
       await _appointmentRepo.completeAppointment(appointmentId);
+      await _notificationService.cancelReminder(appointmentId);
 
       // Remove locally to update UI instantly
       _appointments.removeWhere((app) => app.id == appointmentId);

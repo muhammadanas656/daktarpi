@@ -123,9 +123,32 @@ class AppointmentRepository {
     }
   }
 
-  Future<void> createAppointment(Map<String, dynamic> appointmentData) async {
+  Future<int> createAppointment(Map<String, dynamic> appointmentData) async {
     try {
-      await _client.from('appointments').insert(appointmentData);
+      final inserted =
+          await _client
+              .from('appointments')
+              .insert(appointmentData)
+              .select('id')
+              .single();
+
+      final idValue = inserted['id'];
+      if (idValue is int) {
+        return idValue;
+      }
+
+      final parsed = int.tryParse(idValue.toString());
+      if (parsed == null) {
+        throw const AppFailure(
+          type: AppFailureType.backend,
+          userMessage: 'Booking created but appointment ID could not be read.',
+          technicalMessage:
+              'appointments.insert returned an invalid/non-numeric id.',
+          code: 'invalid_appointment_id',
+        );
+      }
+
+      return parsed;
     } on PostgrestException catch (error) {
       final details =
           '${error.message} ${error.details ?? ''} ${error.hint ?? ''}'

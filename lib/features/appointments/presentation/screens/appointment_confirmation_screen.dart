@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/services/appointment_notification_service.dart';
 import '../../../doctors/data/doctor_repository.dart';
 import '../../data/appointment_repository.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
@@ -47,6 +48,7 @@ class _AppointmentConfirmationScreenState
 
   final _doctorRepo = DoctorRepository();
   final _appointmentRepo = AppointmentRepository();
+  final _notificationService = AppointmentNotificationService.instance;
 
   final TextStyle _sectionHeaderStyle = AppTextStyles.h3;
 
@@ -57,8 +59,8 @@ class _AppointmentConfirmationScreenState
   bool _isLoading = true;
 
   int _selectedTimeSlotIndex = -1;
-  int _selectedReminderIndex = 2;
-  final List<int> _reminderOptions = [10, 15, 25, 30, 35, 40];
+  int _selectedReminderIndex = 1;
+  final List<int> _reminderOptions = [15, 60, 1440];
 
   @override
   void initState() {
@@ -179,11 +181,20 @@ class _AppointmentConfirmationScreenState
 
     setState(() => _isLoading = true);
     final userId = _appointmentRepo.currentUserId;
-    if (userId == null) return;
+    if (userId == null) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        CustomSnackbar.showError(context, "Please sign in again to continue.");
+      }
+      return;
+    }
 
     final slotString = slots[_selectedTimeSlotIndex];
     final times = slotString.split(' - ');
     final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    final appointmentDateTime = DateFormat(
+      'yyyy-MM-dd HH:mm',
+    ).parse('$formattedDate ${times[0]}');
 
     final data = {
       'user_id': userId,
@@ -203,11 +214,20 @@ class _AppointmentConfirmationScreenState
     };
 
     try {
+      int persistedAppointmentId;
       if (widget.appointmentId != null) {
         await _appointmentRepo.updateAppointment(widget.appointmentId!, data);
+        persistedAppointmentId = widget.appointmentId!;
       } else {
-        await _appointmentRepo.createAppointment(data);
+        persistedAppointmentId = await _appointmentRepo.createAppointment(data);
       }
+
+      await _notificationService.scheduleReminder(
+        appointmentId: persistedAppointmentId,
+        appointmentLocalDateTime: appointmentDateTime,
+        reminderMinutes: _reminderOptions[_selectedReminderIndex],
+        doctorName: widget.doctor['full_name']?.toString() ?? 'your doctor',
+      );
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -628,7 +648,7 @@ class _AppointmentConfirmationScreenState
                   child: Text(
                     isTime
                         ? _formatSlotDisplay(items[index])
-                        : "${items[index]}\nMin",
+                        : _formatReminderDisplay(items[index]),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: isSelected ? Colors.white : primaryGreen,
@@ -681,5 +701,19 @@ class _AppointmentConfirmationScreenState
     } catch (_) {
       return s;
     }
+  }
+
+  String _formatReminderDisplay(String minutesRaw) {
+    final minutes = int.tryParse(minutesRaw);
+    if (minutes == null) {
+      return "$minutesRaw\nMin";
+    }
+    if (minutes == 60) {
+      return "1\nHour";
+    }
+    if (minutes == 1440) {
+      return "24\nHours";
+    }
+    return "$minutes\nMin";
   }
 }

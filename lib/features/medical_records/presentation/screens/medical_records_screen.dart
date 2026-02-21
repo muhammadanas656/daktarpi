@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http; // New
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/security/sensitive_action_step_up_service.dart';
 import '../../../../features/medical_records/data/medical_record.dart';
 import '../../../../features/medical_records/data/medical_record_repository.dart';
 import '../models/medical_record_route_args.dart';
@@ -24,9 +25,11 @@ class MedicalRecordsScreen extends StatefulWidget {
 
 class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   final _repository = MedicalRecordRepository();
+  final _stepUpService = SensitiveActionStepUpService();
   List<MedicalRecord> _records = [];
   bool _isLoading = true;
   String? _errorMessage;
+  bool _trustedBiometricUnlocked = false;
 
   // Helper to remove timestamp prefix from display name
   String _getCleanFileName(String path) {
@@ -48,7 +51,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     });
 
     try {
-      final records = await _repository.fetchRecords();
+      final records = await _repository.fetchRecords(
+        allowAal1Bypass: _trustedBiometricUnlocked,
+      );
       if (mounted) {
         setState(() {
           _records = records;
@@ -58,6 +63,21 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     } catch (e) {
       if (mounted) {
         if (e is Requires2FAException) {
+          final unlocked = await _stepUpService.authenticateIfTrusted(
+            localizedReason:
+                'Use Face ID or Touch ID to view your medical records',
+          );
+          if (!mounted) {
+            return;
+          }
+          if (unlocked) {
+            setState(() {
+              _trustedBiometricUnlocked = true;
+            });
+            await _fetchRecords();
+            return;
+          }
+
           // Session expired or insufficient AAL -> Show Dialog
           await showDialog(
             context: context,

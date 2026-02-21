@@ -12,11 +12,13 @@ import 'biometric_auth_service.dart';
 class InactivityLockGuard extends StatefulWidget {
   final Widget child;
   final Duration timeout;
+  final Duration absoluteTimeout;
 
   const InactivityLockGuard({
     super.key,
     required this.child,
     this.timeout = const Duration(minutes: 5),
+    this.absoluteTimeout = const Duration(hours: 12),
   });
 
   @override
@@ -32,12 +34,14 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   bool _isUnlocking = false;
   bool _biometricAvailable = false;
   DateTime? _pausedAt;
+  DateTime? _sessionStartedAt;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadBiometricAvailability();
+    _ensureSessionClock();
     _resetTimer();
   }
 
@@ -57,6 +61,11 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     }
 
     if (state == AppLifecycleState.resumed) {
+      if (_isAbsoluteTimeoutExceeded()) {
+        unawaited(_signOutFromLockScreen());
+        return;
+      }
+
       final pausedAt = _pausedAt;
       _pausedAt = null;
 
@@ -85,6 +94,12 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   }
 
   void _resetTimer() {
+    _ensureSessionClock();
+    if (_isAbsoluteTimeoutExceeded()) {
+      unawaited(_signOutFromLockScreen());
+      return;
+    }
+
     if (_isLocked) {
       return;
     }
@@ -99,6 +114,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
 
     // Ignore when there is no active authenticated user.
     if (_authRepository.currentUser == null) {
+      _sessionStartedAt = null;
       _resetTimer();
       return;
     }
@@ -119,6 +135,11 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
 
   Future<void> _unlock({bool delayBeforePrompt = false}) async {
     if (_isUnlocking || !_isLocked) {
+      return;
+    }
+
+    if (_isAbsoluteTimeoutExceeded()) {
+      await _signOutFromLockScreen();
       return;
     }
 
@@ -162,9 +183,28 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     setState(() {
       _isLocked = false;
       _isUnlocking = false;
+      _sessionStartedAt = null;
     });
     context.go(AppRoutes.login);
-    _resetTimer();
+    _inactivityTimer?.cancel();
+  }
+
+  void _ensureSessionClock() {
+    if (_authRepository.currentUser == null) {
+      _sessionStartedAt = null;
+      return;
+    }
+    _sessionStartedAt ??= DateTime.now().toUtc();
+  }
+
+  bool _isAbsoluteTimeoutExceeded() {
+    _ensureSessionClock();
+    final startedAt = _sessionStartedAt;
+    if (startedAt == null) {
+      return false;
+    }
+    return DateTime.now().toUtc().difference(startedAt) >=
+        widget.absoluteTimeout;
   }
 
   Widget _buildLockOverlay() {

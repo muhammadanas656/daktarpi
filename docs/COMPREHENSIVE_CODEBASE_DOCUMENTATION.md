@@ -50,6 +50,21 @@ Master-plan remediation update (Feb 21, 2026):
 - replaced core doctor/avatar network images with bounded `cached_network_image` + `shimmer` placeholders via `AppNetworkImage` to avoid blank/flicker states and image overflow
 - added chaos scenario integration test scaffold: `integration_test/medical_record_network_chaos_test.dart` (network drop on medical-record update path + offline banner expectation)
 
+Front-door friction hardening update (Feb 21, 2026):
+- added trusted-device persistence (`TrustedDeviceRepository`) with hashed token storage in Supabase (`public.trusted_devices`) + secure on-device token storage, including 30-day bypass of `/verify-2fa` at splash/post-login when token remains valid
+- updated `Verify2FAScreen` with optional "Remember this device for 30 days" control (non-step-up flows), delayed 5-second recovery CTA reveal, and regex-based backup-code block extraction for seamless paste+submit
+- introduced trusted-biometric step-up (`SensitiveActionStepUpService`) so trusted devices can use Face ID/Touch ID before sensitive actions (medical records view and password change) with fallback to authenticator when backend requires recent MFA
+- hardened Google Sign-In init/error handling: explicit `serverClientId` initialization from `GOOGLE_WEB_CLIENT_ID` and silent cancellation handling for expected user-abort paths
+
+Compliance controls update (Feb 21, 2026):
+- added startup device-integrity enforcement (`DeviceIntegrityService`) with platform-channel root/jailbreak checks; compromised-device detection now wipes secure local storage and signs the session out before app usage
+- added Android screenshot protection with `FLAG_SECURE` in `MainActivity` (blocks screenshots and recents thumbnails for PHI surfaces)
+- added iOS privacy shield during background/inactive transitions in `AppDelegate` to reduce PHI exposure in app switcher snapshots
+- introduced on-device appointment reminder scheduling via `AppointmentNotificationService` using `flutter_local_notifications` + `timezone` with absolute UTC trigger timestamps
+- wired reminder lifecycle sync into booking/cancel flows: schedule on create/reschedule and explicit cancel on cancel/complete paths
+- aligned reminder UX options to clinically meaningful presets (`15 min`, `1 hour`, `24 hours`) and tightened OTP input ergonomics (`TextInputType.number`, OTP autofill hints, explicit clipboard support)
+- added absolute session lifetime enforcement (`ABSOLUTE_SESSION_TIMEOUT_MS`, default 12h) in `InactivityLockGuard` in addition to inactivity lock timeout
+
 ## 1. Purpose and Scope
 
 This document explains the app from multiple architecture perspectives so you can inspect the same system through different lenses:
@@ -104,7 +119,9 @@ main()
   -> WidgetsFlutterBinding.ensureInitialized()
   -> dotenv.load(".env")
   -> Supabase.initialize(url, anonKey)
-  -> runApp(MyApp)
+  -> initialize local reminder service
+  -> run compromised-device enforcement (wipe + sign-out when rooted/jailbroken)
+  -> runApp(MyApp) OR compromised-device block screen
 ```
 
 Files:
@@ -382,6 +399,23 @@ Flow in settings:
 
 File:
 - `lib/features/menu/presentation/screens/settings_screen.dart`
+
+### 8.5 Screen privacy and device integrity
+
+Implemented controls:
+- Android screenshot/recents blocking via `FLAG_SECURE` in `MainActivity`
+- iOS privacy shield overlay on inactive/background transitions in `AppDelegate`
+- startup root/jailbreak checks via platform channel (`com.daktarpi/device_integrity`)
+- compromise response path: secure-storage wipe (`FlutterSecureStorage.deleteAll`) + auth sign-out before app access
+
+Important caveat:
+- iOS does not provide a universal API to fully block user screenshots for all content; the current implementation protects app-switcher snapshots and enforces compromised-device handling but should still be validated against your target compliance interpretation.
+
+### 8.6 Session timeout model
+
+- inactivity lock timeout: `INACTIVITY_TIMEOUT_MS` (default 5 minutes)
+- absolute session timeout: `ABSOLUTE_SESSION_TIMEOUT_MS` (default 12 hours)
+- on absolute timeout expiry, session is signed out and routed to `/login`
 
 ## 9. Design Flow Architecture
 

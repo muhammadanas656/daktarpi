@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +15,7 @@ import '../../../../core/utils/security_formatters.dart';
 import '../models/verify_2fa_route_args.dart';
 import '../../data/auth_repository.dart';
 import '../../data/security_gate_service.dart';
+import '../../data/trusted_device_repository.dart';
 
 class Verify2FAScreen extends StatefulWidget {
   final Verify2FARouteArgs routeArgs;
@@ -33,20 +36,27 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
 
   bool _isLoading = false;
   bool _isRecoveryMode = false;
+  bool _rememberThisDevice = false;
+  bool _showRecoveryAssist = false;
+  Timer? _recoveryAssistTimer;
   final SecurityGateService _securityGateService = SecurityGateService(
     authProvider: AuthRepositorySecurityProvider(AuthRepository()),
   );
+  final TrustedDeviceRepository _trustedDeviceRepository =
+      TrustedDeviceRepository();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _startRecoveryAssistTimer();
     _checkClipboardAndPaste();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _recoveryAssistTimer?.cancel();
     _codeController.dispose();
     _recoveryController.dispose();
     super.dispose();
@@ -56,6 +66,45 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _checkClipboardAndPaste();
+    }
+  }
+
+  void _startRecoveryAssistTimer() {
+    _recoveryAssistTimer?.cancel();
+    if (_isRecoveryMode) {
+      return;
+    }
+
+    if (mounted && _showRecoveryAssist) {
+      setState(() {
+        _showRecoveryAssist = false;
+      });
+    } else {
+      _showRecoveryAssist = false;
+    }
+
+    _recoveryAssistTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted || _isRecoveryMode) {
+        return;
+      }
+      setState(() {
+        _showRecoveryAssist = true;
+      });
+    });
+  }
+
+  void _setRecoveryMode(bool enabled) {
+    setState(() {
+      _isRecoveryMode = enabled;
+      _codeController.clear();
+      _recoveryController.clear();
+      _showRecoveryAssist = false;
+    });
+
+    if (enabled) {
+      _recoveryAssistTimer?.cancel();
+    } else {
+      _startRecoveryAssistTimer();
     }
   }
 
@@ -81,9 +130,11 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
           });
           _verify();
         }
-      } else if (_isRecoveryMode && cleanText.length == 8) {
-        final formattedCode =
-            '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
+      } else if (_isRecoveryMode) {
+        final formattedCode = extractFirstBackupCode(text);
+        if (formattedCode == null) {
+          return;
+        }
         if (_recoveryController.text != formattedCode) {
           setState(() {
             _recoveryController.text = formattedCode;
@@ -117,6 +168,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
         final success = await _securityGateService.verifyWithRecoveryCode(code);
 
         if (success) {
+          await _markTrustedDeviceIfSelected();
           if (mounted) {
             await showDialog(
               context: context,
@@ -160,6 +212,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
         }
       } else {
         await _securityGateService.verifyWithTotp(code);
+        await _markTrustedDeviceIfSelected();
         _handleVerificationSuccess();
       }
     } on AuthException catch (_) {
@@ -186,6 +239,17 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _markTrustedDeviceIfSelected() async {
+    if (widget.routeArgs.popOnSuccess || !_rememberThisDevice) {
+      return;
+    }
+    try {
+      await _trustedDeviceRepository.trustCurrentDevice();
+    } catch (_) {
+      // Trust persistence should never block authentication success.
     }
   }
 
@@ -313,6 +377,40 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                         ),
                       ),
                     ),
+                    if (!widget.routeArgs.popOnSuccess && !_isRecoveryMode) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryGreen.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: CheckboxListTile(
+                          dense: true,
+                          value: _rememberThisDevice,
+                          activeColor: AppColors.primaryGreen,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                          ),
+                          title: const Text(
+                            "Remember this device for 30 days",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          onChanged:
+                              _isLoading
+                                  ? null
+                                  : (value) {
+                                    setState(() {
+                                      _rememberThisDevice = value ?? false;
+                                    });
+                                  },
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 32),
 
                     AnimatedCrossFade(
@@ -337,6 +435,8 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                               height: boxWidth + 10,
                             ),
                             autofocus: true,
+                            keyboardType: TextInputType.number,
+                            autofillHints: const [AutofillHints.oneTimeCode],
                             showCursor: true,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
@@ -383,7 +483,14 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                           ),
                         ),
                         onChanged: (val) {
-                          if (val.length == 9) {
+                          final extracted = extractFirstBackupCode(val);
+                          if (extracted != null &&
+                              extracted != _recoveryController.text) {
+                            setState(() {
+                              _recoveryController.text = extracted;
+                            });
+                          }
+                          if (_recoveryController.text.length == 9) {
                             _verify();
                           }
                         },
@@ -407,24 +514,45 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                               : AppColors.primaryGreen,
                     ),
                     const SizedBox(height: 24),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isRecoveryMode = !_isRecoveryMode;
-                          _codeController.clear();
-                          _recoveryController.clear();
-                        });
-                      },
-                      child: Text(
-                        _isRecoveryMode
-                            ? "I found my authenticator app"
-                            : "Can't access your authenticator?",
-                        style: const TextStyle(
-                          color: AppColors.primaryGreen,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 240),
+                      child:
+                          _isRecoveryMode
+                              ? TextButton(
+                                key: const ValueKey('back_to_totp_button'),
+                                onPressed:
+                                    _isLoading
+                                        ? null
+                                        : () => _setRecoveryMode(false),
+                                child: const Text(
+                                  "I found my authenticator app",
+                                  style: TextStyle(
+                                    color: AppColors.primaryGreen,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              )
+                              : AnimatedOpacity(
+                                key: const ValueKey('recovery_assist_button'),
+                                opacity: _showRecoveryAssist ? 1 : 0,
+                                duration: const Duration(milliseconds: 260),
+                                curve: Curves.easeOut,
+                                child: IgnorePointer(
+                                  ignoring: !_showRecoveryAssist || _isLoading,
+                                  child: TextButton(
+                                    onPressed: () => _setRecoveryMode(true),
+                                    child: const Text(
+                                      "Lost your authenticator? Use a backup code",
+                                      style: TextStyle(
+                                        color: AppColors.primaryGreen,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                     ),
                     const SizedBox(height: 16),
                     TextButton(

@@ -22,6 +22,18 @@ class MyApp extends StatelessWidget {
     return const Duration(minutes: 5);
   }
 
+  static Duration _resolveAbsoluteSessionTimeout() {
+    const timeoutMs = String.fromEnvironment(
+      'ABSOLUTE_SESSION_TIMEOUT_MS',
+      defaultValue: '',
+    );
+    final parsed = int.tryParse(timeoutMs);
+    if (parsed != null && parsed > 0) {
+      return Duration(milliseconds: parsed);
+    }
+    return const Duration(hours: 12);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Listen to SettingsNotifier for Theme changes
@@ -56,6 +68,7 @@ class MyApp extends StatelessWidget {
             return OfflineModeGuard(
               child: InactivityLockGuard(
                 timeout: _resolveInactivityTimeout(),
+                absoluteTimeout: _resolveAbsoluteSessionTimeout(),
                 child: child,
               ),
             );

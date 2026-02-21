@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../auth/data/auth_repository.dart';
-import '../../../auth/data/auth_route_resolver.dart';
+import '../../../auth/data/auth_entry_route_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,7 +12,7 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final AuthRepository _authRepository = AuthRepository();
+  final AuthEntryRouteService _authEntryRouteService = AuthEntryRouteService();
 
   @override
   void initState() {
@@ -26,10 +25,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (!mounted) return;
 
-    final target =
-        AuthRouteResolver(
-          AuthRepositoryRouteProvider(_authRepository),
-        ).resolvePostAuthRoute();
+    final target = await _authEntryRouteService.resolvePostAuthRoute();
+    if (!mounted) {
+      return;
+    }
     context.go(target);
   }
 

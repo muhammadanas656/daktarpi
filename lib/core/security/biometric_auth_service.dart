@@ -7,14 +7,25 @@ class BiometricAuthService {
     : _localAuth = localAuth ?? LocalAuthentication();
 
   Future<bool> canUseBiometricUnlock() async {
-    final canCheck = await _localAuth.canCheckBiometrics;
-    final supported = await _localAuth.isDeviceSupported();
-    return canCheck && supported;
+    try {
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final supported = await _localAuth.isDeviceSupported();
+      if (!canCheck || !supported) {
+        return false;
+      }
+
+      final biometrics = await _localAuth.getAvailableBiometrics();
+      return biometrics.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
-  Future<bool> authenticate() async {
+  Future<bool> authenticate({
+    String localizedReason = 'Unlock DaktarPai to continue',
+  }) async {
     return _localAuth.authenticate(
-      localizedReason: 'Unlock DaktarPai to continue',
+      localizedReason: localizedReason,
       options: const AuthenticationOptions(
         biometricOnly: false,
         stickyAuth: true,
