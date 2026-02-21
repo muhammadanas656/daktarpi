@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 
 class SocialButton extends StatelessWidget {
   final String label;
@@ -17,10 +19,10 @@ class SocialButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 56,
+      height: AppDimens.buttonHeight,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppShapes.lg,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -33,12 +35,12 @@ class SocialButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppShapes.lg,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, color: iconColor, size: 24),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppDimens.spaceMd),
               Text(
                 label,
                 style: const TextStyle(

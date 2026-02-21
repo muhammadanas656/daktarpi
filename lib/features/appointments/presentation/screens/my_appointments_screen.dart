@@ -10,6 +10,7 @@ import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../appointment_notifier.dart';
 import '../../../../presentation/widgets/appointment_card.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
+import 'package:uuid/uuid.dart';
 import '../models/booking_route_args.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class MyAppointmentsScreen extends StatefulWidget {
 }
 
 class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
+  final Uuid _uuid = const Uuid();
   final _appointmentRepo = AppointmentRepository();
   final _appointmentNotifier = AppointmentNotifier.instance;
   RealtimeChannel? _appointmentsSubscription;
@@ -122,6 +124,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
         patientDetails: patientDetails,
         appointmentDate: DateTime.now().add(const Duration(days: 1)),
         appointmentId: appointmentId,
+        idempotencyKey: _uuid.v4(),
       ),
     );
 

@@ -34,6 +34,22 @@ Resilience + UX hardening wave (Feb 21, 2026):
 - moved route lookup behind Supabase Edge Function proxy (`supabase/functions/route-proxy`) and added telemetry endpoint scaffold (`supabase/functions/client-error-log`)
 - introduced shape/dimension tokens (`lib/core/theme/app_shapes.dart`, `lib/core/theme/app_dimens.dart`) and applied them to shared theme/widgets
 
+Final polish update (Feb 21, 2026):
+- completed final settings security audit: MFA toggle/verification flows, password updates, and linked-account link/unlink operations now route through `SettingsRepository`
+- hardened `route-proxy` with request rate limiting, upstream timeout controls, and provider abstraction (`ROUTE_PROVIDER=osrm|mapbox`) to support zero-Flutter-change provider swaps
+- added PR CI workflow (`.github/workflows/test.yml`) to run unit/widget tests and integration suites (secret-gated)
+- added lock-resume stress scenario (`integration_test/inactivity_lock_booking_resume_test.dart`) covering inactivity lock during booking + biometric unlock + draft persistence
+- replaced hardcoded spacing/radius values across `lib/presentation/widgets/**` with `AppDimens`/`AppShapes` tokens
+
+Master-plan remediation update (Feb 21, 2026):
+- fixed biometric inactivity unlock race: `InactivityLockGuard` now records `paused` timestamp, hard-locks immediately on long background resume, and delays biometric prompt by 300ms after resume for reliable OS dialog display
+- hardened MFA downgrade lifecycle: introduced `AppFailure.requiresRecentMfa`, mapped AAL downgrade failures in `SettingsRepository`, and made 2FA toggle flow pessimistic with inline loading + disabled switch while operation is in flight
+- added step-up verification mode for `Verify2FAScreen` (`Verify2FARouteArgs.popOnSuccess`) so sensitive settings actions can force recent MFA and return to caller flow
+- added idempotency key propagation across booking route DTOs and appointment write payload (`idempotency_key`) to protect against duplicate submits on repeated taps
+- introduced encrypted local caches for profile and appointment history (`ProfileSecureCacheRepository`, `AppointmentSecureCacheRepository`) using `flutter_secure_storage` with encrypted Android shared prefs backing
+- replaced core doctor/avatar network images with bounded `cached_network_image` + `shimmer` placeholders via `AppNetworkImage` to avoid blank/flicker states and image overflow
+- added chaos scenario integration test scaffold: `integration_test/medical_record_network_chaos_test.dart` (network drop on medical-record update path + offline banner expectation)
+
 ## 1. Purpose and Scope
 
 This document explains the app from multiple architecture perspectives so you can inspect the same system through different lenses:
@@ -536,9 +552,19 @@ Implemented tests:
 - `test/features/auth/data/security_gate_service_test.dart`
 - `test/features/auth/data/auth_route_resolver_test.dart`
 - `test/features/appointments/presentation/models/booking_route_args_test.dart`
+- integration scenarios:
+  - `integration_test/auth_2fa_records_flow_test.dart`
+  - `integration_test/booking_flow_test.dart`
+  - `integration_test/inactivity_lock_booking_resume_test.dart`
+  - `integration_test/medical_record_network_chaos_test.dart`
+
+CI automation:
+- pull-request workflow on `main`: `.github/workflows/test.yml`
+- unit/widget tests always run
+- integration matrix runs when required E2E secrets are present
 
 Remaining gap:
-- end-to-end integration tests are now executable and include core negative-path anchors, but broader stress/path-matrix coverage is still pending
+- executable integration coverage now includes booking/auth gates and inactivity-lock resume; broader long-run load/stress depth is still pending
 
 ### 12.4 Data and schema migration visibility
 
@@ -550,9 +576,9 @@ No in-repo migration directory is present in this snapshot, so schema evolution 
 - presentation and previously-flagged utility paths now route through repositories/services
 - effect: strong domain isolation baseline; maintainers should enforce repository-only policy for new features
 
-2. Security logic duplication (high)
-- significantly reduced by introducing `SecurityGateService`; remaining direct settings security calls still need repository/service consolidation
-- effect: residual behavior drift risk remains in non-migrated paths
+2. Security logic duplication (resolved in current snapshot)
+- final settings/linked-account audit completed: security-sensitive actions now route through `SettingsRepository` and `SecurityGateService`
+- effect: previously identified drift risk from non-migrated settings paths is removed in current code snapshot
 
 3. Untyped route payload contracts (low)
 - booking/payment/appointments refresh/doctor route extras/medical-record edit handoff now use typed DTO contracts
@@ -564,11 +590,11 @@ No in-repo migration directory is present in this snapshot, so schema evolution 
 
 5. External routing provider reliability (medium)
 - route fetch now runs via Supabase Edge Function proxy (`route-proxy`) instead of direct client->OSRM calls
-- effect: improves control, auditability, and future provider swap path; still requires production SLA provider and rate-limit policy
+- effect: proxy now enforces server-side rate limiting and supports env-driven upstream provider switching (`osrm`/`mapbox`), but production BAA-backed provider selection + contractual SLA decision remains pending
 
-6. Duplicate formatter/util classes (low-medium)
-- backup code formatter duplicated in multiple files
-- effect: maintenance overhead
+6. Duplicate formatter/util classes (resolved in current snapshot)
+- backup code formatting utilities were consolidated into shared security formatter utilities in the Feb 21 update
+- effect: prior duplication and drift risk removed in current snapshot
 
 7. Limited automated test coverage (high)
 - auth-routing, 2FA gate service, and typed booking-arg tests now exist
@@ -578,10 +604,12 @@ No in-repo migration directory is present in this snapshot, so schema evolution 
 - `lib/test_auth_check.dart` removed
 - effect: previous clutter/confusion risk removed
 
-9. PHI-at-rest posture (medium)
-- currently detected local persistence is limited to non-PHI UI preferences (`theme_mode`, `show_drawer_hint`) via `SharedPreferences`
-- no encrypted local PHI cache layer is currently implemented in app code paths
-- effect: acceptable current posture for in-memory notifiers, but any future offline PHI caching must use encrypted storage by policy
+9. PHI-at-rest posture (low-medium)
+- profile and appointment cache persistence now uses encrypted local storage wrappers:
+  - `lib/features/profile/data/profile_secure_cache_repository.dart`
+  - `lib/features/appointments/data/appointment_secure_cache_repository.dart`
+- non-PHI UI preferences (`theme_mode`, `show_drawer_hint`) remain in `SharedPreferences`
+- effect: encrypted at-rest baseline now exists for cached profile/appointment surfaces; keep extending this policy to any future medical-record offline cache implementation
 
 ## 14. Recommended Roadmap by Perspective
 
@@ -595,7 +623,7 @@ No in-repo migration directory is present in this snapshot, so schema evolution 
 
 Status:
 - shared security gate service + centralized auth route resolver implemented
-- destructive settings operations now routed through `SettingsRepository`; continue enforcing repository-only boundaries for any future settings/profile additions
+- settings/linked-account security actions (MFA toggles, password updates, account unlinking, account deletion) are now routed through `SettingsRepository`; continue enforcing repository-only boundaries for any future settings/profile additions
 - inactivity protection now uses lock-overlay + biometric resume instead of hard sign-out
 
 ### Navigation architecture
@@ -625,8 +653,9 @@ Status:
   - settings security operations
 
 Status:
-- unit tests added for auth route resolver, security gate service, and booking route args
-- integration tests are now executable and include negative-path anchors (wrong 2FA, past-date booking guard); broader scenario depth still pending
+- unit tests are wired in pull-request CI
+- integration tests are wired in pull-request CI (secret-gated matrix)
+- integration coverage includes negative-path anchors (wrong 2FA, past-date booking guard) plus inactivity-lock mid-booking resume with biometric unlock and draft persistence checks; broader scenario depth still pending
 - repository error handling now standardized on `AppFailure` for safer patient-facing messaging
 
 ## 15. Key File Map by Perspective

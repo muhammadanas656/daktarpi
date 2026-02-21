@@ -126,6 +126,24 @@ class AppointmentRepository {
   Future<void> createAppointment(Map<String, dynamic> appointmentData) async {
     try {
       await _client.from('appointments').insert(appointmentData);
+    } on PostgrestException catch (error) {
+      final details =
+          '${error.message} ${error.details ?? ''} ${error.hint ?? ''}'
+              .toLowerCase();
+      if (error.code == '23505' && details.contains('idempotency')) {
+        throw const AppFailure(
+          type: AppFailureType.validation,
+          userMessage:
+              'This booking request was already submitted. Please wait for confirmation.',
+          technicalMessage:
+              'Duplicate idempotency key detected while creating appointment.',
+          code: 'duplicate_idempotency_key',
+        );
+      }
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to create appointment right now.',
+      );
     } catch (error) {
       throw AppFailure.fromError(
         error,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 
 class DoctorDetailsHeader extends StatelessWidget {
@@ -21,7 +22,8 @@ class DoctorDetailsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final specialty = doctor['specialties']?['name']?.toString() ?? 'Specialist';
+    final specialty =
+        doctor['specialties']?['name']?.toString() ?? 'Specialist';
     final doctorName = doctor['full_name']?.toString() ?? 'Unknown';
     final displayPrice =
         (visitPrice ?? doctor['hourly_rate']?.toString() ?? '0').toString();
@@ -47,20 +49,12 @@ class DoctorDetailsHeader extends StatelessWidget {
             tag: 'doctor-hero-${doctor['id']}',
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.network(
-                doctor['profile_picture_url'] ?? 'https://i.pravatar.cc/300',
+              child: AppNetworkImage(
+                imageUrl: doctor['profile_picture_url']?.toString(),
                 width: 76,
                 height: 76,
-                cacheWidth: 152,
-                cacheHeight: 152,
                 fit: BoxFit.cover,
-                errorBuilder:
-                    (_, __, ___) => Container(
-                      width: 76,
-                      height: 76,
-                      color: const Color(0xFFEAF2F8),
-                      child: const Icon(Icons.person),
-                    ),
+                fallbackIconSize: 28,
               ),
             ),
           ),

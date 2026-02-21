@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_motion.dart';
+import '../../core/theme/app_shapes.dart';
 
 class CustomSnackbar {
   static OverlayEntry? _overlayEntry;
@@ -112,9 +114,9 @@ class _SnackbarOverlayState extends State<_SnackbarOverlay>
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: MediaQuery.of(context).viewInsets.bottom + 40,
-      left: 20,
-      right: 20,
+      bottom: MediaQuery.of(context).viewInsets.bottom + AppDimens.space4xl,
+      left: AppDimens.spaceXl,
+      right: AppDimens.spaceXl,
       child: Material(
         color: Colors.transparent,
         child: SlideTransition(
@@ -127,12 +129,12 @@ class _SnackbarOverlayState extends State<_SnackbarOverlay>
                 onTap: widget.onDismiss, // Dismiss on tap
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
+                    horizontal: AppDimens.spaceXl,
+                    vertical: AppDimens.spaceMdPlus,
                   ),
                   decoration: BoxDecoration(
                     color: widget.color,
-                    borderRadius: BorderRadius.circular(50),
+                    borderRadius: AppShapes.pill,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.1),
@@ -146,7 +148,7 @@ class _SnackbarOverlayState extends State<_SnackbarOverlay>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(widget.icon, color: Colors.white, size: 22),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: AppDimens.spaceMd),
                       Flexible(
                         child: Text(
                           widget.message,

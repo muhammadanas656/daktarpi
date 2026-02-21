@@ -63,14 +63,16 @@ class AppTextField extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppDimens.spaceSm),
         ],
         Container(
           decoration: BoxDecoration(
             borderRadius: radius,
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1C222E).withValues(alpha: 0.05), // Soft Premium Shadow
+                color: const Color(
+                  0xFF1C222E,
+                ).withValues(alpha: 0.05), // Soft Premium Shadow
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -118,8 +120,8 @@ class AppTextField extends StatelessWidget {
                         ? null
                         : Padding(
                           padding: const EdgeInsetsDirectional.only(
-                            start: 12,
-                            end: 4,
+                            start: AppDimens.spaceMd,
+                            end: AppDimens.space2xs,
                           ),
                           child: prefix,
                         ),
@@ -149,8 +151,11 @@ class AppTextField extends StatelessWidget {
                 ),
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: singleLine ? 18 : 14,
+                  horizontal: AppDimens.spaceLg,
+                  vertical:
+                      singleLine
+                          ? AppDimens.spaceLgPlus
+                          : AppDimens.spaceMdPlus,
                 ),
               ),
             ),

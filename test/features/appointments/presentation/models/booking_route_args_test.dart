@@ -9,12 +9,14 @@ void main() {
         'clinic': {'id': 10, 'name': 'Main Clinic'},
         'initialDate': DateTime(2026, 2, 20),
         'timeSlot': '10:00 - 10:30',
+        'idempotencyKey': 'booking-abc-123',
       });
 
       expect(args.doctor['id'], 1);
       expect(args.clinic['id'], 10);
       expect(args.initialDate, DateTime(2026, 2, 20));
       expect(args.timeSlot, '10:00 - 10:30');
+      expect(args.idempotencyKey, 'booking-abc-123');
     });
   });
 
@@ -27,6 +29,7 @@ void main() {
         'appointmentDate': DateTime(2026, 3, 1),
         'appointmentId': 55,
         'timeSlot': '11:00 - 11:30',
+        'idempotencyKey': 'payment-xyz-456',
       });
 
       expect(args.doctor['id'], 2);
@@ -35,6 +38,7 @@ void main() {
       expect(args.appointmentDate, DateTime(2026, 3, 1));
       expect(args.appointmentId, 55);
       expect(args.timeSlot, '11:00 - 11:30');
+      expect(args.idempotencyKey, 'payment-xyz-456');
     });
   });
 

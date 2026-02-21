@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 
 import '../../core/theme/app_text_styles.dart';
 
@@ -29,14 +31,18 @@ class AppointmentCard extends StatelessWidget {
       onTap: onTap,
       onLongPress: onMoreTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppDimens.spaceXl),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20), // Premium Radius
-          border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
+          borderRadius: AppShapes.xl, // Premium Radius
+          border: Border.all(
+            color: AppColors.borderColor.withValues(alpha: 0.5),
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1C222E).withValues(alpha: 0.06), // Soft Shadow
+              color: const Color(
+                0xFF1C222E,
+              ).withValues(alpha: 0.06), // Soft Shadow
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -51,25 +57,27 @@ class AppointmentCard extends StatelessWidget {
                   width: 70,
                   height: 70,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: AppShapes.lg,
                     color: Colors.grey[100],
-                    image: imageUrl.isNotEmpty
-                        ? DecorationImage(
-                            image: NetworkImage(imageUrl),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
+                    image:
+                        imageUrl.isNotEmpty
+                            ? DecorationImage(
+                              image: NetworkImage(imageUrl),
+                              fit: BoxFit.cover,
+                            )
+                            : null,
                   ),
-                  child: imageUrl.isEmpty
-                      ? const Icon(
-                          Icons.person,
-                          size: 40,
-                          color: Colors.grey,
-                        )
-                      : null,
+                  child:
+                      imageUrl.isEmpty
+                          ? const Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Colors.grey,
+                          )
+                          : null,
                 ),
-                const SizedBox(width: 16),
-                
+                const SizedBox(width: AppDimens.spaceLg),
+
                 // Info
                 Expanded(
                   child: Column(
@@ -80,7 +88,7 @@ class AppointmentCard extends StatelessWidget {
                         style: AppTextStyles.h3.copyWith(fontSize: 18),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppDimens.space2xs),
                       Text(
                         specialty,
                         style: AppTextStyles.body.copyWith(
@@ -91,26 +99,23 @@ class AppointmentCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // Action Button
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: onMoreTap,
-                    borderRadius: BorderRadius.circular(50),
+                    borderRadius: AppShapes.pill,
                     child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Icon(
-                        Icons.more_vert,
-                        color: AppColors.textLight,
-                      ),
+                      padding: const EdgeInsets.all(AppDimens.spaceXs),
+                      child: Icon(Icons.more_vert, color: AppColors.textLight),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            
+            const SizedBox(height: AppDimens.spaceLg),
+
             // Date & Time Row
             Row(
               children: [
@@ -137,8 +142,12 @@ class AppointmentCard extends StatelessWidget {
       mainAxisAlignment:
           alignRight ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.textGrey), // Slightly larger icon
-        const SizedBox(width: 8),
+        Icon(
+          icon,
+          size: AppDimens.iconMd,
+          color: AppColors.textGrey,
+        ), // Slightly larger icon
+        const SizedBox(width: AppDimens.spaceXs),
         Flexible(
           child: Text(
             text,

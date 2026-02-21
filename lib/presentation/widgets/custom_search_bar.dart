@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 
 class CustomSearchBar extends StatelessWidget {
   final TextEditingController? controller;
@@ -25,7 +27,7 @@ class CustomSearchBar extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppShapes.lg,
         border: Border.all(color: AppColors.borderColor),
         boxShadow: AppStyles.cardShadow,
       ),
@@ -45,7 +47,7 @@ class CustomSearchBar extends StatelessWidget {
           prefixIcon: const Icon(
             Icons.search_rounded,
             color: AppColors.textLight,
-            size: 20,
+            size: AppDimens.iconLg,
           ),
           suffixIcon:
               showClearIcon && onClear != null
@@ -53,7 +55,7 @@ class CustomSearchBar extends StatelessWidget {
                     icon: const Icon(
                       Icons.close_rounded,
                       color: AppColors.textLight,
-                      size: 20,
+                      size: AppDimens.iconLg,
                     ),
                     onPressed: onClear,
                   )
@@ -61,11 +63,13 @@ class CustomSearchBar extends StatelessWidget {
                       ? const Icon(
                         Icons.close_rounded,
                         color: AppColors.textLight,
-                        size: 20,
+                        size: AppDimens.iconLg,
                       )
                       : null), // Keep legacy icon for Home if needed, or remove
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: AppDimens.spaceLg,
+          ),
         ),
       ),
     );

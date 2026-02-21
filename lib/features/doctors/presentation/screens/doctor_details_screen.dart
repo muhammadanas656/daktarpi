@@ -19,6 +19,7 @@ import '../../../doctors/data/route_repository.dart';
 import '../../../appointments/data/appointment_repository.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import 'package:uuid/uuid.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -41,6 +42,7 @@ class DoctorDetailsScreen extends StatefulWidget {
 
 class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     with TickerProviderStateMixin {
+  final Uuid _uuid = const Uuid();
   // --- DESIGN COLORS (aliased from AppColors) ---
 
   static const Color primaryGreen = AppColors.primaryGreen;
@@ -587,6 +589,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         clinic: Map<String, dynamic>.from(_selectedClinic ?? const {}),
         initialDate: _selectedDate,
         timeSlot: _selectedTimeSlot,
+        idempotencyKey: _uuid.v4(),
       ),
     );
   }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_styles.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 import '../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
+import 'app_network_image.dart';
 
 class HomePopularDoctorCard extends StatelessWidget {
   final int id;
@@ -29,50 +32,33 @@ class HomePopularDoctorCard extends StatelessWidget {
       ),
       child: Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppShapes.xl,
         child: InkWell(
           onTap: () => context.push(AppRoutes.doctorDetailsById('$id')),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppShapes.xl,
           child: Column(
             children: [
               Expanded(
                 flex: 3,
                 child: ClipRRect(
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
+                    top: Radius.circular(AppShapes.radiusXl),
                   ),
                   child: Hero(
                     tag: 'doctor-hero-$id',
-                    child: (imageUrl != null && imageUrl!.isNotEmpty)
-                        ? Image.network(
-                            imageUrl!,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  color: Colors.grey[200],
-                                  child: const Icon(
-                                    Icons.person,
-                                    size: 50,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                          )
-                        : Container(
-                            color: Colors.grey[200],
-                            child: const Icon(
-                              Icons.person,
-                              size: 50,
-                              color: Colors.grey,
-                            ),
-                          ),
+                    child: AppNetworkImage(
+                      imageUrl: imageUrl,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      fallbackIconSize: 50,
+                    ),
                   ),
                 ),
               ),
               Expanded(
                 flex: 2,
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(AppDimens.spaceMd),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -94,7 +80,7 @@ class HomePopularDoctorCard extends StatelessWidget {
                           fontSize: 11,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppDimens.spaceXs),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

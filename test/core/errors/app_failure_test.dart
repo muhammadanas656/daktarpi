@@ -28,6 +28,20 @@ void main() {
       expect(failure.code, '400');
     });
 
+    test('maps AAL2 requirement auth errors to requiresRecentMfa', () {
+      final failure = AppFailure.fromError(
+        const AuthException(
+          'AAL2 is required to complete this request',
+          statusCode: '400',
+        ),
+        fallbackUserMessage: 'Fallback',
+      );
+
+      expect(failure.type, AppFailureType.auth);
+      expect(failure.code, 'requires_recent_mfa');
+      expect(failure.isRequiresRecentMfa, isTrue);
+    });
+
     test('maps unknown error to fallback', () {
       final failure = AppFailure.fromError(
         StateError('unexpected'),

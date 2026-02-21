@@ -31,6 +31,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   bool _isLocked = false;
   bool _isUnlocking = false;
   bool _biometricAvailable = false;
+  DateTime? _pausedAt;
 
   @override
   void initState() {
@@ -49,9 +50,26 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
+      _inactivityTimer?.cancel();
+      return;
+    }
+
     if (state == AppLifecycleState.resumed) {
+      final pausedAt = _pausedAt;
+      _pausedAt = null;
+
+      if (pausedAt != null) {
+        final elapsed = DateTime.now().difference(pausedAt);
+        if (elapsed >= widget.timeout) {
+          _lockAndScheduleUnlock(delayBeforePrompt: true);
+          return;
+        }
+      }
+
       if (_isLocked) {
-        _unlock();
+        _unlock(delayBeforePrompt: true);
       } else {
         _resetTimer();
       }
@@ -85,12 +103,21 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
       return;
     }
 
-    _inactivityTimer?.cancel();
-    setState(() => _isLocked = true);
-    _unlock();
+    _lockAndScheduleUnlock();
   }
 
-  Future<void> _unlock() async {
+  void _lockAndScheduleUnlock({bool delayBeforePrompt = false}) {
+    if (!mounted) {
+      return;
+    }
+    _inactivityTimer?.cancel();
+    if (!_isLocked) {
+      setState(() => _isLocked = true);
+    }
+    unawaited(_unlock(delayBeforePrompt: delayBeforePrompt));
+  }
+
+  Future<void> _unlock({bool delayBeforePrompt = false}) async {
     if (_isUnlocking || !_isLocked) {
       return;
     }
@@ -98,6 +125,9 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     setState(() => _isUnlocking = true);
     bool isAuthenticated = false;
     try {
+      if (delayBeforePrompt) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
       if (_biometricAvailable) {
         isAuthenticated = await _biometricAuthService.authenticate();
       }
@@ -139,7 +169,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
 
   Widget _buildLockOverlay() {
     return Material(
-      color: const Color(0xD90F151E),
+      color: const Color(0xFF0F151E),
       child: SafeArea(
         child: Center(
           child: Container(
@@ -193,19 +223,13 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child:
-                        _isUnlocking
-                            ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                            : Text(
-                              _biometricAvailable ? 'Unlock' : 'Retry Unlock',
-                            ),
+                    child: Text(
+                      _isUnlocking
+                          ? 'Unlocking...'
+                          : _biometricAvailable
+                          ? 'Unlock'
+                          : 'Retry Unlock',
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -253,7 +277,17 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
         child: Stack(
           children: [
             AbsorbPointer(absorbing: _isLocked, child: widget.child),
-            if (_isLocked) Positioned.fill(child: _buildLockOverlay()),
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !_isLocked,
+                child: AnimatedOpacity(
+                  opacity: _isLocked ? 1 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  child: _buildLockOverlay(),
+                ),
+              ),
+            ),
           ],
         ),
       ),

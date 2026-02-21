@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 import '../../core/theme/app_text_styles.dart';
+import 'app_network_image.dart';
 
 class DoctorListCard extends StatelessWidget {
   final int id;
@@ -40,11 +43,13 @@ class DoctorListCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // Premium Radius
+        borderRadius: AppShapes.xl, // Premium Radius
         border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C222E).withValues(alpha: 0.06), // Soft Shadow
+            color: const Color(
+              0xFF1C222E,
+            ).withValues(alpha: 0.06), // Soft Shadow
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -52,12 +57,12 @@ class DoctorListCard extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppShapes.xl,
         child: InkWell(
           onTap: onCardTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppShapes.lg,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppDimens.spaceMd),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -65,36 +70,21 @@ class DoctorListCard extends StatelessWidget {
                 Hero(
                   tag: 'doctor-hero-$id',
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: AppShapes.md,
                     child: SizedBox(
                       width: 80,
                       height: 80,
-                      child: (imageUrl != null && imageUrl!.isNotEmpty)
-                          ? Image.network(
-                              imageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                color: Colors.grey[200],
-                                child: const Icon(
-                                  Icons.person,
-                                  color: Colors.grey,
-                                  size: 40,
-                                ),
-                              ),
-                            )
-                          : Container(
-                              color: Colors.grey[200],
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.grey,
-                                size: 40,
-                              ),
-                            ),
+                      child: AppNetworkImage(
+                        imageUrl: imageUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        fallbackIconSize: 40,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: AppDimens.spaceLg),
 
                 // --- INFO COLUMN ---
                 Expanded(
@@ -115,16 +105,25 @@ class DoctorListCard extends StatelessWidget {
                           // 4. Favorite / Custom Action
                           trailingWidget ??
                               Material(
-                                color: const Color(0xFFF2F4F7), // Neutral background
-                                borderRadius: BorderRadius.circular(12),
+                                color: const Color(
+                                  0xFFF2F4F7,
+                                ), // Neutral background
+                                borderRadius: AppShapes.md,
                                 child: InkWell(
                                   onTap: onFavoriteTap,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: AppShapes.md,
                                   child: Container(
-                                    padding: const EdgeInsets.all(8),
+                                    padding: const EdgeInsets.all(
+                                      AppDimens.spaceXs,
+                                    ),
                                     child: Icon(
-                                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                                      color: isFavorite ? AppColors.dangerRed : const Color(0xFF9CA3AF),
+                                      isFavorite
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                      color:
+                                          isFavorite
+                                              ? AppColors.dangerRed
+                                              : const Color(0xFF9CA3AF),
                                       size: 20,
                                     ),
                                   ),
@@ -132,7 +131,7 @@ class DoctorListCard extends StatelessWidget {
                               ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppDimens.space2xs),
                       Text(
                         specialty,
                         style: AppTextStyles.bodySmall.copyWith(
@@ -141,7 +140,7 @@ class DoctorListCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppDimens.spaceXs),
 
                       // --- DYNAMIC STAR ROW ---
                       Row(
@@ -167,7 +166,7 @@ class DoctorListCard extends StatelessWidget {
                               );
                             }
                           }),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppDimens.spaceXs),
                           Flexible(
                             child: RichText(
                               overflow: TextOverflow.ellipsis,
@@ -181,7 +180,9 @@ class DoctorListCard extends StatelessWidget {
                                   ),
                                   TextSpan(
                                     text: "  ($views views)",
-                                    style: AppTextStyles.bodySmall.copyWith(fontSize: 11),
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      fontSize: 11,
+                                    ),
                                   ),
                                 ],
                               ),

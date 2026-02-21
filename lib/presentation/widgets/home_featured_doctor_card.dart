@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 import '../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/profile/presentation/profile_notifier.dart';
+import 'app_network_image.dart';
 
 class HomeFeaturedDoctorCard extends StatelessWidget {
   final int id;
@@ -33,12 +36,12 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
       ),
       child: Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppShapes.xl,
         child: InkWell(
           onTap: () => context.push(AppRoutes.doctorDetailsById('$id')),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppShapes.xl,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppDimens.spaceMd),
             child: Column(
               children: [
                 Row(
@@ -63,29 +66,26 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppDimens.spaceXs),
                 Container(
-                  width: 50,
-                  height: 50,
+                  width: AppDimens.avatarSm,
+                  height: AppDimens.avatarSm,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.grey[200],
                   ),
                   child: Hero(
                     tag: 'doctor-hero-$id',
-                    child: ClipOval(
-                      child: (imageUrl != null && imageUrl!.isNotEmpty)
-                          ? Image.network(
-                              imageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const Icon(Icons.person, color: Colors.grey),
-                            )
-                          : const Icon(Icons.person, color: Colors.grey),
+                    child: AppNetworkImage(
+                      imageUrl: imageUrl,
+                      width: AppDimens.avatarSm,
+                      height: AppDimens.avatarSm,
+                      fit: BoxFit.cover,
+                      circular: true,
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppDimens.spaceXs),
                 Text(
                   name,
                   maxLines: 1,

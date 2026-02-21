@@ -18,6 +18,19 @@ class AppFailure implements Exception {
     this.code,
   });
 
+  factory AppFailure.requiresRecentMfa({String? technicalMessage}) {
+    return AppFailure(
+      type: AppFailureType.auth,
+      userMessage:
+          'Please verify with your authenticator to continue this security change.',
+      technicalMessage:
+          technicalMessage ?? 'Sensitive action blocked: recent MFA required.',
+      code: 'requires_recent_mfa',
+    );
+  }
+
+  bool get isRequiresRecentMfa => code == 'requires_recent_mfa';
+
   factory AppFailure.fromError(
     Object error, {
     required String fallbackUserMessage,
@@ -38,6 +51,14 @@ class AppFailure implements Exception {
     }
 
     if (error is AuthException) {
+      final raw = error.message.toLowerCase();
+      if (raw.contains('aal2') ||
+          raw.contains('assurance level') ||
+          raw.contains('requires aal') ||
+          raw.contains('mfa') && raw.contains('required')) {
+        return AppFailure.requiresRecentMfa(technicalMessage: error.toString());
+      }
+
       return AppFailure(
         type: AppFailureType.auth,
         userMessage: _authFriendlyMessage(error.message),

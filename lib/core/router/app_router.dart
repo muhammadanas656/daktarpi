@@ -6,6 +6,7 @@ import '../../features/splash/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/verify_2fa_screen.dart';
+import '../../features/auth/presentation/models/verify_2fa_route_args.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profileview_screen.dart';
@@ -72,7 +73,12 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.verify2fa,
-      builder: (context, state) => const Verify2FAScreen(),
+      builder: (context, state) {
+        final extra = state.extra;
+        final args =
+            extra is Verify2FARouteArgs ? extra : const Verify2FARouteArgs();
+        return Verify2FAScreen(routeArgs: args);
+      },
     ),
 
     GoRoute(
@@ -141,6 +147,7 @@ final appRouter = GoRouter(
           clinic: extra.clinic,
           initialDate: extra.initialDate,
           timeSlot: extra.timeSlot,
+          idempotencyKey: extra.idempotencyKey,
         );
       },
     ),
@@ -157,6 +164,7 @@ final appRouter = GoRouter(
           initialDate: extra.appointmentDate,
           appointmentId: extra.appointmentId,
           timeSlot: extra.timeSlot,
+          idempotencyKey: extra.idempotencyKey,
         );
       },
     ),

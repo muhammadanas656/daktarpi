@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'dart:math';
 import 'package:pinput/pinput.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
@@ -14,7 +15,7 @@ import '../../../profile/presentation/profile_notifier.dart';
 import '../../../../presentation/widgets/auth_text_field.dart';
 import '../../../settings/presentation/settings_notifier.dart';
 import '../../../../core/utils/security_formatters.dart';
-import '../../../auth/data/auth_repository.dart';
+import '../../../auth/presentation/models/verify_2fa_route_args.dart';
 import '../../data/settings_repository.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -28,9 +29,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     with WidgetsBindingObserver {
   bool _isLoading = false;
   bool _is2FAEnabled = false;
+  bool _is2FAToggleBusy = false;
   String? _verifiedFactorId;
   bool _hasRecoveryCodes = false;
-  final AuthRepository _authRepository = AuthRepository();
   final SettingsRepository _settingsRepository = SettingsRepository();
 
   TextEditingController? _activePinController;
@@ -96,10 +97,10 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _check2FAStatus() async {
     try {
-      final user = _authRepository.currentUser;
-      final factors = await _authRepository.listMfaFactors();
+      final user = _settingsRepository.currentUser;
+      final factors = await _settingsRepository.listMfaFactors();
 
-      final hasCodes = await _authRepository.userHasRecoveryCodes();
+      final hasCodes = await _settingsRepository.userHasRecoveryCodes();
 
       if (mounted) {
         setState(() {
@@ -127,6 +128,52 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
+  Future<void> _handleTwoFactorToggle(bool enable) async {
+    if (_is2FAToggleBusy) {
+      return;
+    }
+
+    setState(() {
+      _is2FAToggleBusy = true;
+    });
+
+    try {
+      if (enable) {
+        await _start2FASetupWizard();
+      } else {
+        await _showDisable2FADialog();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _is2FAToggleBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _verifyRecentMfaForSensitiveAction() async {
+    if (!mounted) {
+      return false;
+    }
+
+    final verified = await context.push<bool>(
+      AppRoutes.verify2fa,
+      extra: const Verify2FARouteArgs(popOnSuccess: true),
+    );
+
+    if (verified == true) {
+      await _settingsRepository.refreshSession();
+      await _check2FAStatus();
+      return true;
+    }
+
+    if (mounted) {
+      CustomSnackbar.showInfo(context, "Security verification was cancelled.");
+    }
+    return false;
+  }
+
   Future<void> _start2FASetupWizard() async {
     int currentStep = 0;
     bool isDialogLoading = false;
@@ -148,7 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 isDialogLoading = true;
               });
               try {
-                await _authRepository.challengeAndVerify(
+                await _settingsRepository.challengeAndVerify(
                   factorId: factorId!,
                   code: codeController.text,
                 );
@@ -209,16 +256,17 @@ class _SettingsScreenState extends State<SettingsScreen>
                         isDialogLoading = true;
                       });
                       try {
-                        final factors = await _authRepository.listMfaFactors();
+                        final factors =
+                            await _settingsRepository.listMfaFactors();
                         for (final f in factors.all.where(
                           (f) => f.status != FactorStatus.verified,
                         )) {
-                          await _authRepository.unenrollFactor(f.id);
+                          await _settingsRepository.unenrollFactor(f.id);
                         }
-                        final response = await _authRepository.enrollTotp(
+                        final response = await _settingsRepository.enrollTotp(
                           issuer: 'DaktarPai',
                           friendlyName:
-                              'DaktarPai (${_authRepository.currentUser?.email})',
+                              'DaktarPai (${_settingsRepository.currentUserEmail})',
                         );
                         factorId = response.id;
                         qrCodeSvg = response.totp?.qrCode;
@@ -483,7 +531,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     label: "Done",
                     onTap: () async {
                       Navigator.pop(ctx);
-                      await _authRepository.refreshSession();
+                      await _settingsRepository.refreshSession();
                       _check2FAStatus();
                     },
                   ),
@@ -519,11 +567,12 @@ class _SettingsScreenState extends State<SettingsScreen>
     _activePinSubmit = null;
   }
 
-  Future<void> _showDisable2FADialog() async {
+  Future<bool> _showDisable2FADialog() async {
     final otpController = TextEditingController();
     final recoveryController = TextEditingController();
     bool isDialogLoading = false;
     bool isRecoveryMode = false;
+    bool disabled = false;
 
     _activePinController = otpController;
 
@@ -553,26 +602,48 @@ class _SettingsScreenState extends State<SettingsScreen>
 
               try {
                 if (isRecoveryMode) {
-                  final rpcSuccess = await _authRepository.useRecoveryCode(
+                  final rpcSuccess = await _settingsRepository.useRecoveryCode(
                     code,
                   );
                   if (rpcSuccess != true) {
                     throw "Invalid backup code.";
                   }
                 } else {
-                  await _authRepository.challengeAndVerify(
+                  await _settingsRepository.challengeAndVerify(
                     factorId: _verifiedFactorId!,
                     code: code,
                   );
-                  await _authRepository.unenrollFactor(_verifiedFactorId!);
+                  await _settingsRepository.unenrollFactor(_verifiedFactorId!);
                 }
 
                 if (ctx.mounted) {
                   Navigator.pop(ctx);
                 }
+                disabled = true;
                 await _check2FAStatus();
                 if (mounted) {
                   CustomSnackbar.showSuccess(context, "2FA has been disabled.");
+                }
+              } on AppFailure catch (failure) {
+                if (failure.isRequiresRecentMfa) {
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                  }
+
+                  final upgraded = await _verifyRecentMfaForSensitiveAction();
+                  if (upgraded) {
+                    disabled = await _showDisable2FADialog();
+                  }
+                  return;
+                }
+
+                setDialogState(() {
+                  isDialogLoading = false;
+                });
+                otpController.clear();
+                recoveryController.clear();
+                if (ctx.mounted) {
+                  CustomSnackbar.showError(ctx, failure.userMessage);
                 }
               } catch (e) {
                 setDialogState(() {
@@ -750,6 +821,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     _activePinController = null;
     _activePinSubmit = null;
+    return disabled;
   }
 
   List<String> _generateLocalCodes() {
@@ -1024,20 +1096,19 @@ class _SettingsScreenState extends State<SettingsScreen>
 
                 try {
                   if (isRecoveryMode) {
-                    final rpcSuccess = await _authRepository.useRecoveryCode(
-                      code,
-                    );
+                    final rpcSuccess = await _settingsRepository
+                        .useRecoveryCode(code);
                     if (rpcSuccess != true) {
                       throw "Invalid backup code.";
                     }
                   } else {
-                    await _authRepository.challengeAndVerify(
+                    await _settingsRepository.challengeAndVerify(
                       factorId: _verifiedFactorId!,
                       code: code,
                     );
                   }
 
-                  await _authRepository.refreshSession();
+                  await _settingsRepository.refreshSession();
                   setDialogState(() {
                     isDialogLoading = false;
                     currentStep = 1;
@@ -1327,7 +1398,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                               });
 
                               try {
-                                await _authRepository.updatePassword(newPass);
+                                await _settingsRepository.updatePassword(
+                                  newPass,
+                                );
 
                                 if (!dialogCtx.mounted) {
                                   return;
@@ -1411,7 +1484,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
               try {
                 if (_is2FAEnabled && _verifiedFactorId != null) {
-                  await _authRepository.challengeAndVerify(
+                  await _settingsRepository.challengeAndVerify(
                     factorId: _verifiedFactorId!,
                     code: otpController.text,
                   );
@@ -1695,25 +1768,43 @@ class _SettingsScreenState extends State<SettingsScreen>
                         color: AppColors.textDark,
                       ),
                     ),
-                    subtitle: Text(
-                      _is2FAEnabled ? "Enabled via Authenticator" : "Disabled",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color:
-                            _is2FAEnabled
-                                ? AppColors.primaryGreen
-                                : AppColors.textLight,
-                      ),
-                    ),
+                    subtitle:
+                        _is2FAToggleBusy
+                            ? Row(
+                              children: [
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primaryGreen,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  "Updating security setting...",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
+                              ],
+                            )
+                            : Text(
+                              _is2FAEnabled
+                                  ? "Enabled via Authenticator"
+                                  : "Disabled",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color:
+                                    _is2FAEnabled
+                                        ? AppColors.primaryGreen
+                                        : AppColors.textLight,
+                              ),
+                            ),
                     value: _is2FAEnabled,
                     activeColor: AppColors.primaryGreen,
-                    onChanged: (val) {
-                      if (val) {
-                        _start2FASetupWizard();
-                      } else {
-                        _showDisable2FADialog();
-                      }
-                    },
+                    onChanged: _is2FAToggleBusy ? null : _handleTwoFactorToggle,
                   ),
                 ),
 

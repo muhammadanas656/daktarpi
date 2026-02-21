@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../features/profile/presentation/profile_notifier.dart';
+import 'app_network_image.dart';
 
 class FeaturedDoctorCard extends StatelessWidget {
   final int id;
@@ -33,11 +36,13 @@ class FeaturedDoctorCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // Premium Radius
+        borderRadius: AppShapes.xl, // Premium Radius
         border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C222E).withValues(alpha: 0.06), // Soft Shadow
+            color: const Color(
+              0xFF1C222E,
+            ).withValues(alpha: 0.06), // Soft Shadow
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -45,48 +50,33 @@ class FeaturedDoctorCard extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppShapes.xl,
         child: InkWell(
           onTap: onCardTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppShapes.lg,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppDimens.spaceMd),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Hero(
                   tag: 'doctor-hero-$id',
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: AppShapes.md,
                     child: SizedBox(
                       width: 80,
                       height: 80,
-                      child: (imageUrl != null && imageUrl!.isNotEmpty)
-                          ? Image.network(
-                              imageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                color: Colors.grey[200],
-                                child: const Icon(
-                                  Icons.person,
-                                  color: Colors.grey,
-                                  size: 40,
-                                ),
-                              ),
-                            )
-                          : Container(
-                              color: Colors.grey[200],
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.grey,
-                                size: 40,
-                              ),
-                            ),
+                      child: AppNetworkImage(
+                        imageUrl: imageUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        fallbackIconSize: 40,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: AppDimens.spaceLg),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,21 +96,24 @@ class FeaturedDoctorCard extends StatelessWidget {
                             onTap: onFavoriteTap,
                             child: Padding(
                               padding: const EdgeInsets.only(
-                                left: 8.0,
-                                bottom: 4.0,
+                                left: AppDimens.spaceXs,
+                                bottom: AppDimens.space2xs,
                               ),
                               child: Icon(
                                 isFavorite
                                     ? Icons.favorite
                                     : Icons.favorite_border,
-                                color: isFavorite ? AppColors.dangerRed : Colors.grey,
+                                color:
+                                    isFavorite
+                                        ? AppColors.dangerRed
+                                        : Colors.grey,
                                 size: 22,
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppDimens.space2xs),
                       Text(
                         specialty,
                         style: AppTextStyles.bodySmall.copyWith(
@@ -129,11 +122,11 @@ class FeaturedDoctorCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppDimens.spaceXs),
                       Row(
                         children: [
                           const Icon(Icons.star, color: Colors.amber, size: 14),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: AppDimens.space2xs),
                           Text(
                             rating,
                             style: AppTextStyles.bodyBold.copyWith(
@@ -145,7 +138,8 @@ class FeaturedDoctorCard extends StatelessWidget {
                             text: TextSpan(
                               children: [
                                 TextSpan(
-                                  text: "${ProfileNotifier.instance.currencySymbol} ",
+                                  text:
+                                      "${ProfileNotifier.instance.currencySymbol} ",
                                   style: AppTextStyles.bodyBold.copyWith(
                                     color: AppColors.primaryGreen,
                                     fontSize: 14,

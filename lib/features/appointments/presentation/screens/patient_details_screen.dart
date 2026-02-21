@@ -20,6 +20,7 @@ class PatientDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> clinic;
   final DateTime initialDate;
   final String? timeSlot;
+  final String idempotencyKey;
 
   const PatientDetailsScreen({
     super.key,
@@ -27,6 +28,7 @@ class PatientDetailsScreen extends StatefulWidget {
     required this.clinic,
     required this.initialDate,
     this.timeSlot,
+    required this.idempotencyKey,
   });
 
   @override
@@ -454,6 +456,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         clinic: widget.clinic,
         appointmentDate: widget.initialDate,
         timeSlot: widget.timeSlot,
+        idempotencyKey: widget.idempotencyKey,
         patientDetails: {
           'name': _nameController.text,
           'phone': _phoneController.text,

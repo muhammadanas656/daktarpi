@@ -1,0 +1,90 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit and Widget Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run unit/widget tests
+        run: flutter test test --reporter expanded
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+      E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      E2E_TOTP: ${{ secrets.E2E_TOTP }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - integration_test/auth_2fa_records_flow_test.dart
+          - integration_test/booking_flow_test.dart
+          - integration_test/inactivity_lock_booking_resume_test.dart
+          - integration_test/medical_record_network_chaos_test.dart
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Validate required integration secrets
+        run: |
+          test -n "$SUPABASE_URL" || (echo "Missing SUPABASE_URL secret" && exit 1)
+          test -n "$SUPABASE_ANON_KEY" || (echo "Missing SUPABASE_ANON_KEY secret" && exit 1)
+          test -n "$GOOGLE_WEB_CLIENT_ID" || (echo "Missing GOOGLE_WEB_CLIENT_ID secret" && exit 1)
+          test -n "$E2E_EMAIL" || (echo "Missing E2E_EMAIL secret" && exit 1)
+          test -n "$E2E_PASSWORD" || (echo "Missing E2E_PASSWORD secret" && exit 1)
+          test -n "$E2E_TOTP" || (echo "Missing E2E_TOTP secret" && exit 1)
+
+      - name: Write CI .env
+        run: |
+          cat > .env <<'EOF'
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+          GOOGLE_WEB_CLIENT_ID=${GOOGLE_WEB_CLIENT_ID}
+          EOF
+
+      - name: Run integration suite
+        run: |
+          flutter test ${{ matrix.suite }} \
+            --dart-define=RUN_E2E=true \
+            --dart-define=E2E_EMAIL=${E2E_EMAIL} \
+            --dart-define=E2E_PASSWORD=${E2E_PASSWORD} \
+            --dart-define=E2E_TOTP=${E2E_TOTP} \
+            --dart-define=INACTIVITY_TIMEOUT_MS=1200

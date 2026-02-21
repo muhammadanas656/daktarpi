@@ -18,6 +18,7 @@ class AppointmentConfirmationScreen extends StatefulWidget {
   final DateTime initialDate;
   final int? appointmentId;
   final String? timeSlot;
+  final String idempotencyKey;
 
   const AppointmentConfirmationScreen({
     super.key,
@@ -27,6 +28,7 @@ class AppointmentConfirmationScreen extends StatefulWidget {
     required this.initialDate,
     this.appointmentId,
     this.timeSlot,
+    required this.idempotencyKey,
   });
 
   @override
@@ -197,6 +199,7 @@ class _AppointmentConfirmationScreenState
       'patient_gender': widget.patientDetails['gender'],
       'patient_dob': widget.patientDetails['dob'],
       'reminder_minutes': _reminderOptions[_selectedReminderIndex],
+      'idempotency_key': widget.idempotencyKey,
     };
 
     try {

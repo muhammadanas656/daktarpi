@@ -9,6 +9,7 @@ import '../../../../presentation/widgets/auth_text_field.dart';
 import '../../../../core/utils/security_formatters.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/data/security_gate_service.dart';
+import '../../data/settings_repository.dart';
 
 class LinkedAccountsScreen extends StatefulWidget {
   const LinkedAccountsScreen({super.key});
@@ -21,6 +22,9 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   bool _isLoading = false;
   List<UserIdentity> _identities = [];
   final AuthRepository _authRepository = AuthRepository();
+  late final SettingsRepository _settingsRepository = SettingsRepository(
+    authRepository: _authRepository,
+  );
   late final SecurityGateService _securityGateService = SecurityGateService(
     authProvider: AuthRepositorySecurityProvider(_authRepository),
   );
@@ -32,7 +36,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   }
 
   Future<void> _fetchIdentities() async {
-    final user = _authRepository.currentUser;
+    final user = _settingsRepository.currentUser;
     if (user != null) {
       if (mounted) {
         setState(() {
@@ -270,11 +274,11 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       _isLoading = true;
     });
     try {
-      await _authRepository.linkGoogleIdentity(
+      await _settingsRepository.linkGoogleIdentity(
         redirectTo: 'io.supabase.daktarpi://login-callback',
       );
 
-      await _authRepository.refreshSession();
+      await _settingsRepository.refreshSession();
 
       if (!mounted) {
         return;
@@ -370,11 +374,11 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                             });
 
                             try {
-                              await _authRepository.updatePassword(
+                              await _settingsRepository.updatePassword(
                                 passwordController.text,
                               );
 
-                              await _authRepository.refreshSession();
+                              await _settingsRepository.refreshSession();
 
                               if (!ctx.mounted) {
                                 return;
@@ -487,8 +491,8 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     });
 
     try {
-      await _authRepository.unlinkIdentity(identity);
-      await _authRepository.refreshSession();
+      await _settingsRepository.unlinkIdentity(identity);
+      await _settingsRepository.refreshSession();
 
       if (!mounted) {
         return;
@@ -560,7 +564,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                 if (isLinked)
                   Text(
                     provider == 'email'
-                        ? (_authRepository.currentUser?.email ?? 'Linked')
+                        ? (_settingsRepository.currentUserEmail ?? 'Linked')
                         : 'Linked',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textLight,

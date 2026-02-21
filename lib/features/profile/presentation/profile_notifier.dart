@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../data/user_profile.dart';
 import '../data/profile_repository.dart';
+import '../data/profile_secure_cache_repository.dart';
 
 /// Singleton ChangeNotifier that holds the current user's profile.
 /// All screens listen to this instead of fetching profile data independently.
@@ -9,6 +12,7 @@ class ProfileNotifier extends ChangeNotifier {
   static final ProfileNotifier instance = ProfileNotifier._();
 
   final _profileRepo = ProfileRepository();
+  final _cacheRepo = ProfileSecureCacheRepository();
   UserProfile? _profile;
   bool _loaded = false;
 
@@ -25,7 +29,13 @@ class ProfileNotifier extends ChangeNotifier {
     if (loc.contains('pakistan') || loc.contains(' pk')) return 'Rs';
     if (loc.contains('india') || loc.contains(' in')) return '₹';
     if (loc.contains('united kingdom') || loc.contains(' uk')) return '£';
-    if (loc.contains('euro') || loc.contains('germany') || loc.contains('france') || loc.contains('italy') || loc.contains('spain')) return '€';
+    if (loc.contains('euro') ||
+        loc.contains('germany') ||
+        loc.contains('france') ||
+        loc.contains('italy') ||
+        loc.contains('spain')) {
+      return '€';
+    }
     return '\$';
   }
 
@@ -34,8 +44,18 @@ class ProfileNotifier extends ChangeNotifier {
     final userId = _profileRepo.currentUserId;
     if (userId == null) return;
 
+    final cachedProfile = await _cacheRepo.loadProfile();
+    if (cachedProfile != null) {
+      _profile = cachedProfile;
+      _loaded = true;
+      notifyListeners();
+    }
+
     try {
       _profile = await _profileRepo.getProfile(userId);
+      if (_profile != null) {
+        await _cacheRepo.saveProfile(_profile!);
+      }
       _loaded = true;
       notifyListeners();
     } catch (e) {
@@ -46,6 +66,7 @@ class ProfileNotifier extends ChangeNotifier {
   /// Called after profile edits are saved to update all listeners immediately.
   void updateProfile(UserProfile updated) {
     _profile = updated;
+    unawaited(_cacheRepo.saveProfile(updated));
     notifyListeners();
   }
 
@@ -61,6 +82,7 @@ class ProfileNotifier extends ChangeNotifier {
       profilePictureUrl: avatarUrl ?? _profile!.profilePictureUrl,
       updatedAt: DateTime.now(),
     );
+    unawaited(_cacheRepo.saveProfile(_profile!));
     notifyListeners();
   }
 
@@ -68,6 +90,7 @@ class ProfileNotifier extends ChangeNotifier {
   void clear() {
     _profile = null;
     _loaded = false;
+    unawaited(_cacheRepo.clear());
     notifyListeners();
   }
 }

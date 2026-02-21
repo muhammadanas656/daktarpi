@@ -10,11 +10,17 @@ import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/security_formatters.dart';
+import '../models/verify_2fa_route_args.dart';
 import '../../data/auth_repository.dart';
 import '../../data/security_gate_service.dart';
 
 class Verify2FAScreen extends StatefulWidget {
-  const Verify2FAScreen({super.key});
+  final Verify2FARouteArgs routeArgs;
+
+  const Verify2FAScreen({
+    super.key,
+    this.routeArgs = const Verify2FARouteArgs(),
+  });
 
   @override
   State<Verify2FAScreen> createState() => _Verify2FAScreenState();
@@ -135,10 +141,10 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                       TextButton(
                         onPressed: () {
                           Navigator.pop(ctx);
-                          context.go(AppRoutes.home);
+                          _handleVerificationSuccess();
                         },
                         child: const Text(
-                          "Continue to App",
+                          "Continue",
                           style: TextStyle(
                             color: AppColors.primaryGreen,
                             fontWeight: FontWeight.bold,
@@ -154,10 +160,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
         }
       } else {
         await _securityGateService.verifyWithTotp(code);
-
-        if (mounted) {
-          context.go(AppRoutes.home);
-        }
+        _handleVerificationSuccess();
       }
     } on AuthException catch (_) {
       if (mounted) {
@@ -183,6 +186,31 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
           _isLoading = false;
         });
       }
+    }
+  }
+
+  void _handleVerificationSuccess() {
+    if (!mounted) {
+      return;
+    }
+    if (widget.routeArgs.popOnSuccess) {
+      context.pop(true);
+      return;
+    }
+    context.go(AppRoutes.home);
+  }
+
+  Future<void> _handleCancel() async {
+    if (widget.routeArgs.popOnSuccess) {
+      if (mounted) {
+        context.pop(false);
+      }
+      return;
+    }
+
+    await AuthRepository().signOut();
+    if (mounted) {
+      context.go(AppRoutes.login);
     }
   }
 
@@ -400,12 +428,9 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     ),
                     const SizedBox(height: 16),
                     TextButton(
-                      onPressed: () {
-                        AuthRepository().signOut();
-                        context.go(AppRoutes.login);
-                      },
+                      onPressed: _handleCancel,
                       child: const Text(
-                        "Cancel & Return to Login",
+                        "Cancel",
                         style: TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ),

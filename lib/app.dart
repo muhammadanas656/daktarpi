@@ -10,6 +10,18 @@ import 'core/security/inactivity_lock_guard.dart';
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  static Duration _resolveInactivityTimeout() {
+    const timeoutMs = String.fromEnvironment(
+      'INACTIVITY_TIMEOUT_MS',
+      defaultValue: '',
+    );
+    final parsed = int.tryParse(timeoutMs);
+    if (parsed != null && parsed > 0) {
+      return Duration(milliseconds: parsed);
+    }
+    return const Duration(minutes: 5);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Listen to SettingsNotifier for Theme changes
@@ -41,7 +53,12 @@ class MyApp extends StatelessWidget {
             if (child == null) {
               return const SizedBox.shrink();
             }
-            return OfflineModeGuard(child: InactivityLockGuard(child: child));
+            return OfflineModeGuard(
+              child: InactivityLockGuard(
+                timeout: _resolveInactivityTimeout(),
+                child: child,
+              ),
+            );
           },
         );
       },

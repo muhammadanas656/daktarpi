@@ -3,12 +3,14 @@ class AppointmentBookingArgs {
   final Map<String, dynamic> clinic;
   final DateTime initialDate;
   final String? timeSlot;
+  final String idempotencyKey;
 
   const AppointmentBookingArgs({
     required this.doctor,
     required this.clinic,
     required this.initialDate,
     this.timeSlot,
+    required this.idempotencyKey,
   });
 
   factory AppointmentBookingArgs.fromMap(Map<String, dynamic> map) {
@@ -23,6 +25,10 @@ class AppointmentBookingArgs {
       clinic: Map<String, dynamic>.from(map['clinic'] as Map),
       initialDate: date,
       timeSlot: map['timeSlot'] as String?,
+      idempotencyKey:
+          map['idempotencyKey']?.toString().isNotEmpty == true
+              ? map['idempotencyKey'].toString()
+              : 'legacy-${DateTime.now().microsecondsSinceEpoch}',
     );
   }
 }
@@ -34,6 +40,7 @@ class PaymentMethodArgs {
   final DateTime appointmentDate;
   final int? appointmentId;
   final String? timeSlot;
+  final String idempotencyKey;
 
   const PaymentMethodArgs({
     required this.doctor,
@@ -42,6 +49,7 @@ class PaymentMethodArgs {
     required this.appointmentDate,
     this.appointmentId,
     this.timeSlot,
+    required this.idempotencyKey,
   });
 
   factory PaymentMethodArgs.fromMap(Map<String, dynamic> map) {
@@ -58,6 +66,10 @@ class PaymentMethodArgs {
       appointmentDate: date,
       appointmentId: map['appointmentId'] as int?,
       timeSlot: map['timeSlot'] as String?,
+      idempotencyKey:
+          map['idempotencyKey']?.toString().isNotEmpty == true
+              ? map['idempotencyKey'].toString()
+              : 'legacy-${DateTime.now().microsecondsSinceEpoch}',
     );
   }
 }

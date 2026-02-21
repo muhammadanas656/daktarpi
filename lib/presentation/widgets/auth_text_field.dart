@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 
 class AuthTextField extends StatefulWidget {
   final TextEditingController controller;
@@ -31,10 +33,10 @@ class _AuthTextFieldState extends State<AuthTextField> {
   Widget build(BuildContext context) {
     final isVisible = widget.isPasswordVisible ?? _internalIsVisible;
     return Container(
-      height: 60,
+      height: AppDimens.inputHeight,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppShapes.lg,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -59,7 +61,9 @@ class _AuthTextFieldState extends State<AuthTextField> {
           decoration: InputDecoration(
             border: InputBorder.none,
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppDimens.spaceXl,
+            ),
             hintText: widget.hintText,
             hintStyle: const TextStyle(color: Color(0xFFC4C4C4), fontSize: 14),
             suffixIcon:
