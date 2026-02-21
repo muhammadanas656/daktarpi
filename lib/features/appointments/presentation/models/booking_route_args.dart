@@ -1,0 +1,69 @@
+class AppointmentBookingArgs {
+  final Map<String, dynamic> doctor;
+  final Map<String, dynamic> clinic;
+  final DateTime initialDate;
+  final String? timeSlot;
+
+  const AppointmentBookingArgs({
+    required this.doctor,
+    required this.clinic,
+    required this.initialDate,
+    this.timeSlot,
+  });
+
+  factory AppointmentBookingArgs.fromMap(Map<String, dynamic> map) {
+    final rawDate = map['initialDate'];
+    final date =
+        rawDate is DateTime
+            ? rawDate
+            : DateTime.tryParse(rawDate?.toString() ?? '') ?? DateTime.now();
+
+    return AppointmentBookingArgs(
+      doctor: Map<String, dynamic>.from(map['doctor'] as Map),
+      clinic: Map<String, dynamic>.from(map['clinic'] as Map),
+      initialDate: date,
+      timeSlot: map['timeSlot'] as String?,
+    );
+  }
+}
+
+class PaymentMethodArgs {
+  final Map<String, dynamic> doctor;
+  final Map<String, dynamic> clinic;
+  final Map<String, dynamic> patientDetails;
+  final DateTime appointmentDate;
+  final int? appointmentId;
+  final String? timeSlot;
+
+  const PaymentMethodArgs({
+    required this.doctor,
+    required this.clinic,
+    required this.patientDetails,
+    required this.appointmentDate,
+    this.appointmentId,
+    this.timeSlot,
+  });
+
+  factory PaymentMethodArgs.fromMap(Map<String, dynamic> map) {
+    final rawDate = map['appointmentDate'];
+    final date =
+        rawDate is DateTime
+            ? rawDate
+            : DateTime.tryParse(rawDate?.toString() ?? '') ?? DateTime.now();
+
+    return PaymentMethodArgs(
+      doctor: Map<String, dynamic>.from(map['doctor'] as Map),
+      clinic: Map<String, dynamic>.from(map['clinic'] as Map),
+      patientDetails: Map<String, dynamic>.from(map['patientDetails'] as Map),
+      appointmentDate: date,
+      appointmentId: map['appointmentId'] as int?,
+      timeSlot: map['timeSlot'] as String?,
+    );
+  }
+}
+
+class AppointmentsRouteArgs {
+  final bool refresh;
+
+  const AppointmentsRouteArgs({this.refresh = false});
+}

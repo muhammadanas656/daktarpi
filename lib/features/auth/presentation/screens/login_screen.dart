@@ -12,6 +12,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../data/auth_repository.dart';
+import '../../data/auth_route_resolver.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,8 +26,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // Reverted to your original Singleton syntax
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  final AuthRepository _authRepository = AuthRepository();
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
@@ -109,34 +111,14 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      await _authRepository.signIn(email: email, password: password);
 
       if (mounted) {
-        final user = Supabase.instance.client.auth.currentUser;
-        final metadata = user?.userMetadata;
-        final appMetadata = user?.appMetadata;
-        final aal = appMetadata?['aal'] as String?;
-        final is2FAEnabled = appMetadata?['is_2fa_enabled'] == true;
-
-        if (!mounted) {
-          return;
-        }
-
-        if (is2FAEnabled && (aal == 'aal1' || aal == null)) {
-          context.go(AppRoutes.verify2fa);
-          return;
-        }
-
-        final hasDob =
-            metadata?['dob'] != null && metadata!['dob'].toString().isNotEmpty;
-        if (!hasDob) {
-          context.go(AppRoutes.profileEdit);
-        } else {
-          context.go(AppRoutes.home);
-        }
+        final route =
+            AuthRouteResolver(
+              AuthRepositoryRouteProvider(_authRepository),
+            ).resolvePostAuthRoute();
+        context.go(route);
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -170,45 +152,24 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
+      // No null check needed here because authenticate() never returns null
       final googleUser = await _googleSignIn.authenticate();
 
       final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
-      // Removed the accessToken parameter here
 
       if (idToken == null) {
         throw 'No ID Token found.';
       }
 
-      // Supabase only strictly requires the idToken
-      await Supabase.instance.client.auth.signInWithIdToken(
-        provider: OAuthProvider.google,
-        idToken: idToken,
-      );
+      await _authRepository.signInWithGoogleIdToken(idToken: idToken);
 
       if (mounted) {
-        final user = Supabase.instance.client.auth.currentUser;
-        final metadata = user?.userMetadata;
-        final appMetadata = user?.appMetadata;
-        final aal = appMetadata?['aal'] as String?;
-        final is2FAEnabled = appMetadata?['is_2fa_enabled'] == true;
-
-        if (!mounted) {
-          return;
-        }
-
-        if (is2FAEnabled && (aal == 'aal1' || aal == null)) {
-          context.go(AppRoutes.verify2fa);
-          return;
-        }
-
-        final hasDob =
-            metadata?['dob'] != null && metadata!['dob'].toString().isNotEmpty;
-        if (!hasDob) {
-          context.go(AppRoutes.profileEdit);
-        } else {
-          context.go(AppRoutes.home);
-        }
+        final route =
+            AuthRouteResolver(
+              AuthRepositoryRouteProvider(_authRepository),
+            ).resolvePostAuthRoute();
+        context.go(route);
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -227,10 +188,8 @@ class _LoginScreenState extends State<LoginScreen> {
             e.toString().contains('cancelled')) {
           return;
         }
-        CustomSnackbar.showError(
-          context,
-          'Google Sign-In failed. Please try again.',
-        );
+        // Exposing the exact error for debugging instead of hiding it
+        CustomSnackbar.showError(context, 'Google Error: ${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -417,6 +376,7 @@ class _ForgotPasswordSheetContentState
   final _otpController = TextEditingController();
   final _newPassController = TextEditingController();
   final _confirmPassController = TextEditingController();
+  final AuthRepository _authRepository = AuthRepository();
 
   @override
   void initState() {
@@ -480,7 +440,7 @@ class _ForgotPasswordSheetContentState
     });
 
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await _authRepository.resetPasswordForEmail(email);
       if (widget.onCodeSent != null) {
         widget.onCodeSent!();
       }
@@ -527,9 +487,8 @@ class _ForgotPasswordSheetContentState
 
     try {
       final email = _emailController.text.trim();
-      final response = await Supabase.instance.client.auth.verifyOTP(
+      final response = await _authRepository.verifyRecoveryOtp(
         token: code,
-        type: OtpType.recovery,
         email: email,
       );
 
@@ -572,10 +531,7 @@ class _ForgotPasswordSheetContentState
     });
 
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: email,
-        password: newPass,
-      );
+      await _authRepository.signIn(email: email, password: newPass);
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -591,9 +547,7 @@ class _ForgotPasswordSheetContentState
     }
 
     try {
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(password: newPass),
-      );
+      await _authRepository.updatePassword(newPass);
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(

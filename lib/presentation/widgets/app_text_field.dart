@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 import 'package:flutter/services.dart';
 
 class AppTextField extends StatelessWidget {
@@ -34,7 +36,7 @@ class AppTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(20); // Premium Radius
+    final radius = AppShapes.xl;
     final bool singleLine = maxLines == 1;
 
     return Column(
@@ -76,8 +78,11 @@ class AppTextField extends StatelessWidget {
           ),
           constraints:
               singleLine
-                  ? const BoxConstraints(minHeight: 56, maxHeight: 56)
-                  : const BoxConstraints(minHeight: 56),
+                  ? const BoxConstraints(
+                    minHeight: AppDimens.fieldHeight,
+                    maxHeight: AppDimens.fieldHeight,
+                  )
+                  : const BoxConstraints(minHeight: AppDimens.fieldHeight),
           child: Center(
             child: TextField(
               controller: controller,

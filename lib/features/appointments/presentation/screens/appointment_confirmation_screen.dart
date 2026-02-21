@@ -9,6 +9,7 @@ import '../../data/appointment_repository.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import 'package:intl/intl.dart';
+import '../models/booking_route_args.dart';
 
 class AppointmentConfirmationScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
@@ -164,6 +165,11 @@ class _AppointmentConfirmationScreenState
 
   Future<void> _handleConfirm() async {
     final slots = _generateSlots();
+    final today = DateUtils.dateOnly(DateTime.now());
+    if (_selectedDate.isBefore(today)) {
+      CustomSnackbar.showError(context, "You cannot book a past date.");
+      return;
+    }
     if (_selectedTimeSlotIndex == -1) {
       CustomSnackbar.showError(context, "Please select a time slot");
       return;
@@ -289,7 +295,7 @@ class _AppointmentConfirmationScreenState
                         // Redirect logic remains the same
                         context.go(
                           AppRoutes.appointments,
-                          extra: {'refresh': true},
+                          extra: const AppointmentsRouteArgs(refresh: true),
                         );
                       },
                       style: ElevatedButton.styleFrom(

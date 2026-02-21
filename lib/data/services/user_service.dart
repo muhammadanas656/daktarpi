@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../features/profile/data/profile_repository.dart';
 
 class UserService {
   // 1. Singleton Pattern
@@ -8,6 +8,7 @@ class UserService {
   UserService._internal();
 
   // 2. Memory Cache
+  final ProfileRepository _profileRepository = ProfileRepository();
   Map<String, dynamic>? _cachedProfile;
   bool _isFetching = false;
 
@@ -23,21 +24,19 @@ class UserService {
   Future<void> fetchUserProfile() async {
     if (hasData || _isFetching) return;
 
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
+    final userId = _profileRepository.currentUserId;
+    if (userId == null) return;
 
     _isFetching = true;
 
     try {
-      final data =
-          await Supabase.instance.client
-              .from('profiles')
-              .select('full_name, profile_picture_url, phone_number')
-              .eq('id', user.id)
-              .maybeSingle();
-
-      if (data != null) {
-        _cachedProfile = data;
+      final profile = await _profileRepository.getProfile(userId);
+      if (profile != null) {
+        _cachedProfile = {
+          'full_name': profile.fullName,
+          'profile_picture_url': profile.profilePictureUrl,
+          'phone_number': profile.phoneNumber,
+        };
       }
     } catch (e) {
       debugPrint("UserService Error: $e");

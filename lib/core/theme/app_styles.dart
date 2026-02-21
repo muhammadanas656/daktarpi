@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import 'app_dimens.dart';
+import 'app_shapes.dart';
 
 class AppStyles {
   static const LinearGradient pageGradient = LinearGradient(
@@ -15,8 +17,8 @@ class AppStyles {
   );
 
   static const EdgeInsets pagePadding = EdgeInsets.symmetric(
-    horizontal: 24,
-    vertical: 10,
+    horizontal: AppDimens.pageHorizontalPadding,
+    vertical: AppDimens.pageVerticalPadding,
   );
 
   static final List<BoxShadow> cardShadow = [
@@ -27,7 +29,7 @@ class AppStyles {
     ),
   ];
 
-  static final BorderRadius cardRadius = BorderRadius.circular(16);
+  static final BorderRadius cardRadius = AppShapes.lg;
 
   static BoxDecoration surfaceCard({BorderRadius? borderRadius}) {
     return BoxDecoration(

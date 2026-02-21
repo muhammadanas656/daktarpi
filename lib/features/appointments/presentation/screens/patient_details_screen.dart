@@ -1,16 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../profile/data/profile_repository.dart';
+import '../../data/booking_draft_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../core/constants/app_routes.dart';
+import '../models/booking_route_args.dart';
 
 class PatientDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
@@ -30,7 +33,8 @@ class PatientDetailsScreen extends StatefulWidget {
   State<PatientDetailsScreen> createState() => _PatientDetailsScreenState();
 }
 
-class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
+class _PatientDetailsScreenState extends State<PatientDetailsScreen>
+    with WidgetsBindingObserver {
   // --- COLORS (aliased from AppColors) ---
   static const Color primaryGreen = AppColors.primaryGreen;
   static const Color textDark = AppColors.textDark;
@@ -40,6 +44,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   static const Color lightGreenBg = AppColors.lightGreenBg;
 
   final _profileRepo = ProfileRepository();
+  final _draftRepo = BookingDraftRepository();
+  Timer? _draftDebounce;
+  bool _restoringDraft = false;
 
   // --- TYPOGRAPHY ---
   final TextStyle _labelStyle = const TextStyle(
@@ -85,24 +92,131 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchUserProfile();
+    WidgetsBinding.instance.addObserver(this);
+    _nameController.addListener(_onFormFieldChanged);
+    _phoneController.addListener(_onFormFieldChanged);
+    _emailController.addListener(_onFormFieldChanged);
+    unawaited(_bootstrapForm());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _draftDebounce?.cancel();
+    _nameController.removeListener(_onFormFieldChanged);
+    _phoneController.removeListener(_onFormFieldChanged);
+    _emailController.removeListener(_onFormFieldChanged);
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _persistDraftNow();
+    }
+  }
+
   // --- LOGIC ---
+  Future<void> _bootstrapForm() async {
+    await _fetchUserProfile();
+    await _restoreDraftIfMatchingContext();
+  }
+
+  void _onFormFieldChanged() {
+    if (_restoringDraft) return;
+    _scheduleDraftSave();
+  }
+
+  void _scheduleDraftSave() {
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 350), _persistDraftNow);
+  }
+
+  Future<void> _persistDraftNow() async {
+    final doctorId = widget.doctor['id']?.toString();
+    final clinicId = widget.clinic['id']?.toString();
+    if (doctorId == null || clinicId == null) {
+      return;
+    }
+    try {
+      await _draftRepo.saveDraft({
+        'doctor_id': doctorId,
+        'clinic_id': clinicId,
+        'name': _nameController.text,
+        'phone': _phoneController.text,
+        'email': _emailController.text,
+        'gender': _selectedGender,
+        'day': _selectedDay,
+        'month': _selectedMonth,
+        'year': _selectedYear,
+        'selected_profile_index': _selectedProfileIndex,
+        'custom_category_label': _customCategoryLabel,
+        'patient_image_path': _newPatientImage?.path,
+        'time_slot': widget.timeSlot,
+        'appointment_date': widget.initialDate.toIso8601String(),
+      });
+    } catch (_) {
+      // Draft save should never block booking flow.
+    }
+  }
+
+  Future<void> _restoreDraftIfMatchingContext() async {
+    try {
+      final draft = await _draftRepo.loadDraft();
+      if (draft == null) return;
+
+      final doctorId = widget.doctor['id']?.toString();
+      final clinicId = widget.clinic['id']?.toString();
+      if (draft['doctor_id']?.toString() != doctorId ||
+          draft['clinic_id']?.toString() != clinicId) {
+        return;
+      }
+
+      _restoringDraft = true;
+      if (!mounted) return;
+      setState(() {
+        _nameController.text = draft['name']?.toString() ?? '';
+        _phoneController.text = draft['phone']?.toString() ?? '';
+        _emailController.text = draft['email']?.toString() ?? '';
+        _selectedGender = draft['gender']?.toString() ?? _selectedGender;
+        _selectedDay = draft['day']?.toString();
+        _selectedMonth = draft['month']?.toString();
+        _selectedYear = draft['year']?.toString();
+        _selectedProfileIndex =
+            int.tryParse(draft['selected_profile_index']?.toString() ?? '') ??
+            _selectedProfileIndex;
+        _customCategoryLabel =
+            draft['custom_category_label']?.toString() ?? _customCategoryLabel;
+        final imagePath = draft['patient_image_path']?.toString();
+        if (imagePath != null && imagePath.isNotEmpty) {
+          _newPatientImage = File(imagePath);
+        }
+      });
+    } catch (_) {
+      // Ignore draft restore failures and continue with live profile defaults.
+    } finally {
+      _restoringDraft = false;
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      await _draftRepo.clearDraft();
+    } catch (_) {
+      // Ignore clear failures.
+    }
+  }
+
   Future<void> _fetchUserProfile() async {
     final userId = _profileRepo.currentUserId;
     if (userId != null) {
       try {
         final profile = await _profileRepo.getProfile(userId);
-        final user = Supabase.instance.client.auth.currentUser;
+        final userEmail = _profileRepo.currentUserEmail;
 
         if (mounted && profile != null) {
           _userProfileUrl = profile.profilePictureUrl;
@@ -111,7 +225,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
             setState(() {
               _nameController.text = profile.fullName;
               _phoneController.text = profile.phoneNumber ?? "";
-              _emailController.text = user?.email ?? "";
+              _emailController.text = userEmail ?? "";
 
               if (profile.dateOfBirth != null) {
                 _selectedDay = profile.dateOfBirth!.day.toString();
@@ -136,6 +250,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         setState(() {
           _newPatientImage = File(image.path);
         });
+        _scheduleDraftSave();
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
@@ -267,6 +382,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         _selectedGender = "Male";
         _newPatientImage = null;
       });
+      _scheduleDraftSave();
     }
   }
 
@@ -298,6 +414,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         _newPatientImage = null;
       }
     });
+    _scheduleDraftSave();
   }
 
   void _handleContinue() {
@@ -329,14 +446,15 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     if (_selectedProfileIndex == 2) patientType = 'child';
     if (_selectedProfileIndex == 0) patientType = _customCategoryLabel;
 
+    unawaited(_clearDraft());
     context.push(
-      '/payment_method',
-      extra: {
-        'doctor': widget.doctor,
-        'clinic': widget.clinic,
-        'appointmentDate': widget.initialDate,
-        'timeSlot': widget.timeSlot,
-        'patientDetails': {
+      AppRoutes.paymentMethod,
+      extra: PaymentMethodArgs(
+        doctor: widget.doctor,
+        clinic: widget.clinic,
+        appointmentDate: widget.initialDate,
+        timeSlot: widget.timeSlot,
+        patientDetails: {
           'name': _nameController.text,
           'phone': _phoneController.text,
           'email': _emailController.text,
@@ -345,7 +463,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
           'imagePath': imagePath,
           'patientType': patientType,
         },
-      },
+      ),
     );
   }
 
@@ -535,7 +653,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                                       (i) => (i + 1).toString(),
                                     ),
                                     _selectedDay,
-                                    (val) => setState(() => _selectedDay = val),
+                                    (val) {
+                                      setState(() => _selectedDay = val);
+                                      _scheduleDraftSave();
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -559,8 +680,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                                       'December',
                                     ],
                                     _selectedMonth,
-                                    (val) =>
-                                        setState(() => _selectedMonth = val),
+                                    (val) {
+                                      setState(() => _selectedMonth = val);
+                                      _scheduleDraftSave();
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -574,8 +697,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                                       (i) => (currentYear - i).toString(),
                                     ),
                                     _selectedYear,
-                                    (val) =>
-                                        setState(() => _selectedYear = val),
+                                    (val) {
+                                      setState(() => _selectedYear = val);
+                                      _scheduleDraftSave();
+                                    },
                                   ),
                                 ),
                               ],
@@ -832,7 +957,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   Widget _buildRadio(String value) {
     final isSelected = _selectedGender == value;
     return GestureDetector(
-      onTap: () => setState(() => _selectedGender = value),
+      onTap: () {
+        setState(() => _selectedGender = value);
+        _scheduleDraftSave();
+      },
       child: Row(
         children: [
           AnimatedContainer(

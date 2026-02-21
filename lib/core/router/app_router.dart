@@ -22,6 +22,7 @@ import '../../features/legal/presentation/screens/terms_of_service_screen.dart';
 import '../../features/appointments/presentation/screens/my_appointments_screen.dart';
 import '../../features/appointments/presentation/screens/appointment_confirmation_screen.dart';
 import '../../features/appointments/presentation/screens/patient_details_screen.dart';
+import '../../features/appointments/presentation/models/booking_route_args.dart';
 import '../../features/menu/presentation/screens/linked_accounts_screen.dart';
 
 // --- DOCTOR SCREENS ---
@@ -31,10 +32,12 @@ import '../../features/doctors/presentation/screens/doctor_details_screen.dart';
 import '../../features/doctors/presentation/screens/specialty_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/clinic_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/doctors_screen.dart';
+import '../../features/doctors/presentation/models/doctors_route_args.dart';
 import '../../features/doctors/presentation/screens/my_doctors_screen.dart';
 import '../../features/medical_records/presentation/screens/medical_records_screen.dart';
 import '../../features/medical_records/presentation/screens/add_record_screen.dart';
 import '../../features/medical_records/data/medical_record.dart';
+import '../../features/medical_records/presentation/models/medical_record_route_args.dart';
 
 // --- NAVIGATOR KEYS ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -55,10 +58,22 @@ final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/',
   routes: [
-    GoRoute(path: AppRoutes.splash, builder: (context, state) => const SplashScreen()),
-    GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginScreen()),
-    GoRoute(path: AppRoutes.signup, builder: (context, state) => const SignUpScreen()),
-    GoRoute(path: AppRoutes.verify2fa, builder: (context, state) => const Verify2FAScreen()),
+    GoRoute(
+      path: AppRoutes.splash,
+      builder: (context, state) => const SplashScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.login,
+      builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.signup,
+      builder: (context, state) => const SignUpScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.verify2fa,
+      builder: (context, state) => const Verify2FAScreen(),
+    ),
 
     GoRoute(
       path: AppRoutes.privacyPolicy,
@@ -71,7 +86,7 @@ final appRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const SettingsScreen(),
     ),
-    
+
     GoRoute(
       path: AppRoutes.linkedAccounts,
       parentNavigatorKey: _rootNavigatorKey,
@@ -120,12 +135,12 @@ final appRouter = GoRouter(
       path: AppRoutes.appointmentBooking,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        final extra = state.extra as Map<String, dynamic>;
+        final extra = state.extra as AppointmentBookingArgs;
         return PatientDetailsScreen(
-          doctor: extra['doctor'],
-          clinic: extra['clinic'],
-          initialDate: extra['initialDate'],
-          timeSlot: extra['timeSlot'],
+          doctor: extra.doctor,
+          clinic: extra.clinic,
+          initialDate: extra.initialDate,
+          timeSlot: extra.timeSlot,
         );
       },
     ),
@@ -134,14 +149,14 @@ final appRouter = GoRouter(
       path: AppRoutes.paymentMethod,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        final extra = state.extra as Map<String, dynamic>;
+        final extra = state.extra as PaymentMethodArgs;
         return AppointmentConfirmationScreen(
-          doctor: extra['doctor'],
-          clinic: extra['clinic'],
-          patientDetails: extra['patientDetails'],
-          initialDate: extra['appointmentDate'],
-          appointmentId: extra['appointmentId'],
-          timeSlot: extra['timeSlot'],
+          doctor: extra.doctor,
+          clinic: extra.clinic,
+          patientDetails: extra.patientDetails,
+          initialDate: extra.appointmentDate,
+          appointmentId: extra.appointmentId,
+          timeSlot: extra.timeSlot,
         );
       },
     ),
@@ -151,8 +166,8 @@ final appRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final id = state.pathParameters['id']!;
-        final extra = state.extra as Map<String, dynamic>?;
-        final name = extra?['name'] as String? ?? 'Doctors';
+        final extra = state.extra as SpecialtyRouteArgs?;
+        final name = extra?.name ?? 'Doctors';
         return SpecialtyDoctorsScreen(specialtyId: id, specialtyName: name);
       },
     ),
@@ -162,8 +177,8 @@ final appRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final id = state.pathParameters['id']!;
-        final extra = state.extra as Map<String, dynamic>?;
-        final name = extra?['name'] as String? ?? 'Clinic Doctors';
+        final extra = state.extra as ClinicRouteArgs?;
+        final name = extra?.name ?? 'Clinic Doctors';
         return ClinicDoctorsScreen(clinicId: int.parse(id), clinicName: name);
       },
     ),
@@ -183,8 +198,14 @@ final appRouter = GoRouter(
       path: AppRoutes.addMedicalRecord,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        final record = state.extra as MedicalRecord?;
-        return AddRecordScreen(recordToEdit: record);
+        final extra = state.extra;
+        final args =
+            extra is MedicalRecordRouteArgs
+                ? extra
+                : extra is MedicalRecord
+                ? MedicalRecordRouteArgs(record: extra)
+                : const MedicalRecordRouteArgs();
+        return AddRecordScreen(recordToEdit: args.record);
       },
     ),
 
@@ -210,7 +231,6 @@ final appRouter = GoRouter(
               path: AppRoutes.doctors,
               builder: (context, state) => const DoctorsScreen(),
             ),
-
           ],
         ),
         StatefulShellBranch(

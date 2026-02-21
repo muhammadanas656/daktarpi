@@ -4,11 +4,13 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/constants/app_routes.dart';
 import '../../data/appointment_repository.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../appointment_notifier.dart';
 import '../../../../presentation/widgets/appointment_card.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
+import '../models/booking_route_args.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
   const MyAppointmentsScreen({super.key});
@@ -34,7 +36,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   void dispose() {
     _appointmentNotifier.removeListener(_onNotifierChanged);
     if (_appointmentsSubscription != null) {
-      Supabase.instance.client.removeChannel(_appointmentsSubscription!);
+      _appointmentRepo.removeChannel(_appointmentsSubscription!);
     }
     super.dispose();
   }
@@ -48,7 +50,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final extra = GoRouterState.of(context).extra;
-    if (extra != null && extra is Map && extra['refresh'] == true) {
+    if (extra is AppointmentsRouteArgs && extra.refresh) {
       _appointmentNotifier.fetchAppointments();
       // Clear extra logic would ideally happen here or inside router
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -113,14 +115,14 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     };
 
     final result = await context.push(
-      '/payment_method',
-      extra: {
-        'doctor': doctor,
-        'clinic': clinic,
-        'patientDetails': patientDetails,
-        'appointmentDate': DateTime.now().add(const Duration(days: 1)),
-        'appointmentId': appointmentId,
-      },
+      AppRoutes.paymentMethod,
+      extra: PaymentMethodArgs(
+        doctor: Map<String, dynamic>.from(doctor ?? const {}),
+        clinic: Map<String, dynamic>.from(clinic ?? const {}),
+        patientDetails: patientDetails,
+        appointmentDate: DateTime.now().add(const Duration(days: 1)),
+        appointmentId: appointmentId,
+      ),
     );
 
     if (result == true && mounted) {
@@ -226,7 +228,9 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                              color: const Color(
+                                0xFF2196F3,
+                              ).withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -455,10 +459,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
             ),
           ),
           const SizedBox(width: 20),
-          Text(
-            "My Appointments",
-            style: AppTextStyles.h1,
-          ),
+          Text("My Appointments", style: AppTextStyles.h1),
         ],
       ),
     );
@@ -541,8 +542,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
       ),
     );
   }
-
-
 
   String _formatDate(String? d) {
     if (d == null) return "";

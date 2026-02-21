@@ -9,6 +9,9 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/utils/security_formatters.dart';
+import '../../data/auth_repository.dart';
+import '../../data/security_gate_service.dart';
 
 class Verify2FAScreen extends StatefulWidget {
   const Verify2FAScreen({super.key});
@@ -24,6 +27,9 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
 
   bool _isLoading = false;
   bool _isRecoveryMode = false;
+  final SecurityGateService _securityGateService = SecurityGateService(
+    authProvider: AuthRepositorySecurityProvider(AuthRepository()),
+  );
 
   @override
   void initState() {
@@ -102,14 +108,9 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
 
     try {
       if (_isRecoveryMode) {
-        final success = await Supabase.instance.client.rpc(
-          'use_recovery_code',
-          params: {'input_code': code},
-        );
+        final success = await _securityGateService.verifyWithRecoveryCode(code);
 
-        if (success == true) {
-          await Supabase.instance.client.auth.refreshSession();
-
+        if (success) {
           if (mounted) {
             await showDialog(
               context: context,
@@ -152,18 +153,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
           throw "That backup code didn't match. Please try another one.";
         }
       } else {
-        final factors = await Supabase.instance.client.auth.mfa.listFactors();
-        final verifiedFactor = factors.totp.firstWhere(
-          (factor) => factor.status == FactorStatus.verified,
-          orElse:
-              () =>
-                  throw "No verified authenticator found. Please use a backup code.",
-        );
-
-        await Supabase.instance.client.auth.mfa.challengeAndVerify(
-          factorId: verifiedFactor.id,
-          code: code,
-        );
+        await _securityGateService.verifyWithTotp(code);
 
         if (mounted) {
           context.go(AppRoutes.home);
@@ -364,6 +354,11 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                             ),
                           ),
                         ),
+                        onChanged: (val) {
+                          if (val.length == 9) {
+                            _verify();
+                          }
+                        },
                         onSubmitted: (val) => _verify(),
                       ),
                       crossFadeState:
@@ -406,7 +401,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     const SizedBox(height: 16),
                     TextButton(
                       onPressed: () {
-                        Supabase.instance.client.auth.signOut();
+                        AuthRepository().signOut();
                         context.go(AppRoutes.login);
                       },
                       child: const Text(
@@ -421,31 +416,6 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
           ),
         ),
       ),
-    );
-  }
-}
-
-// --- NEW MAGIC AUTO-FORMATTER CLASS ---
-class BackupCodeFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    String cleanText = newValue.text.toUpperCase().replaceAll(
-      RegExp(r'[^A-Z0-9]'),
-      '',
-    );
-    if (cleanText.length > 8) {
-      cleanText = cleanText.substring(0, 8);
-    }
-    String formattedText = cleanText;
-    if (cleanText.length > 4) {
-      formattedText = '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
-    }
-    return TextEditingValue(
-      text: formattedText,
-      selection: TextSelection.collapsed(offset: formattedText.length),
     );
   }
 }

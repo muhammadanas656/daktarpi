@@ -54,11 +54,16 @@ dependencies:
   path_provider: ^2.1.2
   open_filex: ^4.3.4
   shared_preferences: ^2.5.3
+  flutter_secure_storage: ^9.2.4
+  local_auth: ^2.3.0
+  connectivity_plus: ^6.1.5
   flutter_svg: ^2.2.2
   google_sign_in: ^7.2.0
   pinput: ^6.0.2
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

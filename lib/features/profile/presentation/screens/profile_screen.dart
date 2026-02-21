@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
@@ -16,6 +15,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../profile_notifier.dart';
+import '../../data/profile_repository.dart';
+import '../../data/user_profile.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -42,6 +43,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _avatarUrl;
 
   final _picker = ImagePicker();
+  final _profileRepository = ProfileRepository();
 
   // Define colors
 
@@ -134,31 +136,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // --- LOAD PROFILE ---
   Future<void> _loadUserProfile() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        final response =
-            await Supabase.instance.client
-                .from('profiles')
-                .select()
-                .eq('id', user.id)
-                .maybeSingle();
+      final userId = _profileRepository.currentUserId;
+      if (userId != null) {
+        final profile = await _profileRepository.getProfile(userId);
 
-        if (response != null) {
+        if (profile != null) {
           setState(() {
-            _nameController.text = response['full_name'] ?? '';
-            _locationController.text = response['location'] ?? '';
-            _avatarUrl = response['profile_picture_url'];
+            _nameController.text = profile.fullName;
+            _locationController.text = profile.location ?? '';
+            _avatarUrl = profile.profilePictureUrl;
 
-            if (response['date_of_birth'] != null) {
-              _selectedDate = DateTime.tryParse(response['date_of_birth']);
-              if (_selectedDate != null) {
-                _dobController.text = DateFormat(
-                  'dd MMM yyyy',
-                ).format(_selectedDate!);
-              }
+            _selectedDate = profile.dateOfBirth;
+            if (_selectedDate != null) {
+              _dobController.text = DateFormat(
+                'dd MMM yyyy',
+              ).format(_selectedDate!);
             }
 
-            String fullPhone = response['phone_number'] ?? '';
+            String fullPhone = profile.phoneNumber ?? '';
             if (fullPhone.isNotEmpty) {
               if (fullPhone.startsWith(_countryCode)) {
                 _phoneController.text = fullPhone.substring(
@@ -239,37 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _deleteOldProfilePic(String userId) async {
-    if (_avatarUrl != null && _avatarUrl!.contains('profile_pictures')) {
-      try {
-        Uri uri = Uri.parse(_avatarUrl!);
-        int bucketIndex = uri.pathSegments.indexOf('profile_pictures');
-        if (bucketIndex != -1 && bucketIndex + 2 < uri.pathSegments.length) {
-          String pathToDelete = uri.pathSegments
-              .sublist(bucketIndex + 1)
-              .join('/');
-          await Supabase.instance.client.storage
-              .from('profile_pictures')
-              .remove([pathToDelete]);
-          return;
-        }
-      } catch (e) {
-        debugPrint("Error parsing old URL: $e");
-      }
-    }
-    try {
-      final List<FileObject> objects = await Supabase.instance.client.storage
-          .from('profile_pictures')
-          .list(path: userId);
-      if (objects.isNotEmpty) {
-        final List<String> paths =
-            objects.map((e) => '$userId/${e.name}').toList();
-        await Supabase.instance.client.storage
-            .from('profile_pictures')
-            .remove(paths);
-      }
-    } catch (e) {
-      debugPrint("Error cleaning folder: $e");
-    }
+    await _profileRepository.deleteOldProfilePic(userId, _avatarUrl);
   }
 
   // --- SAVE PROFILE ---
@@ -310,67 +275,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) {
+      final userId = _profileRepository.currentUserId;
+      if (userId == null) {
         throw "No active session.";
       }
 
-      final userId = user.id;
       String? finalAvatarUrl = _avatarUrl;
 
       if (_imageFile != null) {
         await _deleteOldProfilePic(userId);
-        final fileExt = _imageFile!.path.split('.').last;
-        final fileName = '$userId/avatar.$fileExt';
-
-        try {
-          await Supabase.instance.client.storage
-              .from('profile_pictures')
-              .upload(
-                fileName,
-                _imageFile!,
-                fileOptions: const FileOptions(upsert: true),
-              );
-          finalAvatarUrl = Supabase.instance.client.storage
-              .from('profile_pictures')
-              .getPublicUrl(fileName);
-          finalAvatarUrl =
-              Uri.parse(finalAvatarUrl)
-                  .replace(
-                    queryParameters: {
-                      't': DateTime.now().millisecondsSinceEpoch.toString(),
-                    },
-                  )
-                  .toString();
-        } on StorageException catch (e) {
-          throw "Storage Error: ${e.message}";
-        }
+        finalAvatarUrl = await _profileRepository.uploadProfilePicture(
+          userId,
+          _imageFile!,
+        );
       }
 
       String fullPhoneNumber = "$_countryCode${_phoneController.text.trim()}";
 
-      try {
-        await Supabase.instance.client.from('profiles').upsert({
-          'id': userId,
-          'full_name': _nameController.text.trim(),
-          'phone_number': fullPhoneNumber,
-          'date_of_birth': _selectedDate?.toIso8601String(),
-          'location': _locationController.text.trim(),
-          'profile_picture_url': finalAvatarUrl,
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-
-        await Supabase.instance.client.auth.updateUser(
-          UserAttributes(
-            data: {
-              'full_name': _nameController.text.trim(),
-              'dob': _selectedDate?.toIso8601String(),
-            },
-          ),
-        );
-      } on PostgrestException catch (e) {
-        throw "Database Error: ${e.message}";
-      }
+      await _profileRepository.updateProfile(
+        UserProfile(
+          id: userId,
+          fullName: _nameController.text.trim(),
+          phoneNumber: fullPhoneNumber,
+          dateOfBirth: _selectedDate,
+          location: _locationController.text.trim(),
+          profilePictureUrl: finalAvatarUrl,
+          updatedAt: DateTime.now(),
+        ),
+      );
 
       if (mounted) {
         setState(() => _isEditing = true);
@@ -422,7 +354,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (isNameMissing || isPhoneMissing || isDobMissing || isLocationMissing) {
       setState(() => _isLoading = true);
       try {
-        await Supabase.instance.client.auth.signOut();
+        await _profileRepository.signOut();
         if (mounted) {
           context.go(AppRoutes.login);
         }

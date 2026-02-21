@@ -13,6 +13,9 @@ import '../../../../presentation/widgets/primary_button.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../../presentation/widgets/auth_text_field.dart';
 import '../../../settings/presentation/settings_notifier.dart';
+import '../../../../core/utils/security_formatters.dart';
+import '../../../auth/data/auth_repository.dart';
+import '../../data/settings_repository.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -27,6 +30,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _is2FAEnabled = false;
   String? _verifiedFactorId;
   bool _hasRecoveryCodes = false;
+  final AuthRepository _authRepository = AuthRepository();
+  final SettingsRepository _settingsRepository = SettingsRepository();
 
   TextEditingController? _activePinController;
   VoidCallback? _activePinSubmit;
@@ -91,15 +96,10 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _check2FAStatus() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      final factors = await Supabase.instance.client.auth.mfa.listFactors();
+      final user = _authRepository.currentUser;
+      final factors = await _authRepository.listMfaFactors();
 
-      bool hasCodes = false;
-      try {
-        hasCodes = await Supabase.instance.client.rpc(
-          'user_has_recovery_codes',
-        );
-      } catch (_) {}
+      final hasCodes = await _authRepository.userHasRecoveryCodes();
 
       if (mounted) {
         setState(() {
@@ -148,15 +148,12 @@ class _SettingsScreenState extends State<SettingsScreen>
                 isDialogLoading = true;
               });
               try {
-                await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                await _authRepository.challengeAndVerify(
                   factorId: factorId!,
                   code: codeController.text,
                 );
                 generatedCodes = _generateLocalCodes();
-                await Supabase.instance.client.rpc(
-                  'save_recovery_codes',
-                  params: {'codes': generatedCodes},
-                );
+                await _settingsRepository.saveRecoveryCodes(generatedCodes);
                 setDialogState(() {
                   currentStep = 2;
                   isDialogLoading = false;
@@ -212,23 +209,17 @@ class _SettingsScreenState extends State<SettingsScreen>
                         isDialogLoading = true;
                       });
                       try {
-                        final factors =
-                            await Supabase.instance.client.auth.mfa
-                                .listFactors();
+                        final factors = await _authRepository.listMfaFactors();
                         for (final f in factors.all.where(
                           (f) => f.status != FactorStatus.verified,
                         )) {
-                          await Supabase.instance.client.auth.mfa.unenroll(
-                            f.id,
-                          );
+                          await _authRepository.unenrollFactor(f.id);
                         }
-                        final response = await Supabase.instance.client.auth.mfa
-                            .enroll(
-                              factorType: FactorType.totp,
-                              issuer: 'DaktarPai',
-                              friendlyName:
-                                  'DaktarPai (${Supabase.instance.client.auth.currentUser?.email})',
-                            );
+                        final response = await _authRepository.enrollTotp(
+                          issuer: 'DaktarPai',
+                          friendlyName:
+                              'DaktarPai (${_authRepository.currentUser?.email})',
+                        );
                         factorId = response.id;
                         qrCodeSvg = response.totp?.qrCode;
                         secretKey = response.totp?.secret;
@@ -292,8 +283,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   const SizedBox(height: 16),
                   if (qrCodeSvg != null)
                     SizedBox(
-                      height: 160,
-                      width: 160,
+                      height:
+                          130, // Optimized size so it doesn't overflow when keyboard opens
+                      width: 130,
                       child: SvgPicture.string(qrCodeSvg!),
                     ),
                   const SizedBox(height: 12),
@@ -491,7 +483,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     label: "Done",
                     onTap: () async {
                       Navigator.pop(ctx);
-                      await Supabase.instance.client.auth.refreshSession();
+                      await _authRepository.refreshSession();
                       _check2FAStatus();
                     },
                   ),
@@ -505,15 +497,17 @@ class _SettingsScreenState extends State<SettingsScreen>
                 borderRadius: BorderRadius.circular(20),
               ),
               contentPadding: const EdgeInsets.all(24),
-              content: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child:
-                    [
-                      buildInfoStep(),
-                      buildQRStep(),
-                      buildBackupStep(),
-                      buildSuccessStep(),
-                    ][currentStep],
+              content: SingleChildScrollView(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child:
+                      [
+                        buildInfoStep(),
+                        buildQRStep(),
+                        buildBackupStep(),
+                        buildSuccessStep(),
+                      ][currentStep],
+                ),
               ),
             );
           },
@@ -531,7 +525,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     bool isDialogLoading = false;
     bool isRecoveryMode = false;
 
-    // We start by tracking the OTP controller
     _activePinController = otpController;
 
     await showDialog(
@@ -560,21 +553,18 @@ class _SettingsScreenState extends State<SettingsScreen>
 
               try {
                 if (isRecoveryMode) {
-                  final rpcSuccess = await Supabase.instance.client.rpc(
-                    'use_recovery_code',
-                    params: {'input_code': code},
+                  final rpcSuccess = await _authRepository.useRecoveryCode(
+                    code,
                   );
                   if (rpcSuccess != true) {
                     throw "Invalid backup code.";
                   }
                 } else {
-                  await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                  await _authRepository.challengeAndVerify(
                     factorId: _verifiedFactorId!,
                     code: code,
                   );
-                  await Supabase.instance.client.auth.mfa.unenroll(
-                    _verifiedFactorId!,
-                  );
+                  await _authRepository.unenrollFactor(_verifiedFactorId!);
                 }
 
                 if (ctx.mounted) {
@@ -697,6 +687,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                             ),
                           ),
                         ),
+                        onChanged: (val) {
+                          if (val.length == 9 && _activePinSubmit != null) {
+                            _activePinSubmit!();
+                          }
+                        },
                         onSubmitted: (val) {
                           if (_activePinSubmit != null) {
                             _activePinSubmit!();
@@ -824,10 +819,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     List<String> codes = [];
     try {
       codes = _generateLocalCodes();
-      await Supabase.instance.client.rpc(
-        'save_recovery_codes',
-        params: {'codes': codes},
-      );
+      await _settingsRepository.saveRecoveryCodes(codes);
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -1032,21 +1024,20 @@ class _SettingsScreenState extends State<SettingsScreen>
 
                 try {
                   if (isRecoveryMode) {
-                    final rpcSuccess = await Supabase.instance.client.rpc(
-                      'use_recovery_code',
-                      params: {'input_code': code},
+                    final rpcSuccess = await _authRepository.useRecoveryCode(
+                      code,
                     );
                     if (rpcSuccess != true) {
                       throw "Invalid backup code.";
                     }
                   } else {
-                    await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                    await _authRepository.challengeAndVerify(
                       factorId: _verifiedFactorId!,
                       code: code,
                     );
                   }
 
-                  await Supabase.instance.client.auth.refreshSession();
+                  await _authRepository.refreshSession();
                   setDialogState(() {
                     isDialogLoading = false;
                     currentStep = 1;
@@ -1141,6 +1132,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                             ),
                           ),
                         ),
+                        onChanged: (val) {
+                          if (val.length == 9 && _activePinSubmit != null) {
+                            _activePinSubmit!();
+                          }
+                        },
                         onSubmitted: (val) {
                           if (_activePinSubmit != null) {
                             _activePinSubmit!();
@@ -1331,9 +1327,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               });
 
                               try {
-                                await Supabase.instance.client.auth.updateUser(
-                                  UserAttributes(password: newPass),
-                                );
+                                await _authRepository.updatePassword(newPass);
 
                                 if (!dialogCtx.mounted) {
                                   return;
@@ -1417,7 +1411,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
               try {
                 if (_is2FAEnabled && _verifiedFactorId != null) {
-                  await Supabase.instance.client.auth.mfa.challengeAndVerify(
+                  await _authRepository.challengeAndVerify(
                     factorId: _verifiedFactorId!,
                     code: otpController.text,
                   );
@@ -1607,27 +1601,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     });
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) {
-        throw "No active session";
-      }
-      try {
-        final List<FileObject> objects = await Supabase.instance.client.storage
-            .from('medical_docs')
-            .list(path: user.id);
-        if (objects.isNotEmpty) {
-          final List<String> paths =
-              objects.map((e) => '${user.id}/${e.name}').toList();
-          await Supabase.instance.client.storage
-              .from('medical_docs')
-              .remove(paths);
-        }
-      } catch (e) {
-        debugPrint("Storage cleanup error (continuing): $e");
-      }
-
-      await Supabase.instance.client.rpc('delete_user_account');
-      await Supabase.instance.client.auth.signOut();
+      await _settingsRepository.deleteAccount();
 
       if (mounted) {
         context.go(AppRoutes.login);
@@ -2070,29 +2044,5 @@ class _SettingsScreenState extends State<SettingsScreen>
       case ThemeMode.dark:
         return "Dark";
     }
-  }
-}
-
-class BackupCodeFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    String cleanText = newValue.text.toUpperCase().replaceAll(
-      RegExp(r'[^A-Z0-9]'),
-      '',
-    );
-    if (cleanText.length > 8) {
-      cleanText = cleanText.substring(0, 8);
-    }
-    String formattedText = cleanText;
-    if (cleanText.length > 4) {
-      formattedText = '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
-    }
-    return TextEditingValue(
-      text: formattedText,
-      selection: TextSelection.collapsed(offset: formattedText.length),
-    );
   }
 }

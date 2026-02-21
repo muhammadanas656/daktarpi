@@ -7,7 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../doctors/presentation/favorites_notifier.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../doctors/data/doctor_repository.dart';
-
+import '../../../doctors/presentation/models/doctors_route_args.dart';
 
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/home_popular_doctor_card.dart';
@@ -99,15 +99,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-
-
   Future<void> _navigateToSpecialty(
     int specialtyId,
     String specialtyName,
   ) async {
     await context.push(
-      '/specialty_doctors/$specialtyId',
-      extra: {'name': specialtyName},
+      AppRoutes.specialtyDoctorsById('$specialtyId'),
+      extra: SpecialtyRouteArgs(name: specialtyName),
     );
     if (mounted) _refreshData();
   }
@@ -117,7 +115,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: const Color(0xFFFBFBFB),
-        body: Center(child: CircularProgressIndicator(color: AppColors.primaryGreen)),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primaryGreen),
+        ),
       );
     }
 
@@ -166,7 +166,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     "Hi ${_profileNotifier.fullName}!",
-                    style: AppTextStyles.body.copyWith(color: Colors.white70, fontSize: 16),
+                    style: AppTextStyles.body.copyWith(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
@@ -187,7 +190,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 25),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 0), // Removed padding from container
+            padding: const EdgeInsets.symmetric(
+              horizontal: 0,
+            ), // Removed padding from container
             child: CustomSearchBar(
               controller: _searchController,
               readOnly: true,
@@ -241,7 +246,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     SizedBox(height: 8),
                     Text(
                       "Yorem ipsum dolor sit amet, consectetur adipiscing elit.",
-                      style: AppTextStyles.bodySmall.copyWith(color: Colors.white70),
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: Colors.white70,
+                      ),
                     ),
                   ],
                 ),
@@ -318,7 +325,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 8),
                       Text(
                         item['name'] ?? '',
-                        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w500),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
@@ -417,21 +426,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: AppTextStyles.h3,
-          ),
+          Text(title, style: AppTextStyles.h3),
           InkWell(
             onTap: onTap,
-            child: Text(
-              "See all >",
-              style: AppTextStyles.bodySmall,
-            ),
+            child: Text("See all >", style: AppTextStyles.bodySmall),
           ),
         ],
       ),
     );
   }
-
-
 }

@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/errors/app_failure.dart';
 import 'appointment.dart';
 
 class AppointmentRepository {
@@ -49,8 +50,11 @@ class AppointmentRepository {
       return data
           .map((json) => Appointment.fromJson(json as Map<String, dynamic>))
           .toList();
-    } catch (e) {
-      throw Exception('Failed to fetch appointments: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load appointments right now.',
+      );
     }
   }
 
@@ -61,8 +65,11 @@ class AppointmentRepository {
           .from('appointments')
           .update({'status': 'cancelled'})
           .eq('id', appointmentId);
-    } catch (e) {
-      throw Exception('Failed to cancel appointment: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to cancel appointment right now.',
+      );
     }
   }
 
@@ -73,8 +80,11 @@ class AppointmentRepository {
           .from('appointments')
           .update({'status': 'completed'})
           .eq('id', appointmentId);
-    } catch (e) {
-      throw Exception('Failed to complete appointment: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to update appointment status right now.',
+      );
     }
   }
 
@@ -105,28 +115,42 @@ class AppointmentRepository {
         final end = record['end_time'].toString().substring(0, 5);
         return "$start - $end";
       }).toList();
-    } catch (e) {
-      throw Exception('Failed to fetch booked slots: $e');
-    }
-  }
-  Future<void> createAppointment(Map<String, dynamic> appointmentData) async {
-    try {
-      await _client.from('appointments').insert(appointmentData);
-    } catch (e) {
-      throw Exception('Failed to create appointment: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load booked slots right now.',
+      );
     }
   }
 
-  Future<void> updateAppointment(int appointmentId, Map<String, dynamic> appointmentData) async {
+  Future<void> createAppointment(Map<String, dynamic> appointmentData) async {
+    try {
+      await _client.from('appointments').insert(appointmentData);
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to create appointment right now.',
+      );
+    }
+  }
+
+  Future<void> updateAppointment(
+    int appointmentId,
+    Map<String, dynamic> appointmentData,
+  ) async {
     try {
       await _client
           .from('appointments')
           .update(appointmentData)
           .eq('id', appointmentId);
-    } catch (e) {
-      throw Exception('Failed to update appointment: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to update appointment right now.',
+      );
     }
   }
+
   RealtimeChannel subscribeToAppointments({
     required String userId,
     required void Function(PostgresChangePayload) onChange,
@@ -145,5 +169,17 @@ class AppointmentRepository {
           callback: onChange,
         )
         .subscribe();
+  }
+
+  /// Removes a realtime channel subscription.
+  Future<void> removeChannel(RealtimeChannel channel) async {
+    try {
+      await _client.removeChannel(channel);
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to refresh realtime updates right now.',
+      );
+    }
   }
 }

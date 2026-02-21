@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/errors/app_failure.dart';
 import 'medical_record.dart';
 
 class Requires2FAException implements Exception {}
@@ -8,7 +9,7 @@ class MedicalRecordRepository {
   final SupabaseClient _client;
 
   MedicalRecordRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   String? get currentUserId => _client.auth.currentUser?.id;
 
@@ -38,36 +39,57 @@ class MedicalRecordRepository {
       return (response as List)
           .map((e) => MedicalRecord.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (e) {
-      throw Exception('Failed to fetch records: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load medical records right now.',
+      );
     }
   }
 
   /// Generates a signed URL for a given file path.
   Future<String> getSignedUrl(String path) async {
-    return await _client.storage.from('medical_docs').createSignedUrl(path, 60 * 60); // 1 hour expiry
+    try {
+      return await _client.storage
+          .from('medical_docs')
+          .createSignedUrl(path, 60 * 60);
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to open this file right now.',
+      );
+    }
   }
 
   /// Uploads files to 'medical_docs' storage bucket and returns their storage paths.
   Future<List<String>> uploadFiles(List<File> files) async {
     final userId = currentUserId;
-    if (userId == null) throw Exception('User not logged in');
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing current user for medical_docs upload.',
+        code: 'not_authenticated',
+      );
+    }
 
     List<String> uploadedUrls = [];
 
     for (var file in files) {
       try {
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.uri.pathSegments.last}';
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${file.uri.pathSegments.last}';
         final path = '$userId/$fileName';
 
         await _client.storage.from('medical_docs').upload(path, file);
-        
+
         // Store the path, not public URL (since bucket is private)
         uploadedUrls.add(path);
-      } catch (e) {
-        // Continue uploading other files even if one fails? 
-        // Or throw? Let's throw for now to ensure integrity.
-        throw Exception('Failed to upload file: $e');
+      } catch (error) {
+        throw AppFailure.fromError(
+          error,
+          fallbackUserMessage: 'Unable to upload one or more files.',
+        );
       }
     }
     return uploadedUrls;
@@ -81,7 +103,14 @@ class MedicalRecordRepository {
     required List<String> fileUrls,
   }) async {
     final userId = currentUserId;
-    if (userId == null) throw Exception('User not logged in');
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing current user for addRecord.',
+        code: 'not_authenticated',
+      );
+    }
 
     try {
       await _client.from('medical_records').insert({
@@ -91,8 +120,11 @@ class MedicalRecordRepository {
         'record_date': recordDate.toIso8601String().split('T')[0],
         'file_urls': fileUrls,
       });
-    } catch (e) {
-      throw Exception('Failed to add record: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to save this record right now.',
+      );
     }
   }
 
@@ -106,8 +138,11 @@ class MedicalRecordRepository {
 
       // 2. Delete record from database
       await _client.from('medical_records').delete().eq('id', id);
-    } catch (e) {
-      throw Exception('Failed to delete record: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to delete this record right now.',
+      );
     }
   }
 
@@ -120,17 +155,30 @@ class MedicalRecordRepository {
     required List<String> fileUrls,
   }) async {
     final userId = currentUserId;
-    if (userId == null) throw Exception('User not logged in');
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing current user for updateRecord.',
+        code: 'not_authenticated',
+      );
+    }
 
     try {
-      await _client.from('medical_records').update({
-        'record_for': recordFor,
-        'record_type': recordType,
-        'record_date': recordDate.toIso8601String().split('T')[0],
-        'file_urls': fileUrls,
-      }).eq('id', id);
-    } catch (e) {
-      throw Exception('Failed to update record: $e');
+      await _client
+          .from('medical_records')
+          .update({
+            'record_for': recordFor,
+            'record_type': recordType,
+            'record_date': recordDate.toIso8601String().split('T')[0],
+            'file_urls': fileUrls,
+          })
+          .eq('id', id);
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to update this record right now.',
+      );
     }
   }
 }

@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
+import 'app_dimens.dart';
+import 'app_shapes.dart';
 
 class AppTheme {
   static const scaffoldBackgroundColor = Colors.white;
@@ -27,10 +29,8 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryGreen,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: AppShapes.lg),
+          elevation: AppDimens.elevationNone,
           textStyle: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             fontSize: 16,
@@ -42,29 +42,30 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        hintStyle: GoogleFonts.poppins(
-            color: AppColors.hintText, fontSize: 14),
+        hintStyle: GoogleFonts.poppins(color: AppColors.hintText, fontSize: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppShapes.md,
           borderSide: const BorderSide(color: AppColors.borderColor),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppShapes.md,
           borderSide: const BorderSide(color: AppColors.borderColor),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppShapes.md,
           borderSide: const BorderSide(color: AppColors.primaryGreen),
         ),
       ),
     );
   }
+
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF121212), // Standard dark background
-
+      scaffoldBackgroundColor: const Color(
+        0xFF121212,
+      ), // Standard dark background
       // Color Scheme
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primaryGreen,
@@ -80,10 +81,8 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryGreen,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: AppShapes.lg),
+          elevation: AppDimens.elevationNone,
           textStyle: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             fontSize: 16,
@@ -95,18 +94,17 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFF1E1E1E), // Darker surface
-        hintStyle: GoogleFonts.poppins(
-            color: Colors.grey, fontSize: 14),
+        hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppShapes.md,
           borderSide: const BorderSide(color: Colors.grey),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppShapes.md,
           borderSide: const BorderSide(color: Colors.grey),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppShapes.md,
           borderSide: const BorderSide(color: AppColors.primaryGreen),
         ),
       ),

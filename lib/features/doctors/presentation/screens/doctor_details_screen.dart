@@ -1,11 +1,10 @@
 import 'dart:async';
-
-import 'dart:convert';
-
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../../core/constants/app_routes.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -13,10 +12,10 @@ import '../favorites_notifier.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../../doctors/data/doctor_repository.dart';
+import '../../../doctors/data/route_repository.dart';
 import '../../../appointments/data/appointment_repository.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
@@ -29,6 +28,7 @@ import '../widgets/doctor_details_header.dart';
 import '../widgets/doctor_stats_row.dart';
 import '../widgets/doctor_appointment_card.dart';
 import '../widgets/doctor_timing_list.dart';
+import '../../../appointments/presentation/models/booking_route_args.dart';
 
 class DoctorDetailsScreen extends StatefulWidget {
   final String doctorId;
@@ -52,6 +52,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
   // --- DATA STATE ---
 
   final _doctorRepo = DoctorRepository();
+  final _routeRepo = RouteRepository();
   final _appointmentRepo = AppointmentRepository();
   final _favNotifier = FavoritesNotifier.instance;
 
@@ -535,37 +536,26 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
   Future<void> _fetchRoute({required LatLng start, required LatLng end}) async {
     try {
-      final url = Uri.parse(
-        'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson',
-      );
+      final points = await _routeRepo.fetchDrivingRoute(start: start, end: end);
 
-      final response = await http.get(url);
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        final coordinates =
-            data['routes'][0]['geometry']['coordinates'] as List;
-
-        final List<LatLng> points =
-            coordinates.map((coord) {
-              return LatLng(coord[1].toDouble(), coord[0].toDouble());
-            }).toList();
-
-        if (mounted) {
-          setState(() {
-            _routePoints = points;
-
-            _userLocation = start;
-
-            _isRouteLoading = false;
-          });
-
-          _fitMapBounds();
-        }
+      if (mounted) {
+        setState(() {
+          _routePoints = points;
+          _userLocation = start;
+          _isRouteLoading = false;
+        });
+        _fitMapBounds();
       }
-    } catch (e) {
-      debugPrint("Route error: $e");
+    } catch (error) {
+      debugPrint("Route error: $error");
+      if (mounted) {
+        final message =
+            error is AppFailure
+                ? error.userMessage
+                : "Secure route lookup failed. Please try external maps.";
+        CustomSnackbar.showError(context, message);
+        setState(() => _isRouteLoading = false);
+      }
     }
   }
 
@@ -591,13 +581,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     // IMPORTANT: We pass the selected clinic, doctor, and date to the next screen.
     // The next screen will use this clinic ID to show relevant slots.
     context.push(
-      '/appointment_booking',
-      extra: {
-        'doctor': _doctor,
-        'clinic': _selectedClinic, // <--- This saves the user's choice
-        'initialDate': _selectedDate,
-        'timeSlot': _selectedTimeSlot, // <--- Pass the selected time slot
-      },
+      AppRoutes.appointmentBooking,
+      extra: AppointmentBookingArgs(
+        doctor: Map<String, dynamic>.from(_doctor ?? const {}),
+        clinic: Map<String, dynamic>.from(_selectedClinic ?? const {}),
+        initialDate: _selectedDate,
+        timeSlot: _selectedTimeSlot,
+      ),
     );
   }
 
@@ -875,7 +865,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                     const SizedBox(height: 14),
 
                     DoctorStatsRow(
-                      patients: _doctor!['patients_served']?.toString() ?? '100',
+                      patients:
+                          _doctor!['patients_served']?.toString() ?? '100',
                       experience:
                           _doctor!['experience_years']?.toString() ?? '5',
                       rating: _doctor!['rating']?.toString() ?? '0.0',

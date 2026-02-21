@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 
 class CustomSnackbar {
   static OverlayEntry? _overlayEntry;
@@ -39,7 +40,7 @@ class CustomSnackbar {
 
     overlayState.insert(_overlayEntry!);
 
-    _timer = Timer(const Duration(seconds: 4), _cleanup);
+    _timer = Timer(AppMotion.snackbarVisible, _cleanup);
   }
 
   static void _cleanup() {
@@ -74,7 +75,7 @@ class _SnackbarOverlayState extends State<_SnackbarOverlay>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;  // opacity requires double
+  late Animation<double> _fadeAnimation; // opacity requires double
   late Animation<Offset> _slideAnimation;
 
   @override
@@ -82,20 +83,22 @@ class _SnackbarOverlayState extends State<_SnackbarOverlay>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: AppMotion.standard,
     );
     _scaleAnimation = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutBack,
+      curve: AppMotion.emphasized,
     );
     _fadeAnimation = CurvedAnimation(
-      parent: _controller, 
-      curve: Curves.easeIn,
+      parent: _controller,
+      curve: AppMotion.standardCurve,
     );
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: AppMotion.standardCurve),
+    );
 
     _controller.forward();
   }

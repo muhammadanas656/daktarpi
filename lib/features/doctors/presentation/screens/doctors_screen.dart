@@ -7,6 +7,7 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../favorites_notifier.dart';
 import '../../data/doctor_repository.dart';
+import '../models/doctors_route_args.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import 'package:geolocator/geolocator.dart';
@@ -92,24 +93,39 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         // --- LOCATION LOGIC ---
         bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (!serviceEnabled) {
-          if (mounted) CustomSnackbar.showError(context, "Location services are disabled.");
+          if (mounted) {
+            CustomSnackbar.showError(
+              context,
+              "Location services are disabled.",
+            );
+          }
           // Fallback to default sort
         } else {
           LocationPermission permission = await Geolocator.checkPermission();
           if (permission == LocationPermission.denied) {
             permission = await Geolocator.requestPermission();
             if (permission == LocationPermission.denied) {
-              if (mounted) CustomSnackbar.showError(context, "Location permission denied");
+              if (mounted) {
+                CustomSnackbar.showError(context, "Location permission denied");
+              }
             }
           }
-          
+
           if (permission == LocationPermission.deniedForever) {
-            if (mounted) CustomSnackbar.showError(context, "Location permissions are permanently denied");
+            if (mounted) {
+              CustomSnackbar.showError(
+                context,
+                "Location permissions are permanently denied",
+              );
+            }
           }
 
-          if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+          if (permission == LocationPermission.whileInUse ||
+              permission == LocationPermission.always) {
             try {
-              final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
+              final position = await Geolocator.getCurrentPosition(
+                desiredAccuracy: LocationAccuracy.medium,
+              );
               userLat = position.latitude;
               userLng = position.longitude;
             } catch (e) {
@@ -129,7 +145,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
 
       // Fetch hospitals
       final hospitals = await _doctorRepo.fetchHospitals(query: query);
-      
+
       // Fetch clinics
       final clinics = await _doctorRepo.fetchClinicsList(query: query);
 
@@ -143,12 +159,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           _doctors = doctors;
 
           // Client-side filtering for 'Hospital' - REMOVED as we now have dedicated fetch
-          // if (_selectedFilter == 'Hospital') { ... } 
-          
+          // if (_selectedFilter == 'Hospital') { ... }
+
           _doctors = doctors;
           _hospitals = hospitals;
           _clinics = clinics;
-          
+
           _isLoading = false;
         });
       }
@@ -183,17 +199,18 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               _buildSearchBar(),
               _buildFilterChips(),
               Expanded(
-                child: _isLoading
+                child:
+                    _isLoading
                         ? const Center(
                           child: CircularProgressIndicator(
                             color: AppColors.primaryGreen,
                           ),
                         )
                         : _selectedFilter == 'Hospital'
-                            ? _buildHospitalGrid()
-                            : _selectedFilter == 'Clinic'
-                                ? _buildClinicGrid()
-                                : _buildDoctorList(),
+                        ? _buildHospitalGrid()
+                        : _selectedFilter == 'Clinic'
+                        ? _buildClinicGrid()
+                        : _buildDoctorList(),
               ),
             ],
           ),
@@ -233,7 +250,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -267,14 +283,20 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               decoration: BoxDecoration(
                 color: isSelected ? AppColors.primaryGreen : Colors.white,
                 borderRadius: BorderRadius.circular(20), // Premium Radius
-                border: isSelected
-                    ? null
-                    : Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
+                border:
+                    isSelected
+                        ? null
+                        : Border.all(
+                          color: AppColors.borderColor.withValues(alpha: 0.5),
+                        ),
                 boxShadow: [
                   BoxShadow(
-                    color: isSelected
-                        ? AppColors.primaryGreen.withValues(alpha: 0.3)
-                        : const Color(0xFF1C222E).withValues(alpha: 0.05), // Soft Premium Shadow
+                    color:
+                        isSelected
+                            ? AppColors.primaryGreen.withValues(alpha: 0.3)
+                            : const Color(
+                              0xFF1C222E,
+                            ).withValues(alpha: 0.05), // Soft Premium Shadow
                     blurRadius: isSelected ? 12 : 8,
                     offset: const Offset(0, 4),
                   ),
@@ -371,7 +393,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-
   Widget _buildClinicGrid() {
     if (_clinics.isEmpty) {
       return Center(
@@ -406,8 +427,8 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       onTap: () {
         if (id != null) {
           context.push(
-            '${AppRoutes.clinicDoctors}/$id',
-            extra: {'name': name},
+            AppRoutes.clinicDoctorsById('$id'),
+            extra: ClinicRouteArgs(name: name),
           );
         }
       },
@@ -433,16 +454,22 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                image: imageUrl != null
-                    ? DecorationImage(
-                        image: NetworkImage(imageUrl),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
+                image:
+                    imageUrl != null
+                        ? DecorationImage(
+                          image: NetworkImage(imageUrl),
+                          fit: BoxFit.cover,
+                        )
+                        : null,
               ),
-              child: imageUrl == null
-                  ? const Icon(Icons.local_hospital, color: AppColors.primaryGreen, size: 40)
-                  : null,
+              child:
+                  imageUrl == null
+                      ? const Icon(
+                        Icons.local_hospital,
+                        color: AppColors.primaryGreen,
+                        size: 40,
+                      )
+                      : null,
             ),
             const SizedBox(height: 12),
             Padding(

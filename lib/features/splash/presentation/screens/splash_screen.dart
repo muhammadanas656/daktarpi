@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../auth/data/auth_repository.dart';
+import '../../../auth/data/auth_route_resolver.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,6 +13,8 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  final AuthRepository _authRepository = AuthRepository();
+
   @override
   void initState() {
     super.initState();
@@ -21,32 +23,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _redirect() async {
     await Future.delayed(const Duration(seconds: 2));
-    final session = Supabase.instance.client.auth.currentSession;
 
     if (!mounted) return;
 
-    if (session != null) {
-      // --- 2FA CHECK (Enforcement on Restart) ---
-      /* 
-       * 2FA CHECK REMOVED: 
-       * We rely on sensitive features (Medical Records) to enforce AAL2 check individually.
-       * This prevents the "Verify / Lost Phone" screen from appearing on every app launch.
-       */
-
-      if (!mounted) return;
-
-      // Check Profile
-      final userMetadata = Supabase.instance.client.auth.currentUser?.userMetadata;
-      final hasDob = userMetadata?['dob'] != null && userMetadata!['dob'].toString().isNotEmpty;
-
-      if (!hasDob) {
-        context.go(AppRoutes.profileEdit);
-      } else {
-        context.go(AppRoutes.home);
-      }
-    } else {
-      context.go(AppRoutes.login);
-    }
+    final target =
+        AuthRouteResolver(
+          AuthRepositoryRouteProvider(_authRepository),
+        ).resolvePostAuthRoute();
+    context.go(target);
   }
 
   @override
@@ -63,7 +47,7 @@ class _SplashScreenState extends State<SplashScreen> {
             colors: [
               AppColors.scaffoldBackground,
               Colors.white,
-              AppColors.primaryGreen.withValues(alpha: 0.1)
+              AppColors.primaryGreen.withValues(alpha: 0.1),
             ],
           ),
         ),

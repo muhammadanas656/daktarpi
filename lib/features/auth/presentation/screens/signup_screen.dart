@@ -9,6 +9,7 @@ import '../../../../presentation/widgets/social_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../data/auth_repository.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -25,6 +26,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _agreedToTerms = false;
+  final AuthRepository _authRepository = AuthRepository();
 
   Future<void> _signUp() async {
     final name = _nameController.text.trim();
@@ -49,11 +51,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
     if (password.length < 6) {
-      CustomSnackbar.showError(context, "Password must be at least 6 characters");
+      CustomSnackbar.showError(
+        context,
+        "Password must be at least 6 characters",
+      );
       return;
     }
     if (!_agreedToTerms) {
-      CustomSnackbar.showError(context, "Please agree to the Terms & Privacy Policy");
+      CustomSnackbar.showError(
+        context,
+        "Please agree to the Terms & Privacy Policy",
+      );
       return;
     }
 
@@ -61,7 +69,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     try {
       // --- 2. SIGN UP LOGIC ---
-      final AuthResponse res = await Supabase.instance.client.auth.signUp(
+      final AuthResponse res = await _authRepository.signUp(
         email: email,
         password: password,
         data: {'full_name': name}, // Save name to metadata initially
@@ -73,17 +81,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
           context.go(AppRoutes.profileEdit);
         } else {
           // Email confirmation required flow
-          CustomSnackbar.showSuccess(context, "Account created! Please check your email.");
+          CustomSnackbar.showSuccess(
+            context,
+            "Account created! Please check your email.",
+          );
           await Future.delayed(const Duration(seconds: 2));
           if (mounted) context.go(AppRoutes.login);
         }
       }
     } on AuthException catch (e) {
-      if (mounted) CustomSnackbar.showError(context, e.message);
+      if (mounted) {
+        CustomSnackbar.showError(context, e.message);
+      }
     } catch (e) {
-      if (mounted) CustomSnackbar.showError(context, 'Something went wrong. Please try again.');
+      if (mounted) {
+        CustomSnackbar.showError(
+          context,
+          'Something went wrong. Please try again.',
+        );
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -97,8 +117,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-
-
     return Scaffold(
       extendBodyBehindAppBar: true,
       body: Container(
@@ -217,8 +235,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                         fontWeight: FontWeight.bold,
                                         decoration: TextDecoration.underline,
                                       ),
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = () => context.push(AppRoutes.termsOfService),
+                                      recognizer:
+                                          TapGestureRecognizer()
+                                            ..onTap =
+                                                () => context.push(
+                                                  AppRoutes.termsOfService,
+                                                ),
                                     ),
                                     const TextSpan(text: ' & '),
                                     TextSpan(
@@ -228,8 +250,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                         fontWeight: FontWeight.bold,
                                         decoration: TextDecoration.underline,
                                       ),
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = () => context.push(AppRoutes.privacyPolicy),
+                                      recognizer:
+                                          TapGestureRecognizer()
+                                            ..onTap =
+                                                () => context.push(
+                                                  AppRoutes.privacyPolicy,
+                                                ),
                                     ),
                                   ],
                                 ),
@@ -257,19 +283,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             children: [
                               Text(
                                 "Have an account? ",
-                                  style: AppTextStyles.body.copyWith(
-                                    color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                style: AppTextStyles.body.copyWith(
+                                  color: AppColors.primaryGreen,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                               GestureDetector(
                                 onTap: () => context.go(AppRoutes.login),
                                 child: Text(
                                   'Log in',
-                                    style: AppTextStyles.body.copyWith(
-                                      color: AppColors.primaryGreen,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.primaryGreen,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ],

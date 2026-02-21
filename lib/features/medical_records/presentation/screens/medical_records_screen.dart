@@ -10,6 +10,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../features/medical_records/data/medical_record.dart';
 import '../../../../features/medical_records/data/medical_record_repository.dart';
+import '../models/medical_record_route_args.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../widgets/record_card.dart';
@@ -61,32 +62,38 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           await showDialog(
             context: context,
             barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              title: const Row(
-                children: [
-                   Icon(Icons.security, color: AppColors.primaryGreen),
-                   SizedBox(width: 10),
-                   Text("Verification Required"),
-                ],
-              ),
-              content: const Text(
-                "For your security, please verify your identity to access sensitive medical records.",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("Cancel"),
+            builder:
+                (ctx) => AlertDialog(
+                  title: const Row(
+                    children: [
+                      Icon(Icons.security, color: AppColors.primaryGreen),
+                      SizedBox(width: 10),
+                      Text("Verification Required"),
+                    ],
+                  ),
+                  content: const Text(
+                    "For your security, please verify your identity to access sensitive medical records.",
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text("Cancel"),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        context.push(AppRoutes.verify2fa);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryGreen,
+                      ),
+                      child: const Text(
+                        "Verify Now",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    context.push(AppRoutes.verify2fa);
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen),
-                  child: const Text("Verify Now", style: TextStyle(color: Colors.white)),
-                ),
-              ],
-            ),
           );
           return;
         }
@@ -101,20 +108,26 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   Future<void> _deleteRecord(MedicalRecord record) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete Record?"),
-        content: const Text("Are you sure you want to delete this record? This action cannot be undone."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
+      builder:
+          (context) => AlertDialog(
+            title: const Text("Delete Record?"),
+            content: const Text(
+              "Are you sure you want to delete this record? This action cannot be undone.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  "Delete",
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
 
     if (confirm == true) {
@@ -133,7 +146,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   void _editRecord(MedicalRecord record) async {
-    final result = await context.push(AppRoutes.addMedicalRecord, extra: record);
+    final result = await context.push(
+      AppRoutes.addMedicalRecord,
+      extra: MedicalRecordRouteArgs(record: record),
+    );
     if (result == true && mounted) {
       _fetchRecords();
     }
@@ -144,61 +160,76 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
     Future<void> openPath(String path) async {
       try {
-        final isImage = ['jpg','jpeg','png'].contains(path.split('.').last.toLowerCase());
+        final isImage = [
+          'jpg',
+          'jpeg',
+          'png',
+        ].contains(path.split('.').last.toLowerCase());
 
         // 1. Get Signed URL
         final url = await _repository.getSignedUrl(path);
 
         // A. Image -> Show In-App Dialog
         if (isImage) {
-           if (!mounted) return;
-           await showDialog(
+          if (!mounted) return;
+          await showDialog(
             context: context,
-            builder: (_) => Dialog(
-              backgroundColor: Colors.transparent,
-              child: Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  InteractiveViewer(
-                    child: Image.network(
-                      url,
-                      loadingBuilder: (_, child, progress) {
-                        return progress == null ? child : const Center(child: CircularProgressIndicator());
-                      },
-                    ),
+            builder:
+                (_) => Dialog(
+                  backgroundColor: Colors.transparent,
+                  child: Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      InteractiveViewer(
+                        child: Image.network(
+                          url,
+                          loadingBuilder: (_, child, progress) {
+                            return progress == null
+                                ? child
+                                : const Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
+                ),
           );
           return;
         }
 
         // B. Document -> Download & Open Native
         if (mounted) CustomSnackbar.showInfo(context, "Opening file...");
-        
+
         final response = await http.get(Uri.parse(url));
         if (response.statusCode != 200) {
           throw Exception('Failed to download file: ${response.statusCode}');
         }
-        
+
         final dir = await getTemporaryDirectory();
         final fileName = _getCleanFileName(path);
         final file = File('${dir.path}/$fileName');
-        
+
         await file.writeAsBytes(response.bodyBytes);
-        
+
         final result = await OpenFilex.open(file.path);
         if (result.type != ResultType.done) {
-          if (mounted) CustomSnackbar.showError(context, "Could not open file: ${result.message}");
+          if (mounted) {
+            CustomSnackbar.showError(
+              context,
+              "Could not open file: ${result.message}",
+            );
+          }
         }
-        
       } catch (e) {
-        if (mounted) CustomSnackbar.showError(context, "Error opening file: $e");
+        if (mounted) {
+          CustomSnackbar.showError(context, "Error opening file: $e");
+        }
       }
     }
 
@@ -207,35 +238,42 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     } else {
       showModalBottomSheet(
         context: context,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-        builder: (context) => Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Attached Files", style: AppTextStyles.h3),
-              const SizedBox(height: 16),
-              ...record.fileUrls.asMap().entries.map((entry) {
-                final path = entry.value;
-                final isImage = ['jpg','jpeg','png'].contains(path.split('.').last.toLowerCase());
-                
-                return ListTile(
-                  leading: Icon(
-                    isImage ? Icons.image : Icons.description, 
-                    color: AppColors.primaryGreen
-                  ),
-                  title: Text(_getCleanFileName(path)),
-                  trailing: const Icon(Icons.open_in_new, size: 18),
-                  onTap: () {
-                    Navigator.pop(context);
-                    openPath(path);
-                  },
-                );
-              }),
-            ],
-          ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
+        builder:
+            (context) => Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Attached Files", style: AppTextStyles.h3),
+                  const SizedBox(height: 16),
+                  ...record.fileUrls.asMap().entries.map((entry) {
+                    final path = entry.value;
+                    final isImage = [
+                      'jpg',
+                      'jpeg',
+                      'png',
+                    ].contains(path.split('.').last.toLowerCase());
+
+                    return ListTile(
+                      leading: Icon(
+                        isImage ? Icons.image : Icons.description,
+                        color: AppColors.primaryGreen,
+                      ),
+                      title: Text(_getCleanFileName(path)),
+                      trailing: const Icon(Icons.open_in_new, size: 18),
+                      onTap: () {
+                        Navigator.pop(context);
+                        openPath(path);
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ),
       );
     }
   }
@@ -255,42 +293,40 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           color: AppColors.textDark,
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(child: _buildBody()),
-        ],
-      ),
+      body: Column(children: [Expanded(child: _buildBody())]),
       bottomNavigationBar: Container(
-         padding: const EdgeInsets.all(24),
-         decoration: BoxDecoration(
-           color: Colors.white,
-           boxShadow: [
-             BoxShadow(
-               color: Colors.black.withValues(alpha: 0.05),
-               blurRadius: 10,
-               offset: const Offset(0, -5),
-             ),
-           ],
-         ),
-         child: SafeArea(
-           child: PrimaryButton(
-             label: "Add a record",
-             onTap: () async {
-               final result = await context.push(AppRoutes.addMedicalRecord);
-               if (!mounted) return;
-               if (result == true) {
-                 _fetchRecords();
-               }
-             },
-           ),
-         ),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: PrimaryButton(
+            label: "Add a record",
+            onTap: () async {
+              final result = await context.push(AppRoutes.addMedicalRecord);
+              if (!mounted) return;
+              if (result == true) {
+                _fetchRecords();
+              }
+            },
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primaryGreen));
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryGreen),
+      );
     }
 
     if (_errorMessage != null) {
@@ -304,7 +340,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             ElevatedButton(
               onPressed: _fetchRecords,
               child: const Text("Retry"),
-            )
+            ),
           ],
         ),
       );
@@ -329,10 +365,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              "No Records Found",
-              style: AppTextStyles.h3,
-            ),
+            Text("No Records Found", style: AppTextStyles.h3),
             const SizedBox(height: 8),
             const Text(
               "Add a medical record to keep track of your health.",

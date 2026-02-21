@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
+import '../../../core/errors/app_failure.dart';
 import 'doctor.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -7,13 +8,13 @@ class DoctorRepository {
   final SupabaseClient _client;
 
   DoctorRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   // ─── Caching ─────────────────────────────────────────────────
-  
+
   List<Map<String, dynamic>> _cachedSpecialties = [];
   DateTime? _lastSpecialtiesFetch;
-  
+
   List<Map<String, dynamic>> _cachedPopularDoctors = [];
   DateTime? _lastPopularDoctorsFetch;
 
@@ -32,15 +33,19 @@ class DoctorRepository {
   Future<Doctor> fetchDoctorDetails(String doctorId) async {
     try {
       final idParam = int.tryParse(doctorId) ?? doctorId;
-      final response = await _client
-          .from('doctors')
-          .select('*, specialties(name)')
-          .eq('id', idParam)
-          .single();
+      final response =
+          await _client
+              .from('doctors')
+              .select('*, specialties(name)')
+              .eq('id', idParam)
+              .single();
 
       return Doctor.fromJson(response);
-    } catch (e) {
-      throw Exception('Failed to fetch doctor details: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load doctor details right now.',
+      );
     }
   }
 
@@ -90,13 +95,20 @@ class DoctorRepository {
 
         return data;
       }
-    } catch (e) {
-      throw Exception('Failed to fetch doctors: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load doctors right now.',
+      );
     }
   }
 
   /// Helper to find the nearest clinic distance for a doctor
-  double _getMinDistance(Map<String, dynamic> doctor, double userLat, double userLng) {
+  double _getMinDistance(
+    Map<String, dynamic> doctor,
+    double userLat,
+    double userLng,
+  ) {
     final clinicsJunction = doctor['doctor_clinics'] as List<dynamic>? ?? [];
     if (clinicsJunction.isEmpty) return double.maxFinite;
 
@@ -104,14 +116,19 @@ class DoctorRepository {
 
     for (var junction in clinicsJunction) {
       final clinic = junction['clinics'];
-      if (clinic != null && clinic['latitude'] != null && clinic['longitude'] != null) {
+      if (clinic != null &&
+          clinic['latitude'] != null &&
+          clinic['longitude'] != null) {
         final double lat = (clinic['latitude'] as num).toDouble();
         final double lng = (clinic['longitude'] as num).toDouble();
-        
+
         final double distanceInMeters = Geolocator.distanceBetween(
-          userLat, userLng, lat, lng
+          userLat,
+          userLng,
+          lat,
+          lng,
         );
-        
+
         if (distanceInMeters < minParamsDiff) {
           minParamsDiff = distanceInMeters;
         }
@@ -148,11 +165,11 @@ class DoctorRepository {
 
       // Order by rating descending
       var finalQuery = dbQuery.order('rating', ascending: false);
-      
+
       // If caching, fetch ALL popular items to cache them, then limit locally if needed.
       // If strict limit requested without cache concern, we could limit DB query.
       // Strategy: Fetch all popular (usually small set) to cache, then return slice.
-      
+
       final response = await finalQuery;
       final data = List<Map<String, dynamic>>.from(response);
 
@@ -165,8 +182,11 @@ class DoctorRepository {
         return data.take(limit).toList();
       }
       return data;
-    } catch (e) {
-      throw Exception('Failed to fetch popular doctors: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load popular doctors right now.',
+      );
     }
   }
 
@@ -177,7 +197,7 @@ class DoctorRepository {
     int? limit,
     bool forceRefresh = false,
   }) async {
-     if (!forceRefresh &&
+    if (!forceRefresh &&
         query == null &&
         _isCacheValid(_lastFeaturedDoctorsFetch) &&
         _cachedFeaturedDoctors.isNotEmpty) {
@@ -196,7 +216,7 @@ class DoctorRepository {
       }
 
       var finalQuery = dbQuery.order('rating', ascending: false);
-      
+
       final response = await finalQuery;
       final data = List<Map<String, dynamic>>.from(response);
 
@@ -209,8 +229,11 @@ class DoctorRepository {
         return data.take(limit).toList();
       }
       return data;
-    } catch (e) {
-      throw Exception('Failed to fetch featured doctors: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load featured doctors right now.',
+      );
     }
   }
 
@@ -231,8 +254,11 @@ class DoctorRepository {
 
       final response = await dbQuery.order('rating', ascending: false);
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      throw Exception('Failed to fetch specialty doctors: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load specialty doctors right now.',
+      );
     }
   }
 
@@ -256,8 +282,12 @@ class DoctorRepository {
       final response = await dbQuery;
 
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      throw Exception('Failed to fetch doctors for clinic: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage:
+            'Unable to load doctors for this clinic right now.',
+      );
     }
   }
 
@@ -277,13 +307,16 @@ class DoctorRepository {
       // Fetch all (or reasonable max) to cache, then limit return
       final response = await _client.from('specialties').select();
       final data = List<Map<String, dynamic>>.from(response);
-      
+
       _cachedSpecialties = data;
       _lastSpecialtiesFetch = DateTime.now();
 
       return data.take(limit).toList();
-    } catch (e) {
-      throw Exception('Failed to fetch specialties: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load specialties right now.',
+      );
     }
   }
 
@@ -310,8 +343,8 @@ class DoctorRepository {
           'avg_wait_time': e['avg_wait_time'] ?? '20-30 mins',
         };
       }).toList();
-    } catch (e) {
-      debugPrint("Error fetching clinics: $e");
+    } catch (error) {
+      debugPrint("Error fetching clinics: $error");
       return [];
     }
   }
@@ -323,10 +356,13 @@ class DoctorRepository {
           .from('doctor_schedules')
           .select('*')
           .eq('doctor_id', idParam);
-      
+
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      throw Exception('Failed to fetch schedules: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load schedules right now.',
+      );
     }
   }
 
@@ -347,8 +383,8 @@ class DoctorRepository {
 
       final response = await dbQuery;
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      debugPrint("Error fetching facilities (type=$type): $e");
+    } catch (error) {
+      debugPrint("Error fetching facilities (type=$type): $error");
       return [];
     }
   }
@@ -363,7 +399,6 @@ class DoctorRepository {
     return fetchFacilities(type: 'clinic', query: query);
   }
 
-
   /// Fetches schedules filtered by both doctor and clinic.
   Future<List<Map<String, dynamic>>> fetchSchedulesByClinic(
     String doctorId,
@@ -377,8 +412,11 @@ class DoctorRepository {
           .eq('clinic_id', clinicId);
 
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      throw Exception('Failed to fetch clinic schedules: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load clinic schedules right now.',
+      );
     }
   }
 
@@ -386,16 +424,17 @@ class DoctorRepository {
 
   Future<bool> isFavorite(String doctorId, String userId) async {
     try {
-      final response = await _client
-          .from('favorite_doctors')
-          .select()
-          .eq('user_id', userId)
-          .eq('doctor_id', doctorId)
-          .maybeSingle();
+      final response =
+          await _client
+              .from('favorite_doctors')
+              .select()
+              .eq('user_id', userId)
+              .eq('doctor_id', doctorId)
+              .maybeSingle();
 
       return response != null;
     } catch (e) {
-      return false; 
+      return false;
     }
   }
 
@@ -407,29 +446,36 @@ class DoctorRepository {
           .select('doctor_id')
           .eq('user_id', userId);
 
-      return List<Map<String, dynamic>>.from(response)
-          .map((e) => e['doctor_id'] as int)
-          .toSet();
+      return List<Map<String, dynamic>>.from(
+        response,
+      ).map((e) => e['doctor_id'] as int).toSet();
     } catch (e) {
       return {};
     }
   }
 
-  Future<void> toggleFavorite(int doctorId, String userId, bool isFavorite) async {
+  Future<void> toggleFavorite(
+    int doctorId,
+    String userId,
+    bool isFavorite,
+  ) async {
     try {
       if (isFavorite) {
-         await _client.from('favorite_doctors').delete().match({
+        await _client.from('favorite_doctors').delete().match({
           'user_id': userId,
           'doctor_id': doctorId,
         });
       } else {
-         await _client.from('favorite_doctors').insert({
+        await _client.from('favorite_doctors').insert({
           'user_id': userId,
           'doctor_id': doctorId,
         });
       }
-    } catch (e) {
-      throw Exception('Failed to toggle favorite: $e');
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to update favorites right now.',
+      );
     }
   }
 
@@ -446,9 +492,7 @@ class DoctorRepository {
 
       // The response is a list of { "doctors": { ... } }
       // We need to flatten it to a list of doctors.
-      return List<Map<String, dynamic>>.from(
-        response.map((e) => e['doctors']),
-      );
+      return List<Map<String, dynamic>>.from(response.map((e) => e['doctors']));
     } catch (e) {
       debugPrint('Error fetching favorite doctors: $e');
       return [];

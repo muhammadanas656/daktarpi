@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_shapes.dart';
 import '../../core/theme/app_text_styles.dart';
 
 class PrimaryButton extends StatelessWidget {
@@ -17,8 +19,8 @@ class PrimaryButton extends StatelessWidget {
     required this.onTap,
     this.isLoading = false,
     this.backgroundColor = AppColors.primaryGreen,
-    this.height = 56,
-    this.borderRadius = 16,
+    this.height = AppDimens.buttonHeight,
+    this.borderRadius = AppShapes.radiusLg,
     this.fontSize = 16,
   });
 
@@ -33,9 +35,9 @@ class PrimaryButton extends StatelessWidget {
           backgroundColor: backgroundColor,
           foregroundColor: Colors.white,
           shadowColor: backgroundColor.withValues(alpha: 0.4),
-          elevation: 8, // Elevated Premium Look
+          elevation: AppDimens.elevationHigh,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20), // Premium Radius
+            borderRadius: BorderRadius.circular(borderRadius),
           ),
         ),
         child:

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show UserIdentity;
 import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/auth_text_field.dart';
+import '../../../../core/utils/security_formatters.dart';
+import '../../../auth/data/auth_repository.dart';
+import '../../../auth/data/security_gate_service.dart';
 
 class LinkedAccountsScreen extends StatefulWidget {
   const LinkedAccountsScreen({super.key});
@@ -17,6 +20,10 @@ class LinkedAccountsScreen extends StatefulWidget {
 class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   bool _isLoading = false;
   List<UserIdentity> _identities = [];
+  final AuthRepository _authRepository = AuthRepository();
+  late final SecurityGateService _securityGateService = SecurityGateService(
+    authProvider: AuthRepositorySecurityProvider(_authRepository),
+  );
 
   @override
   void initState() {
@@ -25,7 +32,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   }
 
   Future<void> _fetchIdentities() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = _authRepository.currentUser;
     if (user != null) {
       if (mounted) {
         setState(() {
@@ -36,12 +43,12 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   }
 
   Future<bool> _enforceAAL2() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final is2FAEnabled = user?.appMetadata['is_2fa_enabled'] == true;
-    final currentAal = user?.appMetadata['aal'];
-
-    if (!is2FAEnabled || currentAal == 'aal2') {
+    final gateDecision = _securityGateService.evaluateAal2Gate();
+    if (gateDecision.isAllowed) {
       return true;
+    }
+    if (gateDecision.isUnauthenticated) {
+      return false;
     }
 
     bool success = false;
@@ -77,10 +84,8 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
               });
               try {
                 if (isRecoveryMode) {
-                  final rpcSuccess = await Supabase.instance.client.rpc(
-                    'use_recovery_code',
-                    params: {'input_code': code},
-                  );
+                  final rpcSuccess = await _securityGateService
+                      .verifyWithRecoveryCode(code);
                   if (rpcSuccess != true) {
                     throw "Invalid backup code.";
                   }
@@ -91,15 +96,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                     );
                   }
                 } else {
-                  final factors =
-                      await Supabase.instance.client.auth.mfa.listFactors();
-                  final verifiedFactor = factors.totp.firstWhere(
-                    (f) => f.status == FactorStatus.verified,
-                  );
-                  await Supabase.instance.client.auth.mfa.challengeAndVerify(
-                    factorId: verifiedFactor.id,
-                    code: code,
-                  );
+                  await _securityGateService.verifyWithTotp(code);
                 }
 
                 success = true;
@@ -204,6 +201,11 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                             ),
                           ),
                         ),
+                        onChanged: (val) {
+                          if (val.length == 9) {
+                            submitCode(val);
+                          }
+                        },
                         onSubmitted: submitCode,
                       ),
                       crossFadeState:
@@ -260,10 +262,6 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
         );
       },
     );
-
-    if (success) {
-      await Supabase.instance.client.auth.refreshSession();
-    }
     return success;
   }
 
@@ -272,12 +270,11 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       _isLoading = true;
     });
     try {
-      await Supabase.instance.client.auth.linkIdentity(
-        OAuthProvider.google,
+      await _authRepository.linkGoogleIdentity(
         redirectTo: 'io.supabase.daktarpi://login-callback',
       );
 
-      await Supabase.instance.client.auth.refreshSession();
+      await _authRepository.refreshSession();
 
       if (!mounted) {
         return;
@@ -373,14 +370,11 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                             });
 
                             try {
-                              await Supabase.instance.client.auth.updateUser(
-                                UserAttributes(
-                                  password: passwordController.text,
-                                ),
+                              await _authRepository.updatePassword(
+                                passwordController.text,
                               );
 
-                              await Supabase.instance.client.auth
-                                  .refreshSession();
+                              await _authRepository.refreshSession();
 
                               if (!ctx.mounted) {
                                 return;
@@ -493,8 +487,8 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     });
 
     try {
-      await Supabase.instance.client.auth.unlinkIdentity(identity);
-      await Supabase.instance.client.auth.refreshSession();
+      await _authRepository.unlinkIdentity(identity);
+      await _authRepository.refreshSession();
 
       if (!mounted) {
         return;
@@ -566,8 +560,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                 if (isLinked)
                   Text(
                     provider == 'email'
-                        ? (Supabase.instance.client.auth.currentUser?.email ??
-                            'Linked')
+                        ? (_authRepository.currentUser?.email ?? 'Linked')
                         : 'Linked',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textLight,
@@ -663,31 +656,6 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                   ],
                 ),
               ),
-    );
-  }
-}
-
-// --- NEW MAGIC AUTO-FORMATTER CLASS ---
-class BackupCodeFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    String cleanText = newValue.text.toUpperCase().replaceAll(
-      RegExp(r'[^A-Z0-9]'),
-      '',
-    );
-    if (cleanText.length > 8) {
-      cleanText = cleanText.substring(0, 8);
-    }
-    String formattedText = cleanText;
-    if (cleanText.length > 4) {
-      formattedText = '${cleanText.substring(0, 4)}-${cleanText.substring(4)}';
-    }
-    return TextEditingValue(
-      text: formattedText,
-      selection: TextSelection.collapsed(offset: formattedText.length),
     );
   }
 }
