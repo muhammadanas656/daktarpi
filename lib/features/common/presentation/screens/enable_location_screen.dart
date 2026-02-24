@@ -13,7 +13,6 @@ class EnableLocationScreen extends StatefulWidget {
 
 class _EnableLocationScreenState extends State<EnableLocationScreen>
     with WidgetsBindingObserver {
-
   @override
   void initState() {
     super.initState();

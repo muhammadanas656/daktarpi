@@ -9,7 +9,7 @@ class HomeRepository {
   final DoctorRepository _doctorRepo;
 
   HomeRepository({DoctorRepository? doctorRepo})
-      : _doctorRepo = doctorRepo ?? DoctorRepository();
+    : _doctorRepo = doctorRepo ?? DoctorRepository();
 
   /// Fetches the list of specialties for the home screen.
   Future<List<Specialty>> fetchSpecialties({int limit = 10}) async {
@@ -18,12 +18,16 @@ class HomeRepository {
   }
 
   /// Fetches popular doctors (limited for the home carousel).
-  Future<List<Map<String, dynamic>>> fetchPopularDoctors({int limit = 5}) async {
+  Future<List<Map<String, dynamic>>> fetchPopularDoctors({
+    int limit = 5,
+  }) async {
     return _doctorRepo.fetchPopularDoctors(limit: limit);
   }
 
   /// Fetches featured doctors (limited for the home carousel).
-  Future<List<Map<String, dynamic>>> fetchFeaturedDoctors({int limit = 5}) async {
+  Future<List<Map<String, dynamic>>> fetchFeaturedDoctors({
+    int limit = 5,
+  }) async {
     return _doctorRepo.fetchFeaturedDoctors(limit: limit);
   }
 }

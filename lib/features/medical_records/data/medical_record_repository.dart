@@ -3,8 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/errors/app_failure.dart';
 import 'medical_record.dart';
 
-class Requires2FAException implements Exception {}
-
 class MedicalRecordRepository {
   final SupabaseClient _client;
 
@@ -14,28 +12,17 @@ class MedicalRecordRepository {
   String? get currentUserId => _client.auth.currentUser?.id;
 
   /// Fetches medical records for the current user.
-  Future<List<MedicalRecord>> fetchRecords({
-    bool allowAal1Bypass = false,
-  }) async {
+  Future<List<MedicalRecord>> fetchRecords() async {
     final user = _client.auth.currentUser;
     final userId = user?.id;
     if (userId == null) return [];
-
-    // --- 2FA SESSION CHECK ---
-    final is2FAEnabled = user?.appMetadata['is_2fa_enabled'] == true;
-    final aal = user?.appMetadata['aal'];
-
-    // If 2FA is enabled but session is only Level 1 (Password), block access.
-    // This handles the "Session Expired" edge case.
-    if (!allowAal1Bypass && is2FAEnabled && (aal == 'aal1' || aal == null)) {
-      throw Requires2FAException();
-    }
 
     try {
       final response = await _client
           .from('medical_records')
           .select()
           .eq('user_id', userId)
+          .isFilter('deleted_at', null)
           .order('record_date', ascending: false);
 
       return (response as List)
@@ -132,14 +119,28 @@ class MedicalRecordRepository {
 
   /// Deletes a record and its associated files.
   Future<void> deleteRecord(int id, List<String> filePaths) async {
+    final userId = currentUserId;
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing current user for deleteRecord.',
+        code: 'not_authenticated',
+      );
+    }
+
     try {
       // 1. Delete files from storage
       if (filePaths.isNotEmpty) {
         await _client.storage.from('medical_docs').remove(filePaths);
       }
 
-      // 2. Delete record from database
-      await _client.from('medical_records').delete().eq('id', id);
+      // 2. Soft-delete record from database
+      await _client
+          .from('medical_records')
+          .update({'deleted_at': DateTime.now().toIso8601String()})
+          .eq('id', id)
+          .eq('user_id', userId);
     } catch (error) {
       throw AppFailure.fromError(
         error,
@@ -175,7 +176,8 @@ class MedicalRecordRepository {
             'record_date': recordDate.toIso8601String().split('T')[0],
             'file_urls': fileUrls,
           })
-          .eq('id', id);
+          .eq('id', id)
+          .eq('user_id', userId);
     } catch (error) {
       throw AppFailure.fromError(
         error,

@@ -178,14 +178,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.white24,
-                backgroundImage:
-                    _profileNotifier.avatarUrl != null
-                        ? NetworkImage(_profileNotifier.avatarUrl!)
-                        : const NetworkImage('https://i.pravatar.cc/300'),
-              ),
+              _profileNotifier.avatarUrl != null
+                  ? CircleAvatar(
+                    radius: 24,
+                    backgroundImage: NetworkImage(_profileNotifier.avatarUrl!),
+                  )
+                  : const CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.white24,
+                    child: Icon(Icons.person, color: Colors.white, size: 28),
+                  ),
             ],
           ),
           const SizedBox(height: 25),

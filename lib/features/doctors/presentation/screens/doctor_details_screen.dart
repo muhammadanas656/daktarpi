@@ -6,6 +6,7 @@ import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../favorites_notifier.dart';
@@ -21,7 +22,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:uuid/uuid.dart';
 
-import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/utils/navigation_helper.dart';
 
 import 'package:geolocator/geolocator.dart';
 
@@ -40,8 +41,7 @@ class DoctorDetailsScreen extends StatefulWidget {
   State<DoctorDetailsScreen> createState() => _DoctorDetailsScreenState();
 }
 
-class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
-    with TickerProviderStateMixin {
+class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   final Uuid _uuid = const Uuid();
   // --- DESIGN COLORS (aliased from AppColors) ---
 
@@ -86,21 +86,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
   // --- ANIMATION CONTROLLERS ---
 
-  late AnimationController _menuController;
-
-  late Animation<double> _expandAnimation;
-
-  late Animation<double> _rotateAnimation;
-
   bool _isMenuOpen = false;
 
   Timer? _autoCloseTimer;
-
-  late AnimationController _locatorMenuController;
-
-  late Animation<double> _locatorExpandAnimation;
-
-  late Animation<double> _locatorRotateAnimation;
 
   bool _isLocatorMenuOpen = false;
 
@@ -112,9 +100,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
   List<LatLng> _routePoints = [];
 
+  double? _distanceToClinic;
+
   bool _isRouteLoading = false;
 
   bool _isNavigating = false;
+
+  bool _isDistanceBarExpanded = false;
 
   bool _isUserPanning = false;
 
@@ -126,53 +118,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
   void initState() {
     super.initState();
     _favNotifier.addListener(_onFavoritesChanged);
-
     _fetchInitialData();
-
-    // 1. Directions Menu Animation
-
-    _menuController = AnimationController(
-      vsync: this,
-
-      duration: const Duration(milliseconds: 300),
-    );
-
-    _expandAnimation = CurvedAnimation(
-      parent: _menuController,
-
-      curve: Curves.easeOutBack,
-    );
-
-    _rotateAnimation = Tween<double>(begin: 0.0, end: 0.5).animate(
-      CurvedAnimation(parent: _menuController, curve: Curves.easeInOut),
-    );
-
-    // 2. Locator Menu Animation
-
-    _locatorMenuController = AnimationController(
-      vsync: this,
-
-      duration: const Duration(milliseconds: 300),
-    );
-
-    _locatorExpandAnimation = CurvedAnimation(
-      parent: _locatorMenuController,
-
-      curve: Curves.easeOutBack,
-    );
-
-    _locatorRotateAnimation = Tween<double>(begin: 0.0, end: 0.5).animate(
-      CurvedAnimation(parent: _locatorMenuController, curve: Curves.easeInOut),
-    );
   }
 
   @override
   void dispose() {
     _favNotifier.removeListener(_onFavoritesChanged);
-    _menuController.dispose();
-
-    _locatorMenuController.dispose();
-
     _scrollController.dispose();
 
     _autoCloseTimer?.cancel();
@@ -199,7 +150,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     if (context == null) return;
     Scrollable.ensureVisible(
       context,
-      duration: const Duration(milliseconds: 320),
+      duration: AppMotion.defaultDuration,
       curve: Curves.easeInOut,
       alignment: 0.05,
     );
@@ -219,22 +170,14 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
   void _openMenu() {
     setState(() => _isMenuOpen = true);
-
-    _menuController.forward();
-
     _autoCloseTimer?.cancel();
-
     _autoCloseTimer = Timer(const Duration(seconds: 5), _closeMenu);
   }
 
   void _closeMenu() {
     if (!mounted) return;
-
     _autoCloseTimer?.cancel();
-
-    _menuController.reverse().then((_) {
-      if (mounted) setState(() => _isMenuOpen = false);
-    });
+    setState(() => _isMenuOpen = false);
   }
 
   void _toggleLocatorMenu() {
@@ -249,26 +192,17 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
   void _openLocatorMenu() {
     setState(() => _isLocatorMenuOpen = true);
-
-    _locatorMenuController.forward();
-
     _locatorAutoCloseTimer?.cancel();
-
     _locatorAutoCloseTimer = Timer(
       const Duration(seconds: 5),
-
       _closeLocatorMenu,
     );
   }
 
   void _closeLocatorMenu() {
     if (!mounted) return;
-
     _locatorAutoCloseTimer?.cancel();
-
-    _locatorMenuController.reverse().then((_) {
-      if (mounted) setState(() => _isLocatorMenuOpen = false);
-    });
+    setState(() => _isLocatorMenuOpen = false);
   }
 
   // --- DATA FETCHING ---
@@ -421,9 +355,39 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
     if (_userLocation != null) {
       setState(() => _isUserPanning = false);
-
-      _mapController.move(_userLocation!, 17.0);
+      _mapController.move(_userLocation!, 16.0);
     }
+  }
+
+  void _updateDistance() {
+    if (_userLocation == null || _selectedClinic == null) return;
+
+    final clinicLat = _selectedClinic!['latitude'] as double?;
+    final clinicLng = _selectedClinic!['longitude'] as double?;
+    if (clinicLat == null || clinicLng == null) return;
+
+    double distance = 0.0;
+    if (_routePoints.isNotEmpty) {
+      for (int i = 0; i < _routePoints.length - 1; i++) {
+        distance += Geolocator.distanceBetween(
+          _routePoints[i].latitude,
+          _routePoints[i].longitude,
+          _routePoints[i + 1].latitude,
+          _routePoints[i + 1].longitude,
+        );
+      }
+    } else {
+      distance = Geolocator.distanceBetween(
+        _userLocation!.latitude,
+        _userLocation!.longitude,
+        clinicLat,
+        clinicLng,
+      );
+    }
+
+    setState(() {
+      _distanceToClinic = distance;
+    });
   }
 
   void _centerOnClinic() {
@@ -446,38 +410,26 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
     if (_selectedClinic == null) return;
 
     final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
-
     final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
+    final title = _selectedClinic!['name'] as String? ?? 'Clinic';
 
-    final Uri googleMapsUrl = Uri.parse("google.navigation:q=$lat,$lng&mode=d");
-
-    final Uri appleMapsUrl = Uri.parse(
-      "https://maps.apple.com/?daddr=$lat,$lng",
+    await NavigationHelper.showMapOptions(
+      context: context,
+      latitude: lat,
+      longitude: lng,
+      title: title,
     );
-
-    try {
-      if (await canLaunchUrl(googleMapsUrl)) {
-        await launchUrl(googleMapsUrl);
-      } else if (await canLaunchUrl(appleMapsUrl)) {
-        await launchUrl(appleMapsUrl);
-      } else {
-        final Uri webUrl = Uri.parse(
-          "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng",
-        );
-
-        await launchUrl(webUrl, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      if (mounted) {
-        CustomSnackbar.showError(context, "Could not launch maps");
-      }
-    }
   }
 
   Future<void> _launchInAppDirection() async {
     _closeMenu();
 
     if (_selectedClinic == null) return;
+
+    if (_isNavigating) {
+      _cancelNavigation();
+      return;
+    }
 
     final isReady = await _ensureLocationReady();
 
@@ -520,6 +472,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
         final newLoc = LatLng(position.latitude, position.longitude);
 
         setState(() => _userLocation = newLoc);
+        _updateDistance();
 
         if (!_isUserPanning) _mapController.move(newLoc, 17.0);
       });
@@ -546,25 +499,52 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
           _userLocation = start;
           _isRouteLoading = false;
         });
+        _updateDistance();
         _fitMapBounds();
       }
     } catch (error) {
       debugPrint("Route error: $error");
       if (mounted) {
-        final message =
-            error is AppFailure
-                ? error.userMessage
-                : "Secure route lookup failed. Please try external maps.";
-        CustomSnackbar.showError(context, message);
         setState(() => _isRouteLoading = false);
+        _updateDistance();
+        _fitMapBounds();
       }
     }
   }
 
-  void _fitMapBounds() {
-    if (_routePoints.isEmpty) return;
+  void _cancelNavigation() {
+    _positionStream?.cancel();
+    _positionStream = null;
+    setState(() {
+      _isNavigating = false;
+      _routePoints.clear();
+      _isUserPanning = false;
+      _isDistanceBarExpanded = false;
+      _distanceToClinic = null;
+    });
 
-    final bounds = LatLngBounds.fromPoints(_routePoints);
+    // Reset view to Clinic
+    if (_selectedClinic != null) {
+      final clinicLat = _selectedClinic!['latitude'] as double? ?? 0.0;
+      final clinicLng = _selectedClinic!['longitude'] as double? ?? 0.0;
+      _mapController.move(LatLng(clinicLat, clinicLng), 15.0);
+    }
+  }
+
+  void _fitMapBounds() {
+    if (_userLocation == null || _selectedClinic == null) return;
+
+    final clinicLat = _selectedClinic!['latitude'] as double?;
+    final clinicLng = _selectedClinic!['longitude'] as double?;
+    if (clinicLat == null || clinicLng == null) return;
+
+    final bounds =
+        _routePoints.isNotEmpty
+            ? LatLngBounds.fromPoints(_routePoints)
+            : LatLngBounds.fromPoints([
+              _userLocation!,
+              LatLng(clinicLat, clinicLng),
+            ]);
 
     _mapController.fitCamera(
       CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
@@ -1161,9 +1141,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
     return Stack(
       children: [
-        Container(
-          height: 150,
-
+        AnimatedContainer(
+          duration: AppMotion.defaultDuration,
+          curve: Curves.easeInOut,
+          height: _isNavigating ? 350 : 150,
           width: double.infinity,
 
           decoration: BoxDecoration(
@@ -1317,6 +1298,121 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
             ),
           ),
 
+        if (_distanceToClinic != null)
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    if (_isNavigating) {
+                      setState(
+                        () => _isDistanceBarExpanded = !_isDistanceBarExpanded,
+                      );
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: AppMotion.defaultDuration,
+                    curve: Curves.easeInOut,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: _isDistanceBarExpanded ? 20 : 16,
+                      vertical: _isDistanceBarExpanded ? 16 : 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(
+                        _isDistanceBarExpanded ? 16 : 20,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.route,
+                              color:
+                                  _isNavigating
+                                      ? AppColors.primaryGreen
+                                      : Colors.blueGrey,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _distanceToClinic! > 1000
+                                  ? "${(_distanceToClinic! / 1000).toStringAsFixed(1)} km away"
+                                  : "${_distanceToClinic!.toStringAsFixed(0)} m away",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textDark,
+                                fontSize: 12,
+                              ),
+                            ),
+                            if (_isNavigating) ...[
+                              const SizedBox(width: 8),
+                              Icon(
+                                _isDistanceBarExpanded
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                color: Colors.grey,
+                                size: 16,
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (_isDistanceBarExpanded && _isNavigating) ...[
+                          const SizedBox(height: 12),
+                          const Divider(height: 1, color: Colors.black12),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                "Active Navigation",
+                                style: TextStyle(
+                                  color: AppColors.primaryGreen,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              InkWell(
+                                onTap: _cancelNavigation,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.red,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
         // --- FLOATING ACTION BUTTONS ---
         Positioned(
           bottom: 12,
@@ -1333,72 +1429,83 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
                 mainAxisSize: MainAxisSize.min,
 
                 children: [
-                  SizeTransition(
-                    sizeFactor: _locatorExpandAnimation,
-
-                    axis: Axis.horizontal,
-
-                    axisAlignment: 1.0,
-
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-
-                      child: FloatingActionButton.small(
-                        heroTag: "btn_center_clinic",
-
-                        backgroundColor: Colors.white,
-
-                        onPressed: _centerOnClinic,
-
-                        child: const Icon(
-                          Icons.medical_services_outlined,
-
-                          color: Colors.redAccent,
-                        ),
-                      ),
-                    ),
+                  AnimatedSize(
+                    duration: AppMotion.defaultDuration,
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.centerRight,
+                    child:
+                        _isLocatorMenuOpen
+                            ? Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FloatingActionButton.small(
+                                heroTag: "btn_center_clinic",
+                                backgroundColor: Colors.white,
+                                onPressed: _centerOnClinic,
+                                child: const Icon(
+                                  Icons.medical_services_outlined,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            )
+                            : const SizedBox.shrink(),
                   ),
 
-                  if (_isNavigating)
-                    SizeTransition(
-                      sizeFactor: _locatorExpandAnimation,
-
-                      axis: Axis.horizontal,
-
-                      axisAlignment: 1.0,
-
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-
-                        child: FloatingActionButton.small(
-                          heroTag: "btn_center_user",
-
-                          backgroundColor: Colors.white,
-
-                          onPressed: _centerOnUser,
-
-                          child: const Icon(
-                            Icons.accessibility_new_rounded,
-
-                            color: Colors.blueAccent,
-                          ),
-                        ),
-                      ),
+                  if (_isNavigating) ...[
+                    AnimatedSize(
+                      duration: AppMotion.defaultDuration,
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.centerRight,
+                      child:
+                          _isLocatorMenuOpen
+                              ? Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: FloatingActionButton.small(
+                                  heroTag: "btn_route_overview",
+                                  backgroundColor: Colors.white,
+                                  onPressed: () {
+                                    setState(() => _isUserPanning = false);
+                                    _fitMapBounds();
+                                  },
+                                  child: const Icon(
+                                    Icons.map_outlined,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              )
+                              : const SizedBox.shrink(),
                     ),
+                    AnimatedSize(
+                      duration: AppMotion.defaultDuration,
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.centerRight,
+                      child:
+                          _isLocatorMenuOpen
+                              ? Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: FloatingActionButton.small(
+                                  heroTag: "btn_center_user",
+                                  backgroundColor: Colors.white,
+                                  onPressed: _centerOnUser,
+                                  child: const Icon(
+                                    Icons.accessibility_new_rounded,
+                                    color: Colors.blueAccent,
+                                  ),
+                                ),
+                              )
+                              : const SizedBox.shrink(),
+                    ),
+                  ],
 
                   FloatingActionButton.small(
                     heroTag: "btn_locator_toggle",
-
                     backgroundColor: Colors.white,
-
                     onPressed: _toggleLocatorMenu,
-
-                    child: RotationTransition(
-                      turns: _locatorRotateAnimation,
-
+                    child: AnimatedRotation(
+                      turns: _isLocatorMenuOpen ? 0.5 : 0.0,
+                      duration: AppMotion.defaultDuration,
+                      curve: Curves.easeInOut,
                       child: Icon(
                         _isLocatorMenuOpen ? Icons.close : Icons.gps_fixed,
-
                         color: primaryGreen,
                       ),
                     ),
@@ -1410,69 +1517,59 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen>
 
               Row(
                 mainAxisSize: MainAxisSize.min,
-
                 children: [
-                  SizeTransition(
-                    sizeFactor: _expandAnimation,
-
-                    axis: Axis.horizontal,
-
-                    axisAlignment: 1.0,
-
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-
-                      child: FloatingActionButton.small(
-                        heroTag: "btn_external_map",
-
-                        backgroundColor: Colors.white,
-
-                        onPressed: _launchExternalMaps,
-
-                        child: const Icon(Icons.public, color: Colors.blue),
-                      ),
-                    ),
+                  AnimatedSize(
+                    duration: AppMotion.defaultDuration,
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.centerRight,
+                    child:
+                        _isMenuOpen
+                            ? Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FloatingActionButton.small(
+                                heroTag: "btn_external_map",
+                                backgroundColor: Colors.white,
+                                onPressed: _launchExternalMaps,
+                                child: const Icon(
+                                  Icons.public,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            )
+                            : const SizedBox.shrink(),
                   ),
 
-                  SizeTransition(
-                    sizeFactor: _expandAnimation,
-
-                    axis: Axis.horizontal,
-
-                    axisAlignment: 1.0,
-
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-
-                      child: FloatingActionButton.small(
-                        heroTag: "btn_inapp_map",
-
-                        backgroundColor: Colors.white,
-
-                        onPressed: _launchInAppDirection,
-
-                        child: const Icon(
-                          Icons.turn_sharp_right,
-
-                          color: primaryGreen,
-                        ),
-                      ),
-                    ),
+                  AnimatedSize(
+                    duration: AppMotion.defaultDuration,
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.centerRight,
+                    child:
+                        _isMenuOpen
+                            ? Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FloatingActionButton.small(
+                                heroTag: "btn_inapp_map",
+                                backgroundColor: Colors.white,
+                                onPressed: _launchInAppDirection,
+                                child: const Icon(
+                                  Icons.turn_sharp_right,
+                                  color: primaryGreen,
+                                ),
+                              ),
+                            )
+                            : const SizedBox.shrink(),
                   ),
 
                   FloatingActionButton.small(
                     heroTag: "btn_main_toggle",
-
                     backgroundColor: primaryGreen,
-
                     onPressed: _toggleDirectionMenu,
-
-                    child: RotationTransition(
-                      turns: _rotateAnimation,
-
+                    child: AnimatedRotation(
+                      turns: _isMenuOpen ? 0.5 : 0.0,
+                      duration: AppMotion.defaultDuration,
+                      curve: Curves.easeInOut,
                       child: Icon(
                         _isMenuOpen ? Icons.close : Icons.directions,
-
                         color: Colors.white,
                       ),
                     ),

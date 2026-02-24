@@ -34,7 +34,7 @@ class AppTextStyles {
     fontWeight: FontWeight.normal,
     color: AppColors.textGrey,
   );
-  
+
   static TextStyle get bodyBold => GoogleFonts.poppins(
     fontSize: 14,
     fontWeight: FontWeight.w600,

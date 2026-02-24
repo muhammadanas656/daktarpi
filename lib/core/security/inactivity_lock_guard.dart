@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/data/auth_repository.dart';
 import '../constants/app_routes.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_colors.dart';
 import 'biometric_auth_service.dart';
 
@@ -46,6 +47,15 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   }
 
   @override
+  void didUpdateWidget(covariant InactivityLockGuard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.timeout != widget.timeout ||
+        oldWidget.absoluteTimeout != widget.absoluteTimeout) {
+      _resetTimer();
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _inactivityTimer?.cancel();
@@ -61,6 +71,8 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     }
 
     if (state == AppLifecycleState.resumed) {
+      _loadBiometricAvailability();
+
       if (_isAbsoluteTimeoutExceeded()) {
         unawaited(_signOutFromLockScreen());
         return;
@@ -72,14 +84,12 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
       if (pausedAt != null) {
         final elapsed = DateTime.now().difference(pausedAt);
         if (elapsed >= widget.timeout) {
-          _lockAndScheduleUnlock(delayBeforePrompt: true);
+          _lockAndScheduleUnlock();
           return;
         }
       }
 
-      if (_isLocked) {
-        _unlock(delayBeforePrompt: true);
-      } else {
+      if (!_isLocked) {
         _resetTimer();
       }
     }
@@ -122,7 +132,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     _lockAndScheduleUnlock();
   }
 
-  void _lockAndScheduleUnlock({bool delayBeforePrompt = false}) {
+  void _lockAndScheduleUnlock() {
     if (!mounted) {
       return;
     }
@@ -130,10 +140,10 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     if (!_isLocked) {
       setState(() => _isLocked = true);
     }
-    unawaited(_unlock(delayBeforePrompt: delayBeforePrompt));
+    // Removed automatic unlock to ensure user initiates the biometric prompt manually.
   }
 
-  Future<void> _unlock({bool delayBeforePrompt = false}) async {
+  Future<void> _unlock() async {
     if (_isUnlocking || !_isLocked) {
       return;
     }
@@ -146,9 +156,6 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     setState(() => _isUnlocking = true);
     bool isAuthenticated = false;
     try {
-      if (delayBeforePrompt) {
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
       if (_biometricAvailable) {
         isAuthenticated = await _biometricAuthService.authenticate();
       }
@@ -322,7 +329,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
                 ignoring: !_isLocked,
                 child: AnimatedOpacity(
                   opacity: _isLocked ? 1 : 0,
-                  duration: const Duration(milliseconds: 180),
+                  duration: AppMotion.defaultDuration,
                   curve: Curves.easeOut,
                   child: _buildLockOverlay(),
                 ),

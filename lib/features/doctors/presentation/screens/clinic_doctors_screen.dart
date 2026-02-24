@@ -68,9 +68,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
   }
 
   void _navigateToDoctorDetails(int doctorId) {
-    context.push(
-      '${AppRoutes.doctorDetails}/$doctorId',
-    );
+    context.push('${AppRoutes.doctorDetails}/$doctorId');
   }
 
   @override
@@ -83,7 +81,11 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: AppColors.textDark, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios,
+            color: AppColors.textDark,
+            size: 20,
+          ),
           onPressed: () => context.pop(),
         ),
       ),
@@ -111,7 +113,9 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             child: Text(
               widget.clinicName,
-              style: AppTextStyles.h2.copyWith(fontSize: 20), // Slightly larger/bold
+              style: AppTextStyles.h2.copyWith(
+                fontSize: 20,
+              ), // Slightly larger/bold
             ),
           ),
 
@@ -122,20 +126,26 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: AppColors.primaryGreen),
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryGreen,
+                    ),
                   );
                 } else if (snapshot.hasError) {
                   return Center(
                     child: Text(
                       'Error: ${snapshot.error}',
-                      style: AppTextStyles.body.copyWith(color: AppColors.dangerRed),
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.dangerRed,
+                      ),
                     ),
                   );
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Center(
                     child: Text(
                       'No doctors found.',
-                      style: AppTextStyles.body.copyWith(color: AppColors.textGrey),
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textGrey,
+                      ),
                     ),
                   );
                 }
@@ -143,15 +153,19 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
                 final doctors = snapshot.data!;
 
                 return ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
                   itemCount: doctors.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 16),
                   itemBuilder: (context, index) {
                     final doctor = doctors[index];
                     final docId = doctor['id'] as int;
-                    final specialtyName = doctor['specialties'] != null
-                        ? doctor['specialties']['name']
-                        : 'Specialist';
+                    final specialtyName =
+                        doctor['specialties'] != null
+                            ? doctor['specialties']['name']
+                            : 'Specialist';
                     final isFavorite = _favNotifier.isFavorite(docId);
 
                     return DoctorListCard(

@@ -5,6 +5,7 @@ abstract final class AppMotion {
   static const Duration fast = Duration(milliseconds: 200);
   static const Duration standard = Duration(milliseconds: 300);
   static const Duration slow = Duration(milliseconds: 400);
+  static const Duration defaultDuration = standard;
 
   static const Duration snackbarVisible = Duration(seconds: 4);
 

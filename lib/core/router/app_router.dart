@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_refresh_stream.dart';
 import '../constants/app_routes.dart';
 
 import '../../features/splash/presentation/screens/splash_screen.dart';
@@ -58,6 +60,26 @@ final _shellNavigatorProfileKey = GlobalKey<NavigatorState>(
 final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/',
+  refreshListenable: GoRouterRefreshStream(
+    Supabase.instance.client.auth.onAuthStateChange,
+  ),
+  redirect: (context, state) {
+    final loc = state.matchedLocation;
+    final isGoingToAuthScreen =
+        loc == AppRoutes.login ||
+        loc == AppRoutes.signup ||
+        loc == AppRoutes.splash ||
+        loc == AppRoutes.verify2fa;
+
+    final isSignedIn = Supabase.instance.client.auth.currentSession != null;
+
+    if (!isSignedIn && !isGoingToAuthScreen) {
+      final target = state.uri.toString();
+      return '${AppRoutes.login}?from=${Uri.encodeComponent(target)}';
+    }
+
+    return null;
+  },
   routes: [
     GoRoute(
       path: AppRoutes.splash,
@@ -65,7 +87,9 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.login,
-      builder: (context, state) => const LoginScreen(),
+      builder:
+          (context, state) =>
+              LoginScreen(intendedRoute: state.uri.queryParameters['from']),
     ),
     GoRoute(
       path: AppRoutes.signup,

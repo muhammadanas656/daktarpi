@@ -6,7 +6,14 @@ const defaultHeaders = {
 };
 
 type RoutePoint = { lat: number; lng: number };
-type UpstreamRequest = { url: string; headers?: Record<string, string> };
+type RouteProvider = "osrm" | "mapbox" | "google";
+type UpstreamRequest = {
+  provider: RouteProvider;
+  method: "GET" | "POST";
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+};
 type RateLimitState = {
   count: number;
   resetAt: number;
@@ -155,8 +162,139 @@ function enforceRateLimit(req: Request): Response | null {
   return null;
 }
 
+function decodePolyline(encoded: string): RoutePoint[] {
+  const points: RoutePoint[] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    const deltaLat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    const deltaLng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += deltaLng;
+
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+
+  return points;
+}
+
+function normalizeGoogleRoutes(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return { routes: [] };
+  }
+
+  const data = payload as Record<string, unknown>;
+  const routes = Array.isArray(data.routes) ? data.routes : [];
+
+  const normalized = routes
+    .map((raw) => {
+      if (!raw || typeof raw !== "object") {
+        return null;
+      }
+
+      const route = raw as Record<string, unknown>;
+      const polylineNode = route.polyline as Record<string, unknown> | undefined;
+      const encoded = polylineNode?.encodedPolyline;
+      if (typeof encoded !== "string" || encoded.length === 0) {
+        return null;
+      }
+
+      const points = decodePolyline(encoded);
+      if (points.length === 0) {
+        return null;
+      }
+
+      return {
+        geometry: {
+          type: "LineString",
+          coordinates: points.map((p) => [p.lng, p.lat]),
+        },
+        distance_meters:
+          typeof route.distanceMeters === "number"
+            ? route.distanceMeters
+            : null,
+        duration: route.duration ?? null,
+      };
+    })
+    .filter((route) => route !== null);
+
+  return { routes: normalized };
+}
+
 function resolveUpstreamRequest(start: RoutePoint, end: RoutePoint): UpstreamRequest {
-  const provider = (Deno.env.get("ROUTE_PROVIDER") ?? "osrm").toLowerCase();
+  const provider = (Deno.env.get("ROUTE_PROVIDER") ?? "osrm")
+    .toLowerCase() as RouteProvider;
+
+  if (provider === "google") {
+    const apiKey =
+      Deno.env.get("GOOGLE_MAPS_API_KEY") ??
+      Deno.env.get("GOOGLE_ROUTES_API_KEY");
+    if (!apiKey) {
+      throw new Error(
+        "GOOGLE_MAPS_API_KEY (or GOOGLE_ROUTES_API_KEY) is required when ROUTE_PROVIDER=google",
+      );
+    }
+
+    const url =
+      Deno.env.get("GOOGLE_ROUTES_BASE_URL") ??
+      "https://routes.googleapis.com/directions/v2:computeRoutes";
+
+    const body = {
+      origin: {
+        location: {
+          latLng: {
+            latitude: start.lat,
+            longitude: start.lng,
+          },
+        },
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: end.lat,
+            longitude: end.lng,
+          },
+        },
+      },
+      travelMode: "DRIVE",
+      routingPreference: "TRAFFIC_UNAWARE",
+      computeAlternativeRoutes: false,
+      units: "METRIC",
+      polylineEncoding: "ENCODED_POLYLINE",
+    };
+
+    return {
+      provider: "google",
+      method: "POST",
+      url,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask":
+          "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
+      },
+      body: JSON.stringify(body),
+    };
+  }
 
   if (provider === "mapbox") {
     const accessToken = Deno.env.get("MAPBOX_ACCESS_TOKEN");
@@ -170,7 +308,12 @@ function resolveUpstreamRequest(start: RoutePoint, end: RoutePoint): UpstreamReq
       `${base}/driving/${start.lng},${start.lat};${end.lng},${end.lat}` +
       `?overview=full&geometries=geojson&access_token=${encodeURIComponent(accessToken)}`;
 
-    return { url, headers: { Accept: "application/json" } };
+    return {
+      provider: "mapbox",
+      method: "GET",
+      url,
+      headers: { Accept: "application/json" },
+    };
   }
 
   const osrmBase =
@@ -179,7 +322,12 @@ function resolveUpstreamRequest(start: RoutePoint, end: RoutePoint): UpstreamReq
     `${osrmBase}/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}` +
     "?overview=full&geometries=geojson";
 
-  return { url, headers: { Accept: "application/json" } };
+  return {
+    provider: "osrm",
+    method: "GET",
+    url,
+    headers: { Accept: "application/json" },
+  };
 }
 
 Deno.serve(async (req) => {
@@ -214,12 +362,26 @@ Deno.serve(async (req) => {
 
     try {
       const upstream = await fetch(upstreamRequest.url, {
-        method: "GET",
+        method: upstreamRequest.method,
         headers: upstreamRequest.headers ?? { Accept: "application/json" },
+        body: upstreamRequest.body,
         signal: controller.signal,
       });
       const payload = await upstream.text();
-      return new Response(payload, {
+
+      let normalizedPayload = payload;
+      if (upstream.ok) {
+        try {
+          const parsed = JSON.parse(payload);
+          if (upstreamRequest.provider === "google") {
+            normalizedPayload = JSON.stringify(normalizeGoogleRoutes(parsed));
+          }
+        } catch (_) {
+          // Keep original payload when upstream body is not JSON.
+        }
+      }
+
+      return new Response(normalizedPayload, {
         status: upstream.status,
         headers: { ...defaultHeaders, "Content-Type": "application/json" },
       });

@@ -52,7 +52,9 @@ class AppointmentNotifier extends ChangeNotifier {
 
     try {
       final previousIds = _appointments.map((a) => a.id).toSet();
-      final freshAppointments = await _appointmentRepo.fetchAppointments(userId);
+      final freshAppointments = await _appointmentRepo.fetchAppointments(
+        userId,
+      );
       final nextIds = freshAppointments.map((a) => a.id).toSet();
 
       for (final removedId in previousIds.difference(nextIds)) {

@@ -11,15 +11,9 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   static Duration _resolveInactivityTimeout() {
-    const timeoutMs = String.fromEnvironment(
-      'INACTIVITY_TIMEOUT_MS',
-      defaultValue: '',
+    return Duration(
+      milliseconds: SettingsNotifier.instance.inactivityTimeoutMs,
     );
-    final parsed = int.tryParse(timeoutMs);
-    if (parsed != null && parsed > 0) {
-      return Duration(milliseconds: parsed);
-    }
-    return const Duration(minutes: 5);
   }
 
   static Duration _resolveAbsoluteSessionTimeout() {

@@ -29,7 +29,19 @@ class AppFailure implements Exception {
     );
   }
 
+  factory AppFailure.biometricRejected({String? technicalMessage}) {
+    return AppFailure(
+      type: AppFailureType.auth,
+      userMessage: 'Biometric verification was not completed.',
+      technicalMessage:
+          technicalMessage ??
+          'Biometric prompt was dismissed or failed authentication.',
+      code: 'biometric_rejected',
+    );
+  }
+
   bool get isRequiresRecentMfa => code == 'requires_recent_mfa';
+  bool get isBiometricRejected => code == 'biometric_rejected';
 
   factory AppFailure.fromError(
     Object error, {

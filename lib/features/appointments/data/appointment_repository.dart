@@ -43,6 +43,7 @@ class AppointmentRepository {
             )
           ''')
           .eq('user_id', userId)
+          .isFilter('deleted_at', null)
           .eq('status', 'confirmed')
           .order('schedule_date', ascending: true);
 
@@ -101,6 +102,7 @@ class AppointmentRepository {
           .eq('doctor_id', doctorId)
           .eq('clinic_id', clinicId)
           .eq('schedule_date', date)
+          .isFilter('deleted_at', null)
           .neq('status', 'cancelled');
 
       if (excludeAppointmentId != null) {

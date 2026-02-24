@@ -108,17 +108,24 @@ class _CustomDrawerState extends State<CustomDrawer> {
   @override
   Widget build(BuildContext context) {
     // Use notifier data
-    final userName = _profileNotifier.fullName.isNotEmpty
-        ? _profileNotifier.fullName
-        : "Guest User";
-    final phone = (_profileNotifier.phoneNumber?.isNotEmpty ?? false)
-        ? _profileNotifier.phoneNumber!
-        : "No Contact Info";
+    final userName =
+        _profileNotifier.fullName.isNotEmpty
+            ? _profileNotifier.fullName
+            : "Guest User";
+    final phone =
+        (_profileNotifier.phoneNumber?.isNotEmpty ?? false)
+            ? _profileNotifier.phoneNumber!
+            : "No Contact Info";
     final avatar = _profileNotifier.avatarUrl;
 
     return Container(
       color: drawerContentColor,
-      padding: const EdgeInsets.fromLTRB(20, 80, 0, 20), // Increased top padding for better alignment
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        80,
+        0,
+        20,
+      ), // Increased top padding for better alignment
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -135,10 +142,14 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   radius: 35,
                   backgroundColor: Colors.white,
                   backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                  child: avatar == null
-                      ? const Icon(Icons.person,
-                          color: AppColors.textLight, size: 35)
-                      : null,
+                  child:
+                      avatar == null
+                          ? const Icon(
+                            Icons.person,
+                            color: AppColors.textLight,
+                            size: 35,
+                          )
+                          : null,
                 ),
               ),
               const SizedBox(height: 12),
@@ -155,22 +166,19 @@ class _CustomDrawerState extends State<CustomDrawer> {
               const SizedBox(height: 4),
               Row(
                 children: [
-                   const Icon(Icons.phone, color: Colors.white70, size: 14),
-                   const SizedBox(width: 6),
-                   Text(
-                     phone,
-                     style: const TextStyle(
-                       color: Colors.white70, 
-                       fontSize: 14,
-                     ),
-                   ),
+                  const Icon(Icons.phone, color: Colors.white70, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    phone,
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
                 ],
-              )
+              ),
             ],
           ),
-          
+
           const SizedBox(height: 40),
-          
+
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -222,12 +230,13 @@ class _CustomDrawerState extends State<CustomDrawer> {
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 5),
-      decoration: isSelected
-          ? BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            )
-          : null,
+      decoration:
+          isSelected
+              ? BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              )
+              : null,
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
         leading: Icon(icon, color: Colors.white, size: 24),

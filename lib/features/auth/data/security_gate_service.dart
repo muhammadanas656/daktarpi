@@ -72,14 +72,11 @@ class SecurityGateService {
 
   Future<void> verifyWithTotp(String code) async {
     await _authProvider.verifyTotpCode(code);
-    await _authProvider.refreshSession();
+    // Suppressed refreshSession() because challengeAndVerify already promotes AAL on the native channel
   }
 
   Future<bool> verifyWithRecoveryCode(String code) async {
     final success = await _authProvider.useRecoveryCode(code);
-    if (success) {
-      await _authProvider.refreshSession();
-    }
     return success;
   }
 }

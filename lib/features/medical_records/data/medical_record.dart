@@ -1,43 +1,33 @@
-class MedicalRecord {
-  final int id;
-  final String userId;
-  final String recordFor;
-  final String recordType;
-  final DateTime recordDate;
-  final List<String> fileUrls;
-  final DateTime createdAt;
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-  MedicalRecord({
-    required this.id,
-    required this.userId,
-    required this.recordFor,
-    required this.recordType,
-    required this.recordDate,
-    required this.fileUrls,
-    required this.createdAt,
-  });
+part 'medical_record.freezed.dart';
+part 'medical_record.g.dart';
 
-  factory MedicalRecord.fromJson(Map<String, dynamic> json) {
-    return MedicalRecord(
-      id: json['id'] as int,
-      userId: json['user_id'] as String,
-      recordFor: json['record_for'] as String,
-      recordType: json['record_type'] as String,
-      recordDate: DateTime.parse(json['record_date'] as String),
-      fileUrls: List<String>.from(json['file_urls'] ?? []),
-      createdAt: DateTime.parse(json['created_at'] as String),
-    );
+List<String> _stringListFromJson(Object? value) {
+  if (value is List) {
+    return value.map((item) => item.toString()).toList();
   }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'user_id': userId,
-      'record_for': recordFor,
-      'record_type': recordType,
-      'record_date': recordDate.toIso8601String(),
-      'file_urls': fileUrls,
-      'created_at': createdAt.toIso8601String(),
-    };
+  if (value is String && value.isNotEmpty) {
+    return <String>[value];
   }
+  return const <String>[];
+}
+
+@freezed
+abstract class MedicalRecord with _$MedicalRecord {
+  const factory MedicalRecord({
+    required int id,
+    @JsonKey(name: 'user_id') required String userId,
+    @JsonKey(name: 'record_for') required String recordFor,
+    @JsonKey(name: 'record_type') required String recordType,
+    @JsonKey(name: 'record_date') required DateTime recordDate,
+    @JsonKey(name: 'file_urls', fromJson: _stringListFromJson)
+    @Default(<String>[])
+    List<String> fileUrls,
+    @JsonKey(name: 'created_at') required DateTime createdAt,
+    @JsonKey(name: 'deleted_at') DateTime? deletedAt,
+  }) = _MedicalRecord;
+
+  factory MedicalRecord.fromJson(Map<String, dynamic> json) =>
+      _$MedicalRecordFromJson(json);
 }

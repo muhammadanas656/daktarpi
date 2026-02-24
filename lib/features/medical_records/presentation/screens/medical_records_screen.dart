@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
-import 'package:open_filex/open_filex.dart'; // New
-import 'package:path_provider/path_provider.dart'; // New
-import 'package:http/http.dart' as http; // New
-// import 'package:url_launcher/url_launcher.dart'; // Removed/Commented out if not used elsewhere, but kept safe.
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/security/sensitive_action_step_up_service.dart';
+import '../../../../core/security/biometric_auth_service.dart';
+import '../../../../features/auth/data/trusted_device_repository.dart';
 import '../../../../features/medical_records/data/medical_record.dart';
 import '../../../../features/medical_records/data/medical_record_repository.dart';
 import '../models/medical_record_route_args.dart';
@@ -24,36 +26,61 @@ class MedicalRecordsScreen extends StatefulWidget {
 }
 
 class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
-  final _repository = MedicalRecordRepository();
-  final _stepUpService = SensitiveActionStepUpService();
+  final MedicalRecordRepository _repository = MedicalRecordRepository();
+  final BiometricAuthService _biometricService = BiometricAuthService();
+  final TrustedDeviceRepository _deviceRepo = TrustedDeviceRepository();
+
   List<MedicalRecord> _records = [];
   bool _isLoading = true;
   String? _errorMessage;
-  bool _trustedBiometricUnlocked = false;
 
-  // Helper to remove timestamp prefix from display name
-  String _getCleanFileName(String path) {
-    String name = path.split('/').last;
-    // Regex matches starts with digits followed by underscore
-    return name.replaceFirst(RegExp(r'^\d+_'), '');
-  }
+  bool _isProtected = false;
+  bool _hasSecurityConfigured = false;
 
   @override
   void initState() {
     super.initState();
+    _checkSecurityConfiguration();
     _fetchRecords();
   }
 
+  Future<void> _checkSecurityConfiguration() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final is2faEnabled = user.appMetadata['is_2fa_enabled'] == true;
+    final isBiometricEnabled = await _deviceRepo.isBiometricEnabledForDevice(
+      userId: user.id,
+    );
+
+    if (mounted) {
+      setState(() {
+        _hasSecurityConfigured = is2faEnabled || isBiometricEnabled;
+      });
+    }
+  }
+
   Future<void> _fetchRecords() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isLoading = true);
 
     try {
-      final records = await _repository.fetchRecords(
-        allowAal1Bypass: _trustedBiometricUnlocked,
-      );
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = "Please log in to view records.";
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final records = await _repository.fetchRecords();
       if (mounted) {
         setState(() {
           _records = records;
@@ -62,67 +89,67 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        if (e is Requires2FAException) {
-          final unlocked = await _stepUpService.authenticateIfTrusted(
-            localizedReason:
-                'Use Face ID or Touch ID to view your medical records',
-          );
-          if (!mounted) {
-            return;
-          }
-          if (unlocked) {
-            setState(() {
-              _trustedBiometricUnlocked = true;
-            });
-            await _fetchRecords();
-            return;
-          }
-
-          // Session expired or insufficient AAL -> Show Dialog
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder:
-                (ctx) => AlertDialog(
-                  title: const Row(
-                    children: [
-                      Icon(Icons.security, color: AppColors.primaryGreen),
-                      SizedBox(width: 10),
-                      Text("Verification Required"),
-                    ],
-                  ),
-                  content: const Text(
-                    "For your security, please verify your identity to access sensitive medical records.",
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text("Cancel"),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        context.push(AppRoutes.verify2fa);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryGreen,
-                      ),
-                      child: const Text(
-                        "Verify Now",
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-          );
-          return;
-        }
         setState(() {
           _errorMessage = e.toString();
           _isLoading = false;
         });
       }
     }
+  }
+
+  Future<void> _toggleProtection() async {
+    if (!_hasSecurityConfigured) {
+      _showSetupSuggestion();
+      return;
+    }
+
+    final reason =
+        _isProtected
+            ? 'Unlock your medical records'
+            : 'Protect your medical records';
+    final authenticated = await _biometricService.authenticate(
+      localizedReason: reason,
+    );
+
+    if (authenticated && mounted) {
+      setState(() {
+        _isProtected = !_isProtected;
+      });
+      CustomSnackbar.showSuccess(
+        context,
+        _isProtected ? "Records protected" : "Records unlocked",
+      );
+    }
+  }
+
+  void _showSetupSuggestion() {
+    showDialog(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text("Secure Your Records"),
+            content: const Text(
+              "Protect your medical records for extra security by enabling 2FA or Biometrics in Settings.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Later"),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  context.push(AppRoutes.settings);
+                },
+                child: const Text("Go to Settings"),
+              ),
+            ],
+          ),
+    );
+  }
+
+  String _getCleanFileName(String path) {
+    return path.split('/').last.replaceFirst(RegExp(r'^\d+_'), '');
   }
 
   Future<void> _deleteRecord(MedicalRecord record) async {
@@ -176,7 +203,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   Future<void> _viewFile(MedicalRecord record) async {
-    if (record.fileUrls.isEmpty) return;
+    if (record.fileUrls.isEmpty) {
+      return;
+    }
 
     Future<void> openPath(String path) async {
       try {
@@ -186,12 +215,12 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           'png',
         ].contains(path.split('.').last.toLowerCase());
 
-        // 1. Get Signed URL
         final url = await _repository.getSignedUrl(path);
 
-        // A. Image -> Show In-App Dialog
         if (isImage) {
-          if (!mounted) return;
+          if (!mounted) {
+            return;
+          }
           await showDialog(
             context: context,
             builder:
@@ -223,12 +252,13 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           return;
         }
 
-        // B. Document -> Download & Open Native
-        if (mounted) CustomSnackbar.showInfo(context, "Opening file...");
+        if (mounted) {
+          CustomSnackbar.showInfo(context, "Opening file...");
+        }
 
         final response = await http.get(Uri.parse(url));
         if (response.statusCode != 200) {
-          throw Exception('Failed to download file: ${response.statusCode}');
+          throw Exception('Failed to download file');
         }
 
         final dir = await getTemporaryDirectory();
@@ -238,13 +268,11 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         await file.writeAsBytes(response.bodyBytes);
 
         final result = await OpenFilex.open(file.path);
-        if (result.type != ResultType.done) {
-          if (mounted) {
-            CustomSnackbar.showError(
-              context,
-              "Could not open file: ${result.message}",
-            );
-          }
+        if (result.type != ResultType.done && mounted) {
+          CustomSnackbar.showError(
+            context,
+            "Could not open file: ${result.message}",
+          );
         }
       } catch (e) {
         if (mounted) {
@@ -312,31 +340,44 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           onPressed: () => context.pop(),
           color: AppColors.textDark,
         ),
-      ),
-      body: Column(children: [Expanded(child: _buildBody())]),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
+        actions: [
+          if (_hasSecurityConfigured)
+            IconButton(
+              icon: Icon(
+                _isProtected ? Icons.lock_rounded : Icons.lock_open_rounded,
+                color: _isProtected ? AppColors.primaryGreen : Colors.grey,
+              ),
+              onPressed: _toggleProtection,
             ),
-          ],
-        ),
-        child: SafeArea(
-          child: PrimaryButton(
-            label: "Add a record",
-            onTap: () async {
-              final result = await context.push(AppRoutes.addMedicalRecord);
-              if (!mounted) return;
-              if (result == true) {
-                _fetchRecords();
-              }
-            },
+        ],
+      ),
+      body: _buildBody(),
+      bottomNavigationBar: _isProtected ? null : _buildBottomBar(),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
           ),
+        ],
+      ),
+      child: SafeArea(
+        child: PrimaryButton(
+          label: "Add a record",
+          onTap: () async {
+            final result = await context.push(AppRoutes.addMedicalRecord);
+            if (result == true && mounted) {
+              _fetchRecords();
+            }
+          },
         ),
       ),
     );
@@ -348,53 +389,14 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         child: CircularProgressIndicator(color: AppColors.primaryGreen),
       );
     }
-
     if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
-            const SizedBox(height: 16),
-            Text("Error: $_errorMessage"),
-            ElevatedButton(
-              onPressed: _fetchRecords,
-              child: const Text("Retry"),
-            ),
-          ],
-        ),
-      );
+      return Center(child: Text(_errorMessage!));
     }
-
+    if (_isProtected) {
+      return _buildProtectedState();
+    }
     if (_records.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.folder_open_rounded,
-                size: 60,
-                color: AppColors.primaryGreen,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text("No Records Found", style: AppTextStyles.h3),
-            const SizedBox(height: 8),
-            const Text(
-              "Add a medical record to keep track of your health.",
-              style: TextStyle(color: AppColors.textLight),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyState();
     }
 
     return ListView.builder(
@@ -406,13 +408,65 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           padding: const EdgeInsets.only(bottom: 16),
           child: RecordCard(
             record: record,
-            onTap: () {}, // Disabled as per user request (only open on Edit)
+            onTap: () {},
             onEdit: () => _editRecord(record),
             onDelete: () => _deleteRecord(record),
             onFileTap: () => _viewFile(record),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildProtectedState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.lock_outline_rounded,
+            size: 80,
+            color: AppColors.primaryGreen.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 16),
+          Text("Records Protected", style: AppTextStyles.h3),
+          const SizedBox(height: 8),
+          const Text(
+            "Verify your identity to view records.",
+            style: TextStyle(color: AppColors.textLight),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: AppColors.primaryGreen.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.folder_open_rounded,
+              size: 60,
+              color: AppColors.primaryGreen,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text("No Records Found", style: AppTextStyles.h3),
+          const SizedBox(height: 8),
+          const Text(
+            "Add a medical record to track your health.",
+            style: TextStyle(color: AppColors.textLight),
+          ),
+        ],
+      ),
     );
   }
 }

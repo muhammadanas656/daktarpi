@@ -56,7 +56,7 @@ class CustomSnackbar {
   }
 }
 
-class _SnackbarOverlay extends StatefulWidget {
+class _SnackbarOverlay extends StatelessWidget {
   final String message;
   final Color color;
   final IconData icon;
@@ -70,48 +70,6 @@ class _SnackbarOverlay extends StatefulWidget {
   });
 
   @override
-  State<_SnackbarOverlay> createState() => _SnackbarOverlayState();
-}
-
-class _SnackbarOverlayState extends State<_SnackbarOverlay>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation; // opacity requires double
-  late Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: AppMotion.standard,
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: AppMotion.emphasized,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: AppMotion.standardCurve,
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: AppMotion.standardCurve),
-    );
-
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Positioned(
       bottom: MediaQuery.of(context).viewInsets.bottom + AppDimens.space4xl,
@@ -119,50 +77,58 @@ class _SnackbarOverlayState extends State<_SnackbarOverlay>
       right: AppDimens.spaceXl,
       child: Material(
         color: Colors.transparent,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: GestureDetector(
-                onTap: widget.onDismiss, // Dismiss on tap
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimens.spaceXl,
-                    vertical: AppDimens.spaceMdPlus,
-                  ),
-                  decoration: BoxDecoration(
-                    color: widget.color,
-                    borderRadius: AppShapes.pill,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(widget.icon, color: Colors.white, size: 22),
-                      const SizedBox(width: AppDimens.spaceMd),
-                      Flexible(
-                        child: Text(
-                          widget.message,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0.0, end: 1.0),
+          duration: AppMotion.standard,
+          curve: AppMotion.emphasized,
+          builder: (context, value, child) {
+            return SlideTransition(
+              position: AlwaysStoppedAnimation(Offset(0, 1 - value)),
+              child: ScaleTransition(
+                scale: AlwaysStoppedAnimation(value),
+                child: FadeTransition(
+                  opacity: AlwaysStoppedAnimation(value.clamp(0.0, 1.0)),
+                  child: child,
                 ),
+              ),
+            );
+          },
+          child: GestureDetector(
+            onTap: onDismiss, // Dismiss on tap
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.spaceXl,
+                vertical: AppDimens.spaceMdPlus,
+              ),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: AppShapes.pill,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: Colors.white, size: 22),
+                  const SizedBox(width: AppDimens.spaceMd),
+                  Flexible(
+                    child: Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

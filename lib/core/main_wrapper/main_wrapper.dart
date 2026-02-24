@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/menu/presentation/widgets/custom_drawer.dart';
 import '../../features/doctors/presentation/screens/doctors_screen.dart';
 import '../../features/settings/presentation/settings_notifier.dart';
+import '../theme/app_motion.dart';
 
 class MainWrapper extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -32,7 +33,7 @@ class _MainWrapperState extends State<MainWrapper>
     super.initState();
     _drawerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: AppMotion.defaultDuration,
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -48,7 +49,7 @@ class _MainWrapperState extends State<MainWrapper>
 
   Future<void> _runIntroTutorial() async {
     // Check setting before running hint
-    await SettingsNotifier.instance.loadSettings(); 
+    await SettingsNotifier.instance.loadSettings();
     if (!SettingsNotifier.instance.showDrawerHint) return;
 
     if (widget.navigationShell.currentIndex != 0) return;
@@ -125,7 +126,7 @@ class _MainWrapperState extends State<MainWrapper>
     if (_isDraggingDrawer || _drawerController.value > 0.0) {
       // If moving fast, snap based on direction
       // REDUCED THRESHOLD: 400 -> 200 for easier sensitivity
-      if (velocity.abs() > 200) { 
+      if (velocity.abs() > 200) {
         if (velocity > 0) {
           _drawerController.forward();
         } else {
@@ -155,12 +156,12 @@ class _MainWrapperState extends State<MainWrapper>
         // Swipe Right -> Open Drawer (on any screen if at edge, or previous tab)
         // Improved logic: If user swipes right significantly, we prioritized drawer above.
         // But if drawer detected no drag (e.g. started in middle), we handle tabs.
-        
-        if (currentIndex > 0) { 
-           _goToBranch(currentIndex - 1);
+
+        if (currentIndex > 0) {
+          _goToBranch(currentIndex - 1);
         } else {
-           // On Home, swipe right opens drawer (handled by drag update usually, but fallback here)
-           _drawerController.forward();
+          // On Home, swipe right opens drawer (handled by drag update usually, but fallback here)
+          _drawerController.forward();
         }
       }
     }
@@ -243,8 +244,8 @@ class _MainWrapperState extends State<MainWrapper>
                               children: [
                                 const DoctorsScreen(),
                                 Container(
-                                  color: drawerBgColor.withValues(alpha: 
-                                    (0.8 * _drawerController.value)
+                                  color: drawerBgColor.withValues(
+                                    alpha: (0.8 * _drawerController.value)
                                         .clamp(0.0, 1.0),
                                   ),
                                 ),
@@ -311,7 +312,7 @@ class _MainWrapperState extends State<MainWrapper>
                 child: Scaffold(
                   body: SizedBox.expand(
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
+                      duration: AppMotion.defaultDuration,
                       child: widget.navigationShell,
                     ),
                   ),

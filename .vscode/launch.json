@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "DaktarPai",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": [
+        "--dart-define=SUPABASE_URL=your_actual_url_here",
+        "--dart-define=SUPABASE_ANON_KEY=your_actual_key_here",
+        "--dart-define=GOOGLE_WEB_CLIENT_ID=your_actual_client_id_here"
+      ]
+    }
+  ]
+}

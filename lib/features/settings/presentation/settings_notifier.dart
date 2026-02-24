@@ -7,14 +7,20 @@ class SettingsNotifier extends ChangeNotifier {
 
   static const String keyShowDrawerHint = 'show_drawer_hint';
   static const String keyThemeMode = 'theme_mode';
+  static const String keyInactivityTimeout = 'inactivity_timeout';
+  static const String keyNotificationsEnabled = 'notifications_enabled';
 
   bool _isLoaded = false;
   bool _showDrawerHint = true;
   ThemeMode _themeMode = ThemeMode.system;
+  int _inactivityTimeoutMs = 300000; // default 5 minutes
+  bool _notificationsEnabled = true;
 
   bool get isLoaded => _isLoaded;
   bool get showDrawerHint => _showDrawerHint;
   ThemeMode get themeMode => _themeMode;
+  int get inactivityTimeoutMs => _inactivityTimeoutMs;
+  bool get notificationsEnabled => _notificationsEnabled;
 
   Future<void> loadSettings() async {
     if (_isLoaded) return;
@@ -25,6 +31,9 @@ class SettingsNotifier extends ChangeNotifier {
 
       final themeString = prefs.getString(keyThemeMode) ?? 'system';
       _themeMode = _parseThemeMode(themeString);
+
+      _inactivityTimeoutMs = prefs.getInt(keyInactivityTimeout) ?? 300000;
+      _notificationsEnabled = prefs.getBool(keyNotificationsEnabled) ?? true;
 
       _isLoaded = true;
       notifyListeners();
@@ -58,6 +67,28 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
+  Future<void> updateInactivityTimeout(int ms) async {
+    _inactivityTimeoutMs = ms;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(keyInactivityTimeout, ms);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save timeout: $e");
+    }
+  }
+
+  Future<void> updateNotificationsEnabled(bool enabled) async {
+    _notificationsEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyNotificationsEnabled, enabled);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save notifications: $e");
+    }
+  }
+
   ThemeMode _parseThemeMode(String mode) {
     switch (mode) {
       case 'light':
@@ -68,5 +99,15 @@ class SettingsNotifier extends ChangeNotifier {
       default:
         return ThemeMode.system;
     }
+  }
+
+  /// Clear state on logout.
+  void clear() {
+    _isLoaded = false;
+    _showDrawerHint = true;
+    _themeMode = ThemeMode.system;
+    _inactivityTimeoutMs = 300000;
+    _notificationsEnabled = true;
+    notifyListeners();
   }
 }

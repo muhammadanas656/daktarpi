@@ -32,15 +32,35 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchIdentities();
+    _fetchIdentities(withLoading: true);
   }
 
-  Future<void> _fetchIdentities() async {
-    final user = _settingsRepository.currentUser;
-    if (user != null) {
+  Future<void> _fetchIdentities({bool withLoading = false}) async {
+    if (withLoading && mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
+
+    try {
+      await _settingsRepository.refreshSession();
+      final user = _settingsRepository.currentUser;
       if (mounted) {
         setState(() {
-          _identities = user.identities ?? [];
+          _identities = user?.identities ?? [];
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showError(
+          context,
+          "Failed to refresh linked accounts: $e",
+        );
+      }
+    } finally {
+      if (withLoading && mounted) {
+        setState(() {
+          _isLoading = false;
         });
       }
     }
@@ -283,7 +303,14 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       if (!mounted) {
         return;
       }
-      _fetchIdentities();
+      await _fetchIdentities();
+      if (!mounted) {
+        return;
+      }
+      CustomSnackbar.showSuccess(
+        context,
+        "Google account linked successfully!",
+      );
     } catch (e) {
       if (!mounted) {
         return;
@@ -516,7 +543,9 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   Widget _buildProviderTile(String provider, String iconPath, Color color) {
     UserIdentity? identity;
     try {
-      identity = _identities.firstWhere((id) => id.provider == provider);
+      identity = _identities.firstWhere(
+        (id) => (id.provider).toLowerCase() == provider,
+      );
     } catch (_) {
       identity = null;
     }
@@ -556,9 +585,12 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  provider[0].toUpperCase() + provider.substring(1),
+                  provider.isNotEmpty
+                      ? provider[0].toUpperCase() + provider.substring(1)
+                      : '',
                   style: AppTextStyles.bodyBold,
                 ),
                 if (isLinked)
@@ -638,27 +670,25 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
               ? const Center(
                 child: CircularProgressIndicator(color: AppColors.primaryGreen),
               )
-              : Padding(
+              : ListView(
                 padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    const Text(
-                      "Manage your signed-in accounts. Linking accounts allows you to sign in with any of them.",
-                      style: TextStyle(color: AppColors.textLight, height: 1.5),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildProviderTile(
-                      'email',
-                      'assets/icons/email.svg',
-                      AppColors.primaryGreen,
-                    ),
-                    _buildProviderTile(
-                      'google',
-                      'assets/icons/google.svg',
-                      Colors.red,
-                    ),
-                  ],
-                ),
+                children: [
+                  const Text(
+                    "Manage your signed-in accounts. Linking accounts allows you to sign in with any of them.",
+                    style: TextStyle(color: AppColors.textLight, height: 1.5),
+                  ),
+                  const SizedBox(height: 32),
+                  _buildProviderTile(
+                    'email',
+                    'assets/icons/email.svg',
+                    AppColors.primaryGreen,
+                  ),
+                  _buildProviderTile(
+                    'google',
+                    'assets/icons/google.svg',
+                    Colors.red,
+                  ),
+                ],
               ),
     );
   }

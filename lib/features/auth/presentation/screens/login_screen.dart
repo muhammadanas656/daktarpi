@@ -12,12 +12,14 @@ import '../../../../presentation/widgets/social_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../data/auth_entry_route_service.dart';
 import '../../data/auth_repository.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String? intendedRoute;
+  const LoginScreen({super.key, this.intendedRoute});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -138,7 +140,9 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authRepository.signIn(email: email, password: password);
 
       if (mounted) {
-        final route = await _authEntryRouteService.resolvePostAuthRoute();
+        final route = await _authEntryRouteService.resolvePostAuthRoute(
+          intendedRoute: widget.intendedRoute,
+        );
         if (!mounted) {
           return;
         }
@@ -191,7 +195,9 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authRepository.signInWithGoogleIdToken(idToken: idToken);
 
       if (mounted) {
-        final route = await _authEntryRouteService.resolvePostAuthRoute();
+        final route = await _authEntryRouteService.resolvePostAuthRoute(
+          intendedRoute: widget.intendedRoute,
+        );
         if (!mounted) {
           return;
         }
@@ -349,7 +355,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         GestureDetector(
                           onTap: _showForgotPasswordSheet,
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
+                            duration: AppMotion.defaultDuration,
                             curve: Curves.easeOut,
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -665,7 +671,7 @@ class _ForgotPasswordSheetContentState
         bottom: MediaQuery.of(context).viewInsets.bottom + 40,
       ),
       child: AnimatedSize(
-        duration: const Duration(milliseconds: 300),
+        duration: AppMotion.defaultDuration,
         curve: Curves.easeInOut,
         child: Column(
           mainAxisSize: MainAxisSize.min,

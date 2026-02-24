@@ -74,7 +74,7 @@ class RecordCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            
+
             // Content
             Expanded(
               child: Column(
@@ -97,7 +97,11 @@ class RecordCard extends StatelessWidget {
                         width: 24,
                         child: PopupMenuButton<String>(
                           padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textLight),
+                          icon: const Icon(
+                            Icons.more_vert,
+                            size: 20,
+                            color: AppColors.textLight,
+                          ),
                           onSelected: (value) {
                             if (value == 'edit') {
                               onEdit?.call();
@@ -105,28 +109,40 @@ class RecordCard extends StatelessWidget {
                               onDelete?.call();
                             }
                           },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.edit, size: 18, color: AppColors.textDark),
-                                  SizedBox(width: 8),
-                                  Text("Edit"),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete, size: 18, color: Colors.red),
-                                  SizedBox(width: 8),
-                                  Text("Delete", style: TextStyle(color: Colors.red)),
-                                ],
-                              ),
-                            ),
-                          ],
+                          itemBuilder:
+                              (context) => [
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.edit,
+                                        size: 18,
+                                        color: AppColors.textDark,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text("Edit"),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete,
+                                        size: 18,
+                                        color: Colors.red,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        "Delete",
+                                        style: TextStyle(color: Colors.red),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                         ),
                       ),
                     ],
@@ -135,13 +151,16 @@ class RecordCard extends StatelessWidget {
                   RichText(
                     text: TextSpan(
                       text: "Record for ",
-                      style: const TextStyle(fontSize: 12, color: AppColors.textLight),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textLight,
+                      ),
                       children: [
                         TextSpan(
                           text: record.recordFor,
                           style: const TextStyle(
-                            color: AppColors.primaryGreen, 
-                            fontWeight: FontWeight.w500
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -151,7 +170,10 @@ class RecordCard extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primaryGreen.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -176,7 +198,11 @@ class RecordCard extends StatelessWidget {
                               color: Colors.grey[100],
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.description_outlined, size: 16, color: AppColors.primaryGreen),
+                            child: const Icon(
+                              Icons.description_outlined,
+                              size: 16,
+                              color: AppColors.primaryGreen,
+                            ),
                           ),
                         ),
                     ],

@@ -12,6 +12,7 @@ import 'core/security/device_integrity_service.dart';
 import 'core/services/appointment_notification_service.dart';
 import 'core/services/error_telemetry_service.dart';
 import 'core/widgets/app_error_fallback.dart';
+import 'features/settings/presentation/settings_notifier.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,9 +23,9 @@ Future<void> main() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
+  await SettingsNotifier.instance.loadSettings();
   await AppointmentNotificationService.instance.initialize();
-  final deviceCompromised =
-      await DeviceIntegrityService().enforceOnStartup();
+  final deviceCompromised = await DeviceIntegrityService().enforceOnStartup();
 
   final telemetryService = ErrorTelemetryService();
 
@@ -55,15 +56,16 @@ Future<void> main() async {
     );
   };
 
-  runZonedGuarded(() {
-    runApp(
-      deviceCompromised ? const _CompromisedDeviceApp() : const MyApp(),
-    );
-  }, (error, stack) {
-    unawaited(
-      telemetryService.logError(error, stack, source: 'run_zoned_guarded'),
-    );
-  });
+  runZonedGuarded(
+    () {
+      runApp(deviceCompromised ? const _CompromisedDeviceApp() : const MyApp());
+    },
+    (error, stack) {
+      unawaited(
+        telemetryService.logError(error, stack, source: 'run_zoned_guarded'),
+      );
+    },
+  );
 }
 
 class _CompromisedDeviceApp extends StatelessWidget {

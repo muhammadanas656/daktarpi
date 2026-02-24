@@ -31,17 +31,26 @@ class TrustedDeviceRepository {
 
   Future<void> trustCurrentDevice({
     Duration ttl = const Duration(days: 30),
+    bool isBiometricEnabled = false,
+    String? biometricPublicKey,
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
       return;
     }
-    await trustDevice(userId: userId, ttl: ttl);
+    await trustDevice(
+      userId: userId,
+      ttl: ttl,
+      isBiometricEnabled: isBiometricEnabled,
+      biometricPublicKey: biometricPublicKey,
+    );
   }
 
   Future<void> trustDevice({
     required String userId,
     Duration ttl = const Duration(days: 30),
+    bool isBiometricEnabled = false,
+    String? biometricPublicKey,
   }) async {
     final token = _uuid.v4();
     final now = DateTime.now().toUtc();
@@ -50,9 +59,11 @@ class TrustedDeviceRepository {
 
     await _client.from('trusted_devices').insert({
       'user_id': userId,
-      'token_hash': tokenHash,
+      'device_hash': tokenHash,
       'expires_at': expiresAt.toIso8601String(),
-      'last_used_at': now.toIso8601String(),
+      'is_biometric_enabled': isBiometricEnabled,
+      if (biometricPublicKey != null)
+        'biometric_public_key': biometricPublicKey,
     });
 
     await _writeLocalToken(
@@ -79,7 +90,7 @@ class TrustedDeviceRepository {
               .from('trusted_devices')
               .select('id, expires_at')
               .eq('user_id', userId)
-              .eq('token_hash', tokenHash)
+              .eq('device_hash', tokenHash)
               .gt('expires_at', now.toIso8601String())
               .maybeSingle();
 
@@ -88,14 +99,41 @@ class TrustedDeviceRepository {
         return false;
       }
 
-      final rowId = row['id'];
-      if (rowId is String) {
-        unawaited(_touchLastUsed(rowId));
-      }
-
       return true;
     } catch (_) {
       // Fail closed: if server validation cannot complete, do not bypass MFA.
+      return false;
+    }
+  }
+
+  Future<bool> isBiometricEnabledForDevice({required String userId}) async {
+    final local = await _readLocalToken();
+    if (local == null) {
+      return false;
+    }
+
+    final now = DateTime.now().toUtc();
+    if (local.userId != userId || local.expiresAt.isBefore(now)) {
+      return false;
+    }
+
+    final tokenHash = _hashToken(local.token);
+    try {
+      final row =
+          await _client
+              .from('trusted_devices')
+              .select('is_biometric_enabled')
+              .eq('user_id', userId)
+              .eq('device_hash', tokenHash)
+              .gt('expires_at', now.toIso8601String())
+              .maybeSingle();
+
+      if (row == null) {
+        return false;
+      }
+
+      return row['is_biometric_enabled'] == true;
+    } catch (_) {
       return false;
     }
   }
@@ -108,7 +146,7 @@ class TrustedDeviceRepository {
             .from('trusted_devices')
             .delete()
             .eq('user_id', local.userId)
-            .eq('token_hash', _hashToken(local.token));
+            .eq('device_hash', _hashToken(local.token));
       } catch (_) {}
     }
 
@@ -119,14 +157,7 @@ class TrustedDeviceRepository {
     return _storage.delete(key: _storageKey);
   }
 
-  Future<void> _touchLastUsed(String id) async {
-    try {
-      await _client
-          .from('trusted_devices')
-          .update({'last_used_at': DateTime.now().toUtc().toIso8601String()})
-          .eq('id', id);
-    } catch (_) {}
-  }
+  // `_touchLastUsed` removed to match schema constraints
 
   Future<_TrustedDeviceToken?> _readLocalToken() async {
     final raw = await _storage.read(key: _storageKey);

@@ -50,9 +50,12 @@ class PrimaryButton extends StatelessWidget {
                     strokeWidth: 2,
                   ),
                 )
-                : Text(
-                  label,
-                  style: AppTextStyles.button.copyWith(fontSize: fontSize),
+                : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    style: AppTextStyles.button.copyWith(fontSize: fontSize),
+                  ),
                 ),
       ),
     );

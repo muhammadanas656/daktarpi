@@ -19,52 +19,58 @@ class DoctorTimingList extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: schedules.map((s) {
-          final day = s['day_of_week']?.toString() ?? 'Day';
-          final start = _toAmPm(s['start_time']?.toString() ?? '09:00:00');
-          final end = _toAmPm(s['end_time']?.toString() ?? '17:00:00');
+        children:
+            schedules.map((s) {
+              final day = s['day_of_week']?.toString() ?? 'Day';
+              final start = _toAmPm(s['start_time']?.toString() ?? '09:00:00');
+              final end = _toAmPm(s['end_time']?.toString() ?? '17:00:00');
 
-          return Container(
-            margin: const EdgeInsets.only(right: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            width: 118,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20), // Premium Radius
-              border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1C222E).withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+              return Container(
+                margin: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
                 ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  day,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                width: 118,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20), // Premium Radius
+                  border: Border.all(
+                    color: AppColors.borderColor.withValues(alpha: 0.5),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1C222E).withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  "$start - $end",
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: Color(0xFF8D97A4),
-                    fontWeight: FontWeight.w500,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      day,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      "$start - $end",
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: Color(0xFF8D97A4),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-        }).toList(),
+              );
+            }).toList(),
       ),
     );
   }

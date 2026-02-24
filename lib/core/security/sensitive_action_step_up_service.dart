@@ -23,10 +23,9 @@ class SensitiveActionStepUpService {
       return false;
     }
 
-    final trusted = await _trustedDeviceRepository.isTrustedDeviceValid(
-      userId: userId,
-    );
-    if (!trusted) {
+    final biometricEnabled = await _trustedDeviceRepository
+        .isBiometricEnabledForDevice(userId: userId);
+    if (!biometricEnabled) {
       return false;
     }
 

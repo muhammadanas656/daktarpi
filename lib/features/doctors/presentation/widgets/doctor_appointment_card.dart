@@ -40,10 +40,12 @@ class DoctorAppointmentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool hasData = clinics.isNotEmpty && selectedClinic != null;
-    final clinicName = hasData ? selectedClinic!['name'].toString() : 'No Clinic Available';
+    final clinicName =
+        hasData ? selectedClinic!['name'].toString() : 'No Clinic Available';
     final clinicAddress = hasData ? selectedClinic!['address'].toString() : '';
     final dynamic price = hasData ? selectedClinic!['visit_price'] : 0;
-    final waitTime = hasData ? selectedClinic!['avg_wait_time'].toString() : 'N/A';
+    final waitTime =
+        hasData ? selectedClinic!['avg_wait_time'].toString() : 'N/A';
     final moreClinicCount = clinics.length > 1 ? clinics.length - 1 : 0;
 
     return Container(
@@ -95,6 +97,8 @@ class DoctorAppointmentCard extends StatelessWidget {
               children: [
                 Text(
                   clinicName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
@@ -179,56 +183,54 @@ class DoctorAppointmentCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
                       "No slots available",
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   )
                 else
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: timeSlots.map((slot) {
-                        final isBooked = bookedSlots.contains(slot);
-                        final isSelected = slot == selectedTimeSlot;
+                      children:
+                          timeSlots.map((slot) {
+                            final isBooked = bookedSlots.contains(slot);
+                            final isSelected = slot == selectedTimeSlot;
 
-                        Color chipColor = const Color(0xFFD7EEF1);
-                        Color textColor = const Color(0xFF2B757E);
-                        if (isBooked) {
-                          chipColor = const Color(0xFFEEF1F4);
-                          textColor = const Color(0xFF9CA7B3);
-                        } else if (isSelected) {
-                          chipColor = AppColors.primaryGreen;
-                          textColor = Colors.white;
-                        }
+                            Color chipColor = const Color(0xFFD7EEF1);
+                            Color textColor = const Color(0xFF2B757E);
+                            if (isBooked) {
+                              chipColor = const Color(0xFFEEF1F4);
+                              textColor = const Color(0xFF9CA7B3);
+                            } else if (isSelected) {
+                              chipColor = AppColors.primaryGreen;
+                              textColor = Colors.white;
+                            }
 
-                        return GestureDetector(
-                          onTap:
-                              (!isBooked && onTimeSlotSelected != null)
-                                  ? () => onTimeSlotSelected!(slot)
-                                  : null,
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: chipColor,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              slot,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
+                            return GestureDetector(
+                              onTap:
+                                  (!isBooked && onTimeSlotSelected != null)
+                                      ? () => onTimeSlotSelected!(slot)
+                                      : null,
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: chipColor,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(
+                                  slot,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                            );
+                          }).toList(),
                     ),
                   ),
               ],

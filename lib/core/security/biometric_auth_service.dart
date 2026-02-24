@@ -24,12 +24,18 @@ class BiometricAuthService {
   Future<bool> authenticate({
     String localizedReason = 'Unlock DaktarPai to continue',
   }) async {
-    return _localAuth.authenticate(
-      localizedReason: localizedReason,
-      options: const AuthenticationOptions(
-        biometricOnly: false,
-        stickyAuth: true,
-      ),
-    );
+    try {
+      return await _localAuth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+          useErrorDialogs: true,
+          sensitiveTransaction: true,
+        ),
+      );
+    } catch (_) {
+      return false;
+    }
   }
 }

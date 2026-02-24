@@ -155,10 +155,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             String fullPhone = profile.phoneNumber ?? '';
             if (fullPhone.isNotEmpty) {
-              if (fullPhone.startsWith(_countryCode)) {
-                _phoneController.text = fullPhone.substring(
-                  _countryCode.length,
-                );
+              if (fullPhone.startsWith('+')) {
+                // Improved split to reliably separate country code and phone digits.
+                final match = RegExp(r'^(\+[0-9]{1,4})\s?([0-9\-\s]+)$').firstMatch(fullPhone);
+                if (match != null) {
+                  _countryCode = match.group(1)!;
+                  _phoneController.text = match.group(2)!.replaceAll(RegExp(r'[\-\s]'), ''); // Store digits only
+                } else {
+                  _phoneController.text = fullPhone;
+                }
               } else {
                 _phoneController.text = fullPhone;
               }
@@ -552,7 +557,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Phone
                         AppTextField(
                           controller: _phoneController,
                           hintText: "Enter phone number",
@@ -567,7 +571,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 _countryCode = country.dialCode ?? "+880";
                               });
                             },
-                            initialSelection: 'BD',
+                            initialSelection: _countryCode,
                             favorite: const ['PK', 'BD', 'IN', 'US'],
                             showCountryOnly: false,
                             showOnlyCountryWhenClosed: false,

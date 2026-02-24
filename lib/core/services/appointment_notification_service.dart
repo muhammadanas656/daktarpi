@@ -29,7 +29,9 @@ class AppointmentNotificationService {
 
     tz_data.initializeTimeZones();
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings();
     const settings = InitializationSettings(
       android: androidSettings,
@@ -51,46 +53,95 @@ class AppointmentNotificationService {
       return;
     }
 
-    await initialize();
+    try {
+      await initialize();
 
-    final triggerUtc =
-        appointmentLocalDateTime.subtract(Duration(minutes: reminderMinutes))
-            .toUtc();
-    final nowUtc = DateTime.now().toUtc();
-    if (!triggerUtc.isAfter(nowUtc)) {
-      await cancelReminder(appointmentId);
-      return;
+      final safeId = appointmentId.abs();
+      final triggerUtc =
+          appointmentLocalDateTime
+              .subtract(Duration(minutes: reminderMinutes))
+              .toUtc();
+      final nowUtc = DateTime.now().toUtc();
+      if (!triggerUtc.isAfter(nowUtc)) {
+        await cancelReminder(safeId);
+        return;
+      }
+
+      final title = 'Appointment reminder';
+      final appointmentTime = DateFormat(
+        'h:mm a',
+      ).format(appointmentLocalDateTime);
+      final body =
+          'You have an appointment with $doctorName at $appointmentTime.';
+
+      final notificationDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'appointment_reminders',
+          'Appointment Reminders',
+          channelDescription: 'Time-sensitive appointment reminder alerts',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      );
+
+      await _plugin.cancel(safeId);
+      await _plugin.zonedSchedule(
+        safeId,
+        title,
+        body,
+        tz.TZDateTime.from(triggerUtc, tz.UTC),
+        notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'appointment:$safeId',
+      );
+    } catch (e) {
+      debugPrint("Failed to schedule notification: $e");
+      // Fallback to inexact if exact is denied on Android 14+
+      try {
+        final safeId = appointmentId.abs();
+        final triggerUtc =
+            appointmentLocalDateTime
+                .subtract(Duration(minutes: reminderMinutes))
+                .toUtc();
+        final appointmentTime = DateFormat(
+          'h:mm a',
+        ).format(appointmentLocalDateTime);
+        final title = 'Appointment reminder';
+        final body =
+            'You have an appointment with $doctorName at $appointmentTime.';
+        final notificationDetails = NotificationDetails(
+          android: AndroidNotificationDetails(
+            'appointment_reminders',
+            'Appointment Reminders',
+            channelDescription: 'Time-sensitive appointment reminder alerts',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        );
+
+        await _plugin.zonedSchedule(
+          safeId,
+          title,
+          body,
+          tz.TZDateTime.from(triggerUtc, tz.UTC),
+          notificationDetails,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: 'appointment:$safeId',
+        );
+      } catch (e2) {
+        debugPrint("Inexact fallback also failed: $e2");
+      }
     }
-
-    final title = 'Appointment reminder';
-    final appointmentTime = DateFormat('h:mm a').format(appointmentLocalDateTime);
-    final body = 'You have an appointment with $doctorName at $appointmentTime.';
-
-    final notificationDetails = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'appointment_reminders',
-        'Appointment Reminders',
-        channelDescription: 'Time-sensitive appointment reminder alerts',
-        importance: Importance.max,
-        priority: Priority.high,
-      ),
-      iOS: const DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      ),
-    );
-
-    await _plugin.cancel(appointmentId);
-    await _plugin.zonedSchedule(
-      appointmentId,
-      title,
-      body,
-      tz.TZDateTime.from(triggerUtc, tz.UTC),
-      notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: 'appointment:$appointmentId',
-    );
   }
 
   Future<void> cancelReminder(int appointmentId) async {
@@ -98,21 +149,31 @@ class AppointmentNotificationService {
       return;
     }
     await initialize();
-    await _plugin.cancel(appointmentId);
+    await _plugin.cancel(appointmentId.abs());
+  }
+
+  Future<void> cancelAllReminders() async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
+    await initialize();
+    await _plugin.cancelAll();
   }
 
   Future<void> _requestPermissions() async {
-    final androidImpl = _plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
+    final androidImpl =
+        _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
     await androidImpl?.requestNotificationsPermission();
     await androidImpl?.requestExactAlarmsPermission();
 
-    final iosImpl = _plugin
-        .resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin
-        >();
+    final iosImpl =
+        _plugin
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >();
     await iosImpl?.requestPermissions(alert: true, badge: true, sound: true);
   }
 }

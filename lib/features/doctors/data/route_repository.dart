@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -16,6 +17,36 @@ class RouteRepository {
     required LatLng end,
   }) async {
     try {
+      // First attempt direct public OSRM lookup to bypass non-deployed edge functions
+      final uri = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson',
+      );
+
+      try {
+        final httpResp = await http
+            .get(uri)
+            .timeout(const Duration(seconds: 10));
+        if (httpResp.statusCode == 200) {
+          final data = jsonDecode(httpResp.body);
+          final routes = data['routes'] as List<dynamic>? ?? [];
+          if (routes.isNotEmpty) {
+            final geometry = (routes.first as Map<String, dynamic>)['geometry'];
+            final coordinates =
+                (geometry as Map<String, dynamic>)['coordinates']
+                    as List<dynamic>;
+            return coordinates.map((coord) {
+              final pair = coord as List<dynamic>;
+              return LatLng(
+                (pair[1] as num).toDouble(),
+                (pair[0] as num).toDouble(),
+              );
+            }).toList();
+          }
+        }
+      } catch (_) {
+        // Fallback to proxy on failure
+      }
+
       final response = await _client.functions.invoke(
         'route-proxy',
         body: {

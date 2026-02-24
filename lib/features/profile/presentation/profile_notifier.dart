@@ -73,12 +73,8 @@ class ProfileNotifier extends ChangeNotifier {
   /// Update just the name and avatar (lightweight update after profile edit).
   void updateNameAndAvatar({String? fullName, String? avatarUrl}) {
     if (_profile == null) return;
-    _profile = UserProfile(
-      id: _profile!.id,
+    _profile = _profile!.copyWith(
       fullName: fullName ?? _profile!.fullName,
-      phoneNumber: _profile!.phoneNumber,
-      dateOfBirth: _profile!.dateOfBirth,
-      location: _profile!.location,
       profilePictureUrl: avatarUrl ?? _profile!.profilePictureUrl,
       updatedAt: DateTime.now(),
     );

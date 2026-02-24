@@ -84,10 +84,7 @@ class DoctorStatsRow extends StatelessWidget {
           children: [
             Icon(icon, color: iconColor, size: 13),
             const SizedBox(width: 4),
-            Text(
-              value,
-              style: AppTextStyles.h3.copyWith(fontSize: 15),
-            ),
+            Text(value, style: AppTextStyles.h3.copyWith(fontSize: 15)),
           ],
         ),
         const SizedBox(height: 4),

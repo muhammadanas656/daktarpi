@@ -4,11 +4,7 @@ class Specialty {
   final String name;
   final String? iconUrl;
 
-  Specialty({
-    required this.id,
-    required this.name,
-    this.iconUrl,
-  });
+  Specialty({required this.id, required this.name, this.iconUrl});
 
   factory Specialty.fromJson(Map<String, dynamic> json) {
     return Specialty(
@@ -19,10 +15,6 @@ class Specialty {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'icon_url': iconUrl,
-    };
+    return {'id': id, 'name': name, 'icon_url': iconUrl};
   }
 }

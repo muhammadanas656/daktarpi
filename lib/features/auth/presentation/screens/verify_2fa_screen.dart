@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/primary_button.dart';
@@ -13,6 +14,7 @@ import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/security_formatters.dart';
 import '../models/verify_2fa_route_args.dart';
+import '../../data/auth_entry_route_service.dart';
 import '../../data/auth_repository.dart';
 import '../../data/security_gate_service.dart';
 import '../../data/trusted_device_repository.dart';
@@ -44,13 +46,13 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
   );
   final TrustedDeviceRepository _trustedDeviceRepository =
       TrustedDeviceRepository();
+  final AuthEntryRouteService _authEntryRouteService = AuthEntryRouteService();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startRecoveryAssistTimer();
-    _checkClipboardAndPaste();
   }
 
   @override
@@ -65,7 +67,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _checkClipboardAndPaste();
+      // Background clipboard checks removed to prevent false verification attempts
     }
   }
 
@@ -108,47 +110,10 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
     }
   }
 
-  Future<void> _checkClipboardAndPaste() async {
-    if (_isLoading) {
-      return;
-    }
-    try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      final text = data?.text?.trim() ?? '';
-      if (text.isEmpty) {
-        return;
-      }
-
-      final cleanText = text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-
-      if (!_isRecoveryMode &&
-          cleanText.length == 6 &&
-          RegExp(r'^[0-9]+$').hasMatch(cleanText)) {
-        if (_codeController.text != cleanText) {
-          setState(() {
-            _codeController.text = cleanText;
-          });
-          _verify();
-        }
-      } else if (_isRecoveryMode) {
-        final formattedCode = extractFirstBackupCode(text);
-        if (formattedCode == null) {
-          return;
-        }
-        if (_recoveryController.text != formattedCode) {
-          setState(() {
-            _recoveryController.text = formattedCode;
-          });
-          _verify();
-        }
-      }
-    } catch (_) {}
-  }
-
   Future<void> _verify() async {
     final code =
         _isRecoveryMode
-            ? _recoveryController.text.trim()
+            ? _recoveryController.text.replaceAll('-', '').trim()
             : _codeController.text.trim();
 
     if (code.isEmpty) {
@@ -168,8 +133,14 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
         final success = await _securityGateService.verifyWithRecoveryCode(code);
 
         if (success) {
-          await _markTrustedDeviceIfSelected();
+          final trustSaved = await _markTrustedDeviceIfSelected();
           if (mounted) {
+            if (!trustSaved && _rememberThisDevice) {
+              CustomSnackbar.showInfo(
+                context,
+                "Verified successfully, but this device could not be remembered.",
+              );
+            }
             await showDialog(
               context: context,
               barrierDismissible: false,
@@ -191,9 +162,9 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     ),
                     actions: [
                       TextButton(
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.pop(ctx);
-                          _handleVerificationSuccess();
+                          await _handleVerificationSuccess();
                         },
                         child: const Text(
                           "Continue",
@@ -212,8 +183,14 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
         }
       } else {
         await _securityGateService.verifyWithTotp(code);
-        await _markTrustedDeviceIfSelected();
-        _handleVerificationSuccess();
+        final trustSaved = await _markTrustedDeviceIfSelected();
+        if (mounted && !trustSaved && _rememberThisDevice) {
+          CustomSnackbar.showInfo(
+            context,
+            "Verified successfully, but this device could not be remembered.",
+          );
+        }
+        await _handleVerificationSuccess();
       }
     } on AuthException catch (_) {
       if (mounted) {
@@ -242,18 +219,21 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
     }
   }
 
-  Future<void> _markTrustedDeviceIfSelected() async {
-    if (widget.routeArgs.popOnSuccess || !_rememberThisDevice) {
-      return;
+  Future<bool> _markTrustedDeviceIfSelected() async {
+    if (!_rememberThisDevice) {
+      return true;
     }
     try {
       await _trustedDeviceRepository.trustCurrentDevice();
-    } catch (_) {
+      return true;
+    } catch (e) {
+      debugPrint('Mark trusted failed: $e');
       // Trust persistence should never block authentication success.
+      return false;
     }
   }
 
-  void _handleVerificationSuccess() {
+  Future<void> _handleVerificationSuccess() async {
     if (!mounted) {
       return;
     }
@@ -261,7 +241,20 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
       context.pop(true);
       return;
     }
-    context.go(AppRoutes.home);
+    String targetRoute = AppRoutes.home;
+    try {
+      targetRoute = await _authEntryRouteService.resolvePostAuthRoute();
+    } catch (_) {
+      targetRoute = AppRoutes.home;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    if (targetRoute == AppRoutes.verify2fa) {
+      targetRoute = AppRoutes.home;
+    }
+    context.go(targetRoute);
   }
 
   Future<void> _handleCancel() async {
@@ -353,7 +346,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     ),
                     const SizedBox(height: 24),
                     AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
+                      duration: AppMotion.defaultDuration,
                       child: Text(
                         _isRecoveryMode ? "Account Recovery" : "Security Check",
                         key: ValueKey(_isRecoveryMode),
@@ -363,7 +356,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     ),
                     const SizedBox(height: 12),
                     AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
+                      duration: AppMotion.defaultDuration,
                       child: Text(
                         _isRecoveryMode
                             ? "Enter one of your 8-character backup codes to securely regain access to your account."
@@ -377,7 +370,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                         ),
                       ),
                     ),
-                    if (!widget.routeArgs.popOnSuccess && !_isRecoveryMode) ...[
+                    if (!_isRecoveryMode) ...[
                       const SizedBox(height: 14),
                       Container(
                         width: double.infinity,
@@ -500,7 +493,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                           _isRecoveryMode
                               ? CrossFadeState.showSecond
                               : CrossFadeState.showFirst,
-                      duration: const Duration(milliseconds: 300),
+                      duration: AppMotion.defaultDuration,
                     ),
 
                     const SizedBox(height: 32),
@@ -515,7 +508,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     ),
                     const SizedBox(height: 24),
                     AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 240),
+                      duration: AppMotion.defaultDuration,
                       child:
                           _isRecoveryMode
                               ? TextButton(
@@ -536,7 +529,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                               : AnimatedOpacity(
                                 key: const ValueKey('recovery_assist_button'),
                                 opacity: _showRecoveryAssist ? 1 : 0,
-                                duration: const Duration(milliseconds: 260),
+                                duration: AppMotion.defaultDuration,
                                 curve: Curves.easeOut,
                                 child: IgnorePointer(
                                   ignoring: !_showRecoveryAssist || _isLoading,

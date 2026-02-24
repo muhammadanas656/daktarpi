@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/services/appointment_notification_service.dart';
+import '../../../settings/presentation/settings_notifier.dart';
 import '../../../doctors/data/doctor_repository.dart';
 import '../../data/appointment_repository.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
@@ -222,15 +223,31 @@ class _AppointmentConfirmationScreenState
         persistedAppointmentId = await _appointmentRepo.createAppointment(data);
       }
 
-      await _notificationService.scheduleReminder(
-        appointmentId: persistedAppointmentId,
-        appointmentLocalDateTime: appointmentDateTime,
-        reminderMinutes: _reminderOptions[_selectedReminderIndex],
-        doctorName: widget.doctor['full_name']?.toString() ?? 'your doctor',
-      );
+      bool reminderFailed = false;
+      try {
+        if (SettingsNotifier.instance.notificationsEnabled) {
+          await _notificationService.scheduleReminder(
+            appointmentId: persistedAppointmentId,
+            appointmentLocalDateTime: appointmentDateTime,
+            reminderMinutes: _reminderOptions[_selectedReminderIndex],
+            doctorName: widget.doctor['full_name']?.toString() ?? 'your doctor',
+          );
+        } else {
+          await _notificationService.cancelReminder(persistedAppointmentId);
+        }
+      } catch (error) {
+        debugPrint('Reminder scheduling failed for appointment: $error');
+        reminderFailed = true;
+      }
 
       if (mounted) {
         setState(() => _isLoading = false);
+        if (reminderFailed) {
+          CustomSnackbar.showInfo(
+            context,
+            "Appointment confirmed. Reminder could not be scheduled.",
+          );
+        }
         _showSuccessDialog(times[0]);
       }
     } catch (e) {

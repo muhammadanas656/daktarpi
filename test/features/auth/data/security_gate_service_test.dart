@@ -71,7 +71,7 @@ void main() {
       expect(decision.isAllowed, isTrue);
     });
 
-    test('verifyWithTotp verifies and refreshes session', () async {
+    test('verifyWithTotp verifies without redundant session refresh', () async {
       final provider = _FakeSecurityAuthProvider(
         isSignedIn: true,
         requiresAal2StepUp: true,
@@ -81,25 +81,28 @@ void main() {
       await service.verifyWithTotp('123456');
 
       expect(provider.totpVerified, isTrue);
-      expect(provider.refreshed, isTrue);
-    });
-
-    test('verifyWithRecoveryCode refreshes session only on success', () async {
-      final provider = _FakeSecurityAuthProvider(
-        isSignedIn: true,
-        requiresAal2StepUp: true,
-      );
-      final service = SecurityGateService(authProvider: provider);
-
-      provider.recoveryWillSucceed = false;
-      final first = await service.verifyWithRecoveryCode('ABCD-1234');
-      expect(first, isFalse);
       expect(provider.refreshed, isFalse);
-
-      provider.recoveryWillSucceed = true;
-      final second = await service.verifyWithRecoveryCode('WXYZ-9999');
-      expect(second, isTrue);
-      expect(provider.refreshed, isTrue);
     });
+
+    test(
+      'verifyWithRecoveryCode verifies without redundant session refresh',
+      () async {
+        final provider = _FakeSecurityAuthProvider(
+          isSignedIn: true,
+          requiresAal2StepUp: true,
+        );
+        final service = SecurityGateService(authProvider: provider);
+
+        provider.recoveryWillSucceed = false;
+        final first = await service.verifyWithRecoveryCode('ABCD-1234');
+        expect(first, isFalse);
+        expect(provider.refreshed, isFalse);
+
+        provider.recoveryWillSucceed = true;
+        final second = await service.verifyWithRecoveryCode('WXYZ-9999');
+        expect(second, isTrue);
+        expect(provider.refreshed, isFalse);
+      },
+    );
   });
 }

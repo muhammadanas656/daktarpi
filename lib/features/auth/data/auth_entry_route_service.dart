@@ -15,13 +15,16 @@ class AuthEntryRouteService {
        _trustedDeviceRepository =
            trustedDeviceRepository ?? TrustedDeviceRepository();
 
-  Future<String> resolvePostAuthRoute() async {
+  Future<String> resolvePostAuthRoute({String? intendedRoute}) async {
     final route =
         AuthRouteResolver(
           AuthRepositoryRouteProvider(_authRepository),
         ).resolvePostAuthRoute();
 
     if (route != AppRoutes.verify2fa) {
+      if (route == AppRoutes.home && intendedRoute != null) {
+        return intendedRoute;
+      }
       return route;
     }
 
@@ -37,8 +40,15 @@ class AuthEntryRouteService {
       return route;
     }
 
-    return _authRepository.hasCompletedProfileDob
-        ? AppRoutes.home
-        : AppRoutes.profileEdit;
+    final finalRoute =
+        _authRepository.hasCompletedProfileDob
+            ? AppRoutes.home
+            : AppRoutes.profileEdit;
+
+    if (finalRoute == AppRoutes.home && intendedRoute != null) {
+      return intendedRoute;
+    }
+
+    return finalRoute;
   }
 }

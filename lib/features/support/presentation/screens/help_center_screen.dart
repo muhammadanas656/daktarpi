@@ -34,11 +34,12 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       if (query.isEmpty) {
         _filteredList = kFaqList;
       } else {
-        _filteredList = kFaqList.where((item) {
-          return item.question.toLowerCase().contains(query) ||
-                 item.answer.toLowerCase().contains(query) ||
-                 item.category.toLowerCase().contains(query);
-        }).toList();
+        _filteredList =
+            kFaqList.where((item) {
+              return item.question.toLowerCase().contains(query) ||
+                  item.answer.toLowerCase().contains(query) ||
+                  item.category.toLowerCase().contains(query);
+            }).toList();
       }
     });
   }
@@ -56,16 +57,16 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       } else {
         // Fallback or error handling
         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             const SnackBar(content: Text("Could not launch email app.")),
-           );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Could not launch email app.")),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text("Error: $e")),
-         );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     }
   }
@@ -101,13 +102,14 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                enabledBorder: OutlineInputBorder( // Explicit border for visibility
-                   borderRadius: BorderRadius.circular(12),
-                   borderSide: BorderSide(color: Colors.grey.shade200),
+                enabledBorder: OutlineInputBorder(
+                  // Explicit border for visibility
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
                 focusedBorder: OutlineInputBorder(
-                   borderRadius: BorderRadius.circular(12),
-                   borderSide: const BorderSide(color: AppColors.primaryGreen),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.primaryGreen),
                 ),
               ),
             ),
@@ -115,66 +117,84 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
 
           // --- FAQ LIST ---
           Expanded(
-            child: _filteredList.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search_off_rounded, size: 64, color: Colors.grey[300]),
-                        const SizedBox(height: 16),
-                        Text("No results found", style: TextStyle(color: Colors.grey[500])),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemCount: _filteredList.length,
-                    itemBuilder: (context, index) {
-                      final item = _filteredList[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Theme(
-                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                          child: ExpansionTile(
-                            title: Text(
-                              item.question,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            backgroundColor: Colors.transparent,
-                            collapsedBackgroundColor: Colors.transparent,
-                            iconColor: AppColors.primaryGreen,
-                            collapsedIconColor: Colors.grey,
-                            children: [
-                              Text(
-                                item.answer,
-                                style: TextStyle(
-                                  height: 1.5,
-                                  color: Colors.grey[700],
-                                  fontSize: 14,
-                                ),
+            child:
+                _filteredList.isEmpty
+                    ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 64,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "No results found",
+                            style: TextStyle(color: Colors.grey[500]),
+                          ),
+                        ],
+                      ),
+                    )
+                    : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      itemCount: _filteredList.length,
+                      itemBuilder: (context, index) {
+                        final item = _filteredList[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
                             ],
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                          child: Theme(
+                            data: Theme.of(
+                              context,
+                            ).copyWith(dividerColor: Colors.transparent),
+                            child: ExpansionTile(
+                              title: Text(
+                                item.question,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                16,
+                                0,
+                                16,
+                                16,
+                              ),
+                              backgroundColor: Colors.transparent,
+                              collapsedBackgroundColor: Colors.transparent,
+                              iconColor: AppColors.primaryGreen,
+                              collapsedIconColor: Colors.grey,
+                              children: [
+                                Text(
+                                  item.answer,
+                                  style: TextStyle(
+                                    height: 1.5,
+                                    color: Colors.grey[700],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
           ),
 
           // --- CONTACT US BUTTON ---

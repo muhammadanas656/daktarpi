@@ -1,0 +1,13 @@
+﻿Analyzing daktarpi...
+
+warning - lib\features\doctors\presentation\screens\doctor_details_screen.dart:7:8 - Unused import: '../../../../core/errors/app_failure.dart'. Try removing the import directive. - unused_import
+warning - lib\features\menu\presentation\screens\settings_screen.dart:7:8 - Unused import: 'package:pinput/pinput.dart'. Try removing the import directive. - unused_import
+warning - test_db.dart:2:8 - Unused import: 'package:flutter/foundation.dart'. Try removing the import directive. - unused_import
+   info - lib\features\auth\presentation\screens\verify_2fa_screen.dart:4:8 - The import of 'package:flutter/services.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'. Try removing the import directive. - unnecessary_import
+   info - lib\features\menu\presentation\screens\settings_screen.dart:2163:56 - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext. - use_build_context_synchronously
+   info - test\test_db_diagnostic_test.dart:13:7 - Don't invoke 'print' in production code. Try using a logging framework. - avoid_print
+   info - test\test_db_diagnostic_test.dart:15:7 - Don't invoke 'print' in production code. Try using a logging framework. - avoid_print
+   info - test_db.dart:12:5 - Don't invoke 'print' in production code. Try using a logging framework. - avoid_print
+   info - test_db.dart:14:5 - Don't invoke 'print' in production code. Try using a logging framework. - avoid_print
+
+9 issues found.

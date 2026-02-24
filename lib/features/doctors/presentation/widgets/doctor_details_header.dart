@@ -73,6 +73,8 @@ class DoctorDetailsHeader extends StatelessWidget {
                 Text(
                   "Specialist $specialty",
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
                 Row(
