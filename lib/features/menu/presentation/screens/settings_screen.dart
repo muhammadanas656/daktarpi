@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/security/biometric_auth_service.dart';
+import '../../../../core/security/sensitive_action_step_up_service.dart';
 import '../../../../core/services/appointment_notification_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
@@ -38,6 +39,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   late bool _is2FAEnabled;
   bool _is2FAToggleBusy = false;
   String? _verifiedFactorId;
+  bool _hasRecoveryCodes = false;
   bool _hasPromptedSecurity = false;
 
   late final AuthRepository _authRepository = AuthRepository();
@@ -46,6 +48,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   );
 
   final SettingsRepository _settingsRepository = SettingsRepository();
+  final SensitiveActionStepUpService _stepUpService =
+      SensitiveActionStepUpService();
 
   bool _hasBiometricHardware = false;
   bool _isBiometricEnabled = false;
@@ -75,11 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     final user = _settingsRepository.currentUser;
 
     if (user == null || !hasHardware) {
-      if (mounted) {
-        setState(() {
-          _hasBiometricHardware = false;
-        });
-      }
+      if (mounted) setState(() => _hasBiometricHardware = false);
       return;
     }
 
@@ -104,6 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     try {
       final user = _settingsRepository.currentUser;
       final factors = await _settingsRepository.listMfaFactors();
+      final hasCodes = await _settingsRepository.userHasRecoveryCodes();
 
       if (mounted) {
         setState(() {
@@ -113,6 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               user?.appMetadata['is_2fa_enabled'] == true;
 
           _is2FAEnabled = hasFactor && isEnabledInMetadata;
+          _hasRecoveryCodes = hasCodes;
 
           if (hasFactor) {
             final verifiedFactor = totpFactors.firstWhere(
@@ -128,9 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (!_is2FAEnabled && !_isBiometricEnabled && !_hasPromptedSecurity) {
           _hasPromptedSecurity = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _showSecurityOnboardingPrompt();
-            }
+            if (mounted) _showSecurityOnboardingPrompt();
           });
         }
       }
@@ -168,9 +168,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             actions: [
               TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                },
+                onPressed: () => Navigator.pop(ctx),
                 child: const Text(
                   "Maybe Later",
                   style: TextStyle(color: Colors.grey),
@@ -199,13 +197,12 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<bool> _enforceSecurityGate(String actionReason) async {
+    // Note: To avoid recursion, we don't use _isBiometricEnabled check here
+    // when explicitly disabling biometrics. Standard TOTP/Recovery verification is used.
+
     final gateDecision = _securityGateService.evaluateAal2Gate();
-    if (gateDecision.isAllowed) {
-      return true;
-    }
-    if (gateDecision.isUnauthenticated) {
-      return false;
-    }
+    if (gateDecision.isAllowed) return true;
+    if (gateDecision.isUnauthenticated) return false;
 
     bool success = false;
     final otpController = TextEditingController();
@@ -213,9 +210,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     bool isDialogLoading = false;
     bool isRecoveryMode = false;
 
-    if (!mounted) {
-      return false;
-    }
+    if (!mounted) return false;
 
     await showDialog(
       context: context,
@@ -239,28 +234,20 @@ class _SettingsScreenState extends State<SettingsScreen>
             );
 
             Future<void> submitCode(String code) async {
-              setDialogState(() {
-                isDialogLoading = true;
-              });
+              setDialogState(() => isDialogLoading = true);
               try {
                 if (isRecoveryMode) {
                   final rpcSuccess = await _authRepository.useRecoveryCode(
                     code,
                   );
-                  if (rpcSuccess != true) {
-                    throw "Invalid backup code.";
-                  }
+                  if (rpcSuccess != true) throw "Invalid backup code.";
                 } else {
                   await _authRepository.verifyTotpCode(code);
                 }
                 success = true;
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
+                if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
-                setDialogState(() {
-                  isDialogLoading = false;
-                });
+                setDialogState(() => isDialogLoading = false);
                 otpController.clear();
                 recoveryController.clear();
                 if (ctx.mounted) {
@@ -353,9 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ),
                         ),
                         onChanged: (val) {
-                          if (val.length == 9) {
-                            submitCode(val);
-                          }
+                          if (val.length == 9) submitCode(val);
                         },
                         onSubmitted: submitCode,
                       ),
@@ -366,8 +351,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                       duration: const Duration(milliseconds: 300),
                     ),
                     if (isDialogLoading)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 16),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: AppColors.primaryGreen,
@@ -378,12 +363,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed:
-                      isDialogLoading
-                          ? null
-                          : () {
-                            Navigator.pop(ctx);
-                          },
+                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
                   child: const Text(
                     "Cancel",
                     style: TextStyle(color: Colors.grey),
@@ -420,26 +400,19 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<bool> _handleBiometricToggle(bool enable) async {
-    if (_isBiometricToggleBusy) {
-      return _isBiometricEnabled;
-    }
-    setState(() {
-      _isBiometricToggleBusy = true;
-    });
+    if (_isBiometricToggleBusy) return _isBiometricEnabled;
+    setState(() => _isBiometricToggleBusy = true);
 
     try {
       if (enable) {
-        if (!_hasBiometricHardware) {
+        if (!_hasBiometricHardware)
           throw Exception("Biometric hardware not available.");
-        }
 
         bool passedGate = await _enforceSecurityGate(
           'Verify your identity to enable Biometrics',
         );
 
-        if (!passedGate) {
-          return false;
-        }
+        if (!passedGate) return false;
 
         await Future.delayed(const Duration(milliseconds: 300));
 
@@ -452,9 +425,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           await _trustedDeviceRepository.trustCurrentDevice(
             isBiometricEnabled: true,
           );
-          if (!mounted) {
-            return false;
-          }
+          if (!mounted) return false;
           CustomSnackbar.showSuccess(
             context,
             "Biometric login successfully linked",
@@ -464,50 +435,37 @@ class _SettingsScreenState extends State<SettingsScreen>
           return false;
         }
       } else {
+        // PROMPT 6 MODIFICATION: Require verification before disabling
+        // This ensures the user must verify their identity before removing security.
         bool passedGate = await _enforceSecurityGate(
           'Verify your identity to disable biometric authentication',
         );
 
-        if (!passedGate) {
-          return true;
-        }
+        if (!passedGate) return true; // Keep enabled if gate fails
 
         await _trustedDeviceRepository.revokeCurrentDevice();
-
-        if (mounted) {
-          CustomSnackbar.showSuccess(
-            context,
-            "Biometric login removed from this device",
-          );
-        }
-
+        if (!mounted) return false;
+        CustomSnackbar.showSuccess(
+          context,
+          "Biometric login removed from this device",
+        );
         return false;
       }
     } catch (e) {
-      if (!mounted) {
-        return _isBiometricEnabled;
-      }
+      if (!mounted) return _isBiometricEnabled;
       CustomSnackbar.showError(
         context,
         "Failed to update biometric settings: ${e.toString().replaceAll('Exception: ', '')}",
       );
       return _isBiometricEnabled;
     } finally {
-      if (mounted) {
-        setState(() {
-          _isBiometricToggleBusy = false;
-        });
-      }
+      if (mounted) setState(() => _isBiometricToggleBusy = false);
     }
   }
 
   Future<bool> _handleTwoFactorToggle(bool enable) async {
-    if (_is2FAToggleBusy) {
-      return _is2FAEnabled;
-    }
-    setState(() {
-      _is2FAToggleBusy = true;
-    });
+    if (_is2FAToggleBusy) return _is2FAEnabled;
+    setState(() => _is2FAToggleBusy = true);
 
     try {
       if (enable) {
@@ -522,9 +480,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     } finally {
       if (mounted) {
         await _check2FAStatus();
-        setState(() {
-          _is2FAToggleBusy = false;
-        });
+        setState(() => _is2FAToggleBusy = false);
       }
     }
   }
@@ -544,13 +500,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     void proceedToBiometricsOrSuccess(Function setDialogState) {
       if (_hasBiometricHardware && !_isBiometricEnabled) {
-        setDialogState(() {
-          currentStep = stepBiometricPrompt;
-        });
+        setDialogState(() => currentStep = stepBiometricPrompt);
       } else {
-        setDialogState(() {
-          currentStep = stepSuccess;
-        });
+        setDialogState(() => currentStep = stepSuccess);
       }
     }
 
@@ -561,9 +513,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             _activePinSubmit = () async {
-              setDialogState(() {
-                isDialogLoading = true;
-              });
+              setDialogState(() => isDialogLoading = true);
               try {
                 await _settingsRepository.challengeAndVerify(
                   factorId: factorId!,
@@ -628,9 +578,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     isLoading: isDialogLoading,
                     label: "Set Up 2FA",
                     onTap: () async {
-                      setDialogState(() {
-                        isDialogLoading = true;
-                      });
+                      setDialogState(() => isDialogLoading = true);
                       try {
                         final factors =
                             await _settingsRepository.listMfaFactors();
@@ -655,9 +603,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           isDialogLoading = false;
                         });
                       } catch (e) {
-                        setDialogState(() {
-                          isDialogLoading = false;
-                        });
+                        setDialogState(() => isDialogLoading = false);
                         if (ctx.mounted) {
                           CustomSnackbar.showError(
                             ctx,
@@ -668,9 +614,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     },
                   ),
                   TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                    },
+                    onPressed: () => Navigator.pop(ctx),
                     child: const Text(
                       "Skip 2FA",
                       style: TextStyle(color: Colors.grey),
@@ -750,14 +694,12 @@ class _SettingsScreenState extends State<SettingsScreen>
                       ),
                     ),
                     onCompleted: (code) {
-                      if (_activePinSubmit != null) {
-                        _activePinSubmit!();
-                      }
+                      if (_activePinSubmit != null) _activePinSubmit!();
                     },
                   ),
                   if (isDialogLoading)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: AppColors.primaryGreen,
@@ -765,9 +707,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   const SizedBox(height: 16),
                   TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                    },
+                    onPressed: () => Navigator.pop(ctx),
                     child: const Text(
                       "Cancel 2FA Setup",
                       style: TextStyle(color: Colors.grey),
@@ -863,11 +803,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   const SizedBox(height: 16),
                   CheckboxListTile(
                     value: hasSavedCodes,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        hasSavedCodes = val == true;
-                      });
-                    },
+                    onChanged:
+                        (val) =>
+                            setDialogState(() => hasSavedCodes = val == true),
                     title: const Text(
                       "I have safely stored these codes",
                       style: TextStyle(
@@ -908,7 +846,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    "Would you like to enable Biometric Login for faster access on this device?",
+                    "Would you like to enable Biometric Login (Face ID/Touch ID) for faster access on this device?",
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: AppColors.textLight),
                   ),
@@ -917,9 +855,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     label: "Enable Biometric Login",
                     isLoading: isDialogLoading,
                     onTap: () async {
-                      setDialogState(() {
-                        isDialogLoading = true;
-                      });
+                      setDialogState(() => isDialogLoading = true);
                       try {
                         await Future.delayed(const Duration(milliseconds: 400));
                         final authenticated = await _biometricAuthService
@@ -945,9 +881,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                    },
+                    onPressed: () => Navigator.pop(ctx),
                     child: const Text(
                       "Skip Biometrics",
                       style: TextStyle(color: Colors.grey),
@@ -1023,9 +957,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       'Verify your identity to disable Two-Factor Authentication',
     );
 
-    if (!passedGate || !mounted) {
-      return false;
-    }
+    if (!passedGate || !mounted) return false;
 
     try {
       CustomSnackbar.showInfo(context, "Disabling 2FA...");
@@ -1054,15 +986,11 @@ class _SettingsScreenState extends State<SettingsScreen>
       await _check2FAStatus();
       await _checkBiometricStatus();
 
-      if (!mounted) {
-        return true;
-      }
+      if (!mounted) return true;
       CustomSnackbar.showSuccess(context, "2FA has been disabled.");
       return true;
     } catch (e) {
-      if (!mounted) {
-        return false;
-      }
+      if (!mounted) return false;
       CustomSnackbar.showError(context, "Failed to disable 2FA.");
       return false;
     }
@@ -1082,9 +1010,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     bool passedGate = await _enforceSecurityGate(
       'Verify your identity to change your password',
     );
-    if (!passedGate || !mounted) {
-      return;
-    }
+    if (!passedGate || !mounted) return;
 
     bool isDialogLoading = false;
     final newPassController = TextEditingController();
@@ -1149,9 +1075,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                       isPassword: true,
                     ),
                     if (isDialogLoading)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 16),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 16),
+                        child: Center(
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: AppColors.primaryGreen,
@@ -1164,11 +1090,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               actions: [
                 TextButton(
                   onPressed:
-                      isDialogLoading
-                          ? null
-                          : () {
-                            Navigator.pop(dialogCtx);
-                          },
+                      isDialogLoading ? null : () => Navigator.pop(dialogCtx),
                   child: const Text(
                     "Cancel",
                     style: TextStyle(color: Colors.grey),
@@ -1196,40 +1118,26 @@ class _SettingsScreenState extends State<SettingsScreen>
                               );
                               return;
                             }
-                            setDialogState(() {
-                              isDialogLoading = true;
-                            });
+                            setDialogState(() => isDialogLoading = true);
                             try {
                               await _settingsRepository.updatePassword(newPass);
-                              if (!dialogCtx.mounted) {
-                                return;
-                              }
+                              if (!dialogCtx.mounted) return;
                               Navigator.pop(dialogCtx);
-                              if (!mounted) {
-                                return;
-                              }
+                              if (!mounted) return;
                               CustomSnackbar.showSuccess(
                                 context,
                                 "Password updated successfully!",
                               );
                             } on AppFailure catch (failure) {
-                              setDialogState(() {
-                                isDialogLoading = false;
-                              });
-                              if (!ctx.mounted) {
-                                return;
-                              }
+                              setDialogState(() => isDialogLoading = false);
+                              if (!ctx.mounted) return;
                               CustomSnackbar.showError(
                                 ctx,
                                 failure.userMessage,
                               );
                             } catch (e) {
-                              setDialogState(() {
-                                isDialogLoading = false;
-                              });
-                              if (!ctx.mounted) {
-                                return;
-                              }
+                              setDialogState(() => isDialogLoading = false);
+                              if (!ctx.mounted) return;
                               CustomSnackbar.showError(
                                 ctx,
                                 "Failed to update password",
@@ -1256,9 +1164,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     bool passedGate = await _enforceSecurityGate(
       'Verify your identity to delete your account',
     );
-    if (!passedGate || !mounted) {
-      return;
-    }
+    if (!passedGate || !mounted) return;
 
     final confirmController = TextEditingController();
     bool isDialogLoading = false;
@@ -1319,21 +1225,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                           vertical: 12,
                         ),
                       ),
-                      onChanged: (val) {
-                        setDialogState(() {});
-                      },
+                      onChanged: (val) => setDialogState(() {}),
                     ),
                   ],
                 ),
               ),
               actions: [
                 TextButton(
-                  onPressed:
-                      isDialogLoading
-                          ? null
-                          : () {
-                            Navigator.pop(ctx);
-                          },
+                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
                   child: const Text(
                     "Cancel",
                     style: TextStyle(color: Colors.grey),
@@ -1363,7 +1262,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               color:
                                   canDelete
                                       ? Colors.red
-                                      : Colors.red.withValues(alpha: 0.5),
+                                      : Colors.red.withOpacity(0.5),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1377,30 +1276,20 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _executeAccountDeletion() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     try {
       await _settingsRepository.deleteAccount();
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       CustomSnackbar.showSuccess(context, "Account deleted successfully.");
       context.go(AppRoutes.login);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       CustomSnackbar.showError(
         context,
         "Account deletion failed: ${e.toString()}",
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1417,9 +1306,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded),
-              onPressed: () {
-                context.pop();
-              },
+              onPressed: () => context.pop(),
               color: AppColors.textDark,
             ),
           ),
@@ -1440,10 +1327,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   icon: Icons.link,
                   title: "Linked Accounts",
                   subtitle: "Facebook, Google",
-                  onTap: () {
-                    context.push(AppRoutes.linkedAccounts);
-                  },
+                  onTap: () => context.push(AppRoutes.linkedAccounts),
                 ),
+
                 if (_hasBiometricHardware && _is2FAEnabled)
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -1452,7 +1338,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03),
+                          color: Colors.black.withOpacity(0.03),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -1466,7 +1352,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       leading: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                          color: AppColors.primaryGreen.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -1528,14 +1414,13 @@ class _SettingsScreenState extends State<SettingsScreen>
                         activeColor: AppColors.primaryGreen,
                         onAttemptChange: (val) async {
                           final result = await _handleBiometricToggle(val);
-                          setState(() {
-                            _isBiometricEnabled = result;
-                          });
+                          setState(() => _isBiometricEnabled = result);
                           return result;
                         },
                       ),
                     ),
                   ),
+
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
@@ -1543,7 +1428,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
+                        color: Colors.black.withOpacity(0.03),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1557,7 +1442,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     leading: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                        color: AppColors.primaryGreen.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -1622,6 +1507,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                 ),
+
                 _buildSettingsTile(
                   context,
                   icon: Icons.delete_forever,
@@ -1629,8 +1515,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                   isDestructive: true,
                   onTap: _showDeleteConfirmation,
                 ),
+
                 const SizedBox(height: 32),
                 _buildSectionHeader("Preferences"),
+
                 AnimatedBuilder(
                   animation: SettingsNotifier.instance,
                   builder: (context, child) {
@@ -1641,7 +1529,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       secondary: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                          color: AppColors.primaryGreen.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -1678,7 +1566,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                     );
                   },
                 ),
-                if (_isBiometricEnabled)
+
+                if (_isBiometricEnabled) ...[
                   AnimatedBuilder(
                     animation: SettingsNotifier.instance,
                     builder: (context, child) {
@@ -1689,25 +1578,25 @@ class _SettingsScreenState extends State<SettingsScreen>
                         value: _getTimeoutName(
                           SettingsNotifier.instance.inactivityTimeoutMs,
                         ),
-                        onTap: () {
-                          _showTimeoutSelectionDialog();
-                        },
+                        onTap: () => _showTimeoutSelectionDialog(),
                       );
                     },
                   ),
+                ],
+
                 _buildSettingsTile(
                   context,
                   icon: Icons.attach_money,
                   title: "Currency",
                   value: ProfileNotifier.instance.currencySymbol,
                   subtitle: "Set automatically by location",
-                  onTap: () {
-                    CustomSnackbar.showInfo(
-                      context,
-                      "Currency is automatically configured based on your profile location.",
-                    );
-                  },
+                  onTap:
+                      () => CustomSnackbar.showInfo(
+                        context,
+                        "Currency is automatically configured based on your profile location.",
+                      ),
                 ),
+
                 _buildSettingsTile(
                   context,
                   icon: Icons.dark_mode_outlined,
@@ -1794,11 +1683,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                         );
                       },
                     );
-                    if (mounted) {
-                      setState(() {});
-                    }
+                    if (mounted) setState(() {});
                   },
                 ),
+
                 AnimatedBuilder(
                   animation: SettingsNotifier.instance,
                   builder: (context, child) {
@@ -1809,7 +1697,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       secondary: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                          color: AppColors.primaryGreen.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -1841,31 +1729,26 @@ class _SettingsScreenState extends State<SettingsScreen>
                     );
                   },
                 ),
+
                 const SizedBox(height: 32),
                 _buildSectionHeader("Support & Legal"),
                 _buildSettingsTile(
                   context,
                   icon: Icons.help_outline,
                   title: "Help Center",
-                  onTap: () {
-                    context.push(AppRoutes.helpCenter);
-                  },
+                  onTap: () => context.push(AppRoutes.helpCenter),
                 ),
                 _buildSettingsTile(
                   context,
                   icon: Icons.privacy_tip_outlined,
                   title: "Privacy Policy",
-                  onTap: () {
-                    context.push(AppRoutes.privacyPolicy);
-                  },
+                  onTap: () => context.push(AppRoutes.privacyPolicy),
                 ),
                 _buildSettingsTile(
                   context,
                   icon: Icons.description_outlined,
                   title: "Terms of Service",
-                  onTap: () {
-                    context.push(AppRoutes.termsOfService);
-                  },
+                  onTap: () => context.push(AppRoutes.termsOfService),
                 ),
                 _buildSettingsTile(
                   context,
@@ -1881,7 +1764,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
         if (_isLoading)
           Container(
-            color: Colors.black.withValues(alpha: 0.5),
+            color: Colors.black.withOpacity(0.5),
             child: const Center(
               child: CircularProgressIndicator(color: AppColors.primaryGreen),
             ),
@@ -1921,7 +1804,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withOpacity(0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1935,8 +1818,8 @@ class _SettingsScreenState extends State<SettingsScreen>
           decoration: BoxDecoration(
             color:
                 isDestructive
-                    ? Colors.red.withValues(alpha: 0.1)
-                    : AppColors.primaryGreen.withValues(alpha: 0.1),
+                    ? Colors.red.withOpacity(0.1)
+                    : AppColors.primaryGreen.withOpacity(0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -2000,18 +1883,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   String _getTimeoutName(int ms) {
-    if (ms == 60000) {
-      return "1 Minute";
-    }
-    if (ms == 300000) {
-      return "5 Minutes";
-    }
-    if (ms == 900000) {
-      return "15 Minutes";
-    }
-    if (ms == 1800000) {
-      return "30 Minutes";
-    }
+    if (ms == 60000) return "1 Minute";
+    if (ms == 300000) return "5 Minutes";
+    if (ms == 900000) return "15 Minutes";
+    if (ms == 1800000) return "30 Minutes";
     return "5 Minutes";
   }
 
@@ -2045,9 +1920,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   onTap: () {
                     SettingsNotifier.instance.updateInactivityTimeout(timeout);
                     Navigator.pop(context);
-                    if (mounted) {
-                      setState(() {});
-                    }
+                    if (mounted) setState(() {});
                   },
                 );
               }),

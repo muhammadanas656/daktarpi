@@ -9,21 +9,29 @@ class SettingsNotifier extends ChangeNotifier {
   static const String keyThemeMode = 'theme_mode';
   static const String keyInactivityTimeout = 'inactivity_timeout';
   static const String keyNotificationsEnabled = 'notifications_enabled';
+  // NEW: Key for medical records lock persistence
+  static const String keyMedicalRecordsLocked = 'medical_records_locked';
 
   bool _isLoaded = false;
   bool _showDrawerHint = true;
   ThemeMode _themeMode = ThemeMode.system;
   int _inactivityTimeoutMs = 300000; // default 5 minutes
   bool _notificationsEnabled = true;
+  // NEW: Internal state for medical records lock
+  bool _medicalRecordsLocked = false;
 
   bool get isLoaded => _isLoaded;
   bool get showDrawerHint => _showDrawerHint;
   ThemeMode get themeMode => _themeMode;
   int get inactivityTimeoutMs => _inactivityTimeoutMs;
   bool get notificationsEnabled => _notificationsEnabled;
+  // NEW: Getter for the medical records lock state
+  bool get medicalRecordsLocked => _medicalRecordsLocked;
 
   Future<void> loadSettings() async {
-    if (_isLoaded) return;
+    if (_isLoaded) {
+      return;
+    }
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -35,10 +43,25 @@ class SettingsNotifier extends ChangeNotifier {
       _inactivityTimeoutMs = prefs.getInt(keyInactivityTimeout) ?? 300000;
       _notificationsEnabled = prefs.getBool(keyNotificationsEnabled) ?? true;
 
+      // NEW: Load the saved medical records lock state
+      _medicalRecordsLocked = prefs.getBool(keyMedicalRecordsLocked) ?? false;
+
       _isLoaded = true;
       notifyListeners();
     } catch (e) {
       debugPrint("SettingsNotifier: Failed to load settings: $e");
+    }
+  }
+
+  // NEW: Method to update and persist the medical records lock state
+  Future<void> updateMedicalRecordsLock(bool value) async {
+    _medicalRecordsLocked = value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyMedicalRecordsLocked, value);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save records lock setting: $e");
     }
   }
 
@@ -108,6 +131,7 @@ class SettingsNotifier extends ChangeNotifier {
     _themeMode = ThemeMode.system;
     _inactivityTimeoutMs = 300000;
     _notificationsEnabled = true;
+    _medicalRecordsLocked = false; // Reset lock on logout
     notifyListeners();
   }
 }

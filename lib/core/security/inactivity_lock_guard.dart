@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/data/trusted_device_repository.dart'; // NEW IMPORT
+import '../../features/settings/presentation/settings_notifier.dart';
 import '../constants/app_routes.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_colors.dart';
@@ -30,6 +32,9 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     with WidgetsBindingObserver {
   final AuthRepository _authRepository = AuthRepository();
   final BiometricAuthService _biometricAuthService = BiometricAuthService();
+  final TrustedDeviceRepository _trustedDeviceRepository =
+      TrustedDeviceRepository(); // ADDED
+
   Timer? _inactivityTimer;
   bool _isLocked = false;
   bool _isUnlocking = false;
@@ -71,48 +76,67 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     }
 
     if (state == AppLifecycleState.resumed) {
-      _loadBiometricAvailability();
-
-      if (_isAbsoluteTimeoutExceeded()) {
-        unawaited(_signOutFromLockScreen());
-        return;
-      }
-
-      final pausedAt = _pausedAt;
-      _pausedAt = null;
-
-      if (pausedAt != null) {
-        final elapsed = DateTime.now().difference(pausedAt);
-        if (elapsed >= widget.timeout) {
-          _lockAndScheduleUnlock();
+      // Re-check security status on resume to catch settings changes
+      _loadBiometricAvailability().then((_) {
+        if (_isAbsoluteTimeoutExceeded()) {
+          unawaited(_signOutFromLockScreen());
           return;
         }
-      }
 
-      if (!_isLocked) {
-        _resetTimer();
-      }
+        final pausedAt = _pausedAt;
+        _pausedAt = null;
+
+        // Only enforce inactivity lock if biometrics are active/configured
+        if (pausedAt != null && _biometricAvailable) {
+          final elapsed = DateTime.now().difference(pausedAt);
+          if (elapsed >= widget.timeout) {
+            _lockAndScheduleUnlock();
+            return;
+          }
+        }
+
+        if (!_isLocked) {
+          _resetTimer();
+        }
+      });
     }
   }
 
   Future<void> _loadBiometricAvailability() async {
-    final available = await _biometricAuthService.canUseBiometricUnlock();
+    final hasHardware = await _biometricAuthService.canUseBiometricUnlock();
+    final userId = _authRepository.currentUserId;
+
+    bool isConfigured = false;
+    if (userId != null) {
+      isConfigured = await _trustedDeviceRepository.isBiometricEnabledForDevice(
+        userId: userId,
+      );
+    }
+
     if (!mounted) {
       return;
     }
-    setState(() => _biometricAvailable = available);
+
+    setState(() {
+      // Feature only functions if hardware exists AND user enabled it
+      _biometricAvailable = hasHardware && isConfigured;
+    });
   }
 
   void _resetTimer() {
     _ensureSessionClock();
+
     if (_isAbsoluteTimeoutExceeded()) {
       unawaited(_signOutFromLockScreen());
       return;
     }
 
-    if (_isLocked) {
+    // NEW Logic: If security is not configured, do not start the inactivity timer
+    if (!_biometricAvailable || _isLocked) {
+      _inactivityTimer?.cancel();
       return;
     }
+
     _inactivityTimer?.cancel();
     _inactivityTimer = Timer(widget.timeout, _handleSessionTimeout);
   }
@@ -133,14 +157,17 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   }
 
   void _lockAndScheduleUnlock() {
-    if (!mounted) {
+    if (!mounted || !_biometricAvailable) {
       return;
     }
     _inactivityTimer?.cancel();
     if (!_isLocked) {
-      setState(() => _isLocked = true);
+      setState(() {
+        _isLocked = true;
+      });
+
+      SettingsNotifier.instance.updateMedicalRecordsLock(true);
     }
-    // Removed automatic unlock to ensure user initiates the biometric prompt manually.
   }
 
   Future<void> _unlock() async {
@@ -153,7 +180,9 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
       return;
     }
 
-    setState(() => _isUnlocking = true);
+    setState(() {
+      _isUnlocking = true;
+    });
     bool isAuthenticated = false;
     try {
       if (_biometricAvailable) {
@@ -170,7 +199,9 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
           });
           _resetTimer();
         } else {
-          setState(() => _isUnlocking = false);
+          setState(() {
+            _isUnlocking = false;
+          });
         }
       }
     }

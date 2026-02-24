@@ -16,6 +16,7 @@ import '../../../../features/medical_records/data/medical_record_repository.dart
 import '../models/medical_record_route_args.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../settings/presentation/settings_notifier.dart'; // IMPORTED
 import '../widgets/record_card.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
@@ -34,7 +35,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  bool _isProtected = false;
+  // REMOVED local _isProtected variable to use global SettingsNotifier instead
   bool _hasSecurityConfigured = false;
 
   @override
@@ -103,22 +104,31 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       return;
     }
 
+    // Access global state from the Notifier
+    final isCurrentlyLocked = SettingsNotifier.instance.medicalRecordsLocked;
     final reason =
-        _isProtected
+        isCurrentlyLocked
             ? 'Unlock your medical records'
             : 'Protect your medical records';
+
     final authenticated = await _biometricService.authenticate(
       localizedReason: reason,
     );
 
     if (authenticated && mounted) {
-      setState(() {
-        _isProtected = !_isProtected;
-      });
-      CustomSnackbar.showSuccess(
-        context,
-        _isProtected ? "Records protected" : "Records unlocked",
+      // Update global persistent state
+      await SettingsNotifier.instance.updateMedicalRecordsLock(
+        !isCurrentlyLocked,
       );
+
+      if (mounted) {
+        CustomSnackbar.showSuccess(
+          context,
+          SettingsNotifier.instance.medicalRecordsLocked
+              ? "Records protected"
+              : "Records unlocked",
+        );
+      }
     }
   }
 
@@ -328,31 +338,39 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text("Medical Records", style: AppTextStyles.h2),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.pop(),
-          color: AppColors.textDark,
-        ),
-        actions: [
-          if (_hasSecurityConfigured)
-            IconButton(
-              icon: Icon(
-                _isProtected ? Icons.lock_rounded : Icons.lock_open_rounded,
-                color: _isProtected ? AppColors.primaryGreen : Colors.grey,
-              ),
-              onPressed: _toggleProtection,
+    // Listen to SettingsNotifier for persistent protection state
+    return AnimatedBuilder(
+      animation: SettingsNotifier.instance,
+      builder: (context, child) {
+        final isLocked = SettingsNotifier.instance.medicalRecordsLocked;
+
+        return Scaffold(
+          backgroundColor: Colors.grey[50],
+          appBar: AppBar(
+            title: Text("Medical Records", style: AppTextStyles.h2),
+            centerTitle: true,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              onPressed: () => context.pop(),
+              color: AppColors.textDark,
             ),
-        ],
-      ),
-      body: _buildBody(),
-      bottomNavigationBar: _isProtected ? null : _buildBottomBar(),
+            actions: [
+              if (_hasSecurityConfigured)
+                IconButton(
+                  icon: Icon(
+                    isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                    color: isLocked ? AppColors.primaryGreen : Colors.grey,
+                  ),
+                  onPressed: _toggleProtection,
+                ),
+            ],
+          ),
+          body: _buildBody(isLocked),
+          bottomNavigationBar: isLocked ? null : _buildBottomBar(),
+        );
+      },
     );
   }
 
@@ -383,7 +401,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(bool isLocked) {
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.primaryGreen),
@@ -392,9 +410,12 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     if (_errorMessage != null) {
       return Center(child: Text(_errorMessage!));
     }
-    if (_isProtected) {
+
+    // UI reacts to persistent lock state
+    if (isLocked) {
       return _buildProtectedState();
     }
+
     if (_records.isEmpty) {
       return _buildEmptyState();
     }
