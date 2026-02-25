@@ -7,6 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/auth_text_field.dart';
 import '../../../../core/utils/security_formatters.dart';
+import '../../../../core/security/sensitive_action_step_up_service.dart'; // NEW IMPORT
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/data/security_gate_service.dart';
 import '../../data/settings_repository.dart';
@@ -21,6 +22,7 @@ class LinkedAccountsScreen extends StatefulWidget {
 class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   bool _isLoading = false;
   List<UserIdentity> _identities = [];
+
   final AuthRepository _authRepository = AuthRepository();
   late final SettingsRepository _settingsRepository = SettingsRepository(
     authRepository: _authRepository,
@@ -29,10 +31,20 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     authProvider: AuthRepositorySecurityProvider(_authRepository),
   );
 
+  // NEW: Service for biometric step-up
+  final SensitiveActionStepUpService _stepUpService =
+      SensitiveActionStepUpService();
+
   @override
   void initState() {
     super.initState();
-    _fetchIdentities(withLoading: true);
+
+    // INSTANT RENDERING: Load identities from local session immediately
+    final user = _settingsRepository.currentUser;
+    _identities = user?.identities ?? [];
+
+    // Background refresh to ensure up-to-date info
+    _fetchIdentities(withLoading: _identities.isEmpty);
   }
 
   Future<void> _fetchIdentities({bool withLoading = false}) async {
@@ -51,11 +63,8 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        CustomSnackbar.showError(
-          context,
-          "Failed to refresh linked accounts: $e",
-        );
+      if (mounted && withLoading) {
+        CustomSnackbar.showError(context, "Failed to refresh linked accounts.");
       }
     } finally {
       if (withLoading && mounted) {
@@ -66,7 +75,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     }
   }
 
-  Future<bool> _enforceAAL2() async {
+  Future<bool> _enforceAAL2(String localizedReason) async {
     final gateDecision = _securityGateService.evaluateAal2Gate();
     if (gateDecision.isAllowed) {
       return true;
@@ -75,6 +84,15 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       return false;
     }
 
+    // NEW: TRY BIOMETRIC STEP-UP FIRST
+    final biometricSuccess = await _stepUpService.authenticateIfTrusted(
+      localizedReason: localizedReason,
+    );
+    if (biometricSuccess) {
+      return true;
+    }
+
+    // FALLBACK TO MANUAL VERIFICATION DIALOG
     bool success = false;
     final otpController = TextEditingController();
     final recoveryController = TextEditingController();
@@ -186,11 +204,9 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                         controller: otpController,
                         autofocus: true,
                         defaultPinTheme: defaultPinTheme,
-                        // SECURITY FIXES:
-                        onClipboardFound: null, // Disables auto-paste popup
-                        autofillHints: null, // Disables OS autofill suggestions
-                        enableInteractiveSelection:
-                            false, // Disables manual paste context menu
+                        onClipboardFound: null,
+                        autofillHints: null,
+                        enableInteractiveSelection: false,
                         focusedPinTheme: defaultPinTheme.copyWith(
                           decoration: defaultPinTheme.decoration!.copyWith(
                             border: Border.all(
@@ -202,14 +218,13 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                         ],
-                        onCompleted: submitCode, // Keeps automatic submit
+                        onCompleted: submitCode,
                       ),
                       secondChild: TextField(
                         controller: recoveryController,
                         keyboardType: TextInputType.text,
                         textCapitalization: TextCapitalization.characters,
-                        enableInteractiveSelection:
-                            false, // Disables paste for backup codes
+                        enableInteractiveSelection: false,
                         inputFormatters: [BackupCodeFormatter()],
                         textAlign: TextAlign.center,
                         style: const TextStyle(
@@ -335,8 +350,8 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   }
 
   Future<void> _linkEmail() async {
-    final passed2FA = await _enforceAAL2();
-    if (!passed2FA) {
+    final passedSecurity = await _enforceAAL2('Verify identity to link Email');
+    if (!passedSecurity) {
       return;
     }
 
@@ -468,8 +483,10 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   }
 
   Future<void> _unlinkIdentity(UserIdentity identity) async {
-    final passed2FA = await _enforceAAL2();
-    if (!passed2FA) {
+    final passedSecurity = await _enforceAAL2(
+      'Verify identity to unlink ${identity.provider}',
+    );
+    if (!passedSecurity) {
       return;
     }
 

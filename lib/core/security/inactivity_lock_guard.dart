@@ -133,6 +133,11 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   }
 
   void _resetTimer() {
+    if (_isLocked) {
+      _inactivityTimer?.cancel();
+      return;
+    }
+
     _ensureSessionClock();
 
     if (_isAbsoluteTimeoutExceeded()) {
@@ -142,7 +147,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
 
     final savedTimeoutMs = SettingsNotifier.instance.inactivityTimeoutMs;
 
-    if (!_biometricAvailable || _isLocked || savedTimeoutMs <= 0) {
+    if (!_biometricAvailable || savedTimeoutMs <= 0) {
       _inactivityTimer?.cancel();
       return;
     }
