@@ -664,7 +664,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
                     child: const Text(
-                      "Skip 2FA",
+                      "Close",
                       style: TextStyle(color: Colors.grey),
                     ),
                   ),

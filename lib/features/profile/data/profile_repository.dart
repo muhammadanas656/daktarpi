@@ -125,4 +125,59 @@ class ProfileRepository {
       );
     }
   }
+  // --- PATIENT CATEGORIES LOGIC ---
+
+  Future<List<String>> getPatientCategories(String userId) async {
+    try {
+      final response =
+          await _client
+              .from('profiles')
+              .select('saved_patient_categories')
+              .eq('id', userId)
+              .maybeSingle();
+
+      if (response != null && response['saved_patient_categories'] != null) {
+        final list = response['saved_patient_categories'] as List<dynamic>;
+        return list.map((e) => e.toString()).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<void> savePatientCategory(String category) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+
+    try {
+      final currentCategories = await getPatientCategories(userId);
+      if (!currentCategories.contains(category)) {
+        currentCategories.add(category);
+        await _client
+            .from('profiles')
+            .update({'saved_patient_categories': currentCategories})
+            .eq('id', userId);
+      }
+    } catch (_) {} // Fails silently to not disrupt booking flow
+  }
+
+  Future<void> removePatientCategory(String category) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+
+    try {
+      final currentCategories = await getPatientCategories(userId);
+      currentCategories.remove(category);
+      await _client
+          .from('profiles')
+          .update({'saved_patient_categories': currentCategories})
+          .eq('id', userId);
+    } catch (e) {
+      throw AppFailure.fromError(
+        e,
+        fallbackUserMessage: 'Could not remove category.',
+      );
+    }
+  }
 }

@@ -128,6 +128,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               ? "Records protected"
               : "Records unlocked",
         );
+        if (!SettingsNotifier.instance.medicalRecordsLocked) {
+          _fetchRecords();
+        }
       }
     }
   }

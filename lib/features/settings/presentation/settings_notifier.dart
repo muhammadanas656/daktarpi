@@ -69,6 +69,13 @@ class SettingsNotifier extends ChangeNotifier {
 
       // NEW: Load cached security statuses from disk
       _is2FAEnabled = prefs.getBool(key2FAEnabled) ?? false;
+      
+      // Enforce security dependency on medical records lock
+      final hasSecurityConfigured = _is2FAEnabled || _isBiometricEnabled;
+      if (!hasSecurityConfigured) {
+        _medicalRecordsLocked = false;
+        await prefs.setBool(keyMedicalRecordsLocked, false);
+      }
 
       _isLoaded = true;
       notifyListeners();
@@ -85,6 +92,11 @@ class SettingsNotifier extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(key2FAEnabled, value);
+      
+      // If turning off 2FA and biometrics is also off, unlock records
+      if (!value && !_isBiometricEnabled) {
+        await updateMedicalRecordsLock(false);
+      }
     } catch (e) {
       debugPrint("SettingsNotifier: Failed to save 2FA status: $e");
     }
@@ -99,6 +111,11 @@ class SettingsNotifier extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyHasBiometricHardware, hasHardware);
       await prefs.setBool(keyIsBiometricEnabled, isEnabled);
+      
+      // If turning off biometrics and 2FA is also off, unlock records
+      if (!isEnabled && !_is2FAEnabled) {
+        await updateMedicalRecordsLock(false);
+      }
     } catch (e) {
       debugPrint("SettingsNotifier: Failed to save biometric state: $e");
     }

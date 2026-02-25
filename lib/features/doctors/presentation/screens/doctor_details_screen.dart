@@ -4,7 +4,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/errors/app_failure.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
@@ -520,8 +519,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       _routePoints.clear();
       _isUserPanning = false;
       _isDistanceBarExpanded = false;
-      _distanceToClinic = null;
+      // Removed: _distanceToClinic = null; to allow smooth shrink animation
     });
+
+    _updateDistance(); // Added: Revert to straight-line distance smoothly
 
     // Reset view to Clinic
     if (_selectedClinic != null) {
@@ -1334,78 +1335,83 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         ),
                       ],
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.route,
-                              color:
-                                  _isNavigating
-                                      ? AppColors.primaryGreen
-                                      : Colors.blueGrey,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _distanceToClinic! > 1000
-                                  ? "${(_distanceToClinic! / 1000).toStringAsFixed(1)} km away"
-                                  : "${_distanceToClinic!.toStringAsFixed(0)} m away",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textDark,
-                                fontSize: 12,
-                              ),
-                            ),
-                            if (_isNavigating) ...[
-                              const SizedBox(width: 8),
-                              Icon(
-                                _isDistanceBarExpanded
-                                    ? Icons.expand_less
-                                    : Icons.expand_more,
-                                color: Colors.grey,
-                                size: 16,
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (_isDistanceBarExpanded && _isNavigating) ...[
-                          const SizedBox(height: 12),
-                          const Divider(height: 1, color: Colors.black12),
-                          const SizedBox(height: 12),
+                    child: AnimatedSize(
+                      duration: AppMotion.defaultDuration,
+                      curve: Curves.easeInOut,
+                      alignment: Alignment.topCenter,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text(
-                                "Active Navigation",
-                                style: TextStyle(
-                                  color: AppColors.primaryGreen,
+                              Icon(
+                                Icons.route,
+                                color:
+                                    _isNavigating
+                                        ? AppColors.primaryGreen
+                                        : Colors.blueGrey,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _distanceToClinic! > 1000
+                                    ? "${(_distanceToClinic! / 1000).toStringAsFixed(1)} km away"
+                                    : "${_distanceToClinic!.toStringAsFixed(0)} m away",
+                                style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 13,
+                                  color: AppColors.textDark,
+                                  fontSize: 12,
                                 ),
                               ),
-                              const SizedBox(width: 24),
-                              InkWell(
-                                onTap: _cancelNavigation,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.red,
-                                    size: 18,
-                                  ),
+                              if (_isNavigating) ...[
+                                const SizedBox(width: 8),
+                                Icon(
+                                  _isDistanceBarExpanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  color: Colors.grey,
+                                  size: 16,
                                 ),
-                              ),
+                              ],
                             ],
                           ),
+                          if (_isDistanceBarExpanded && _isNavigating) ...[
+                            const SizedBox(height: 12),
+                            const Divider(height: 1, color: Colors.black12),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  "Active Navigation",
+                                  style: TextStyle(
+                                    color: AppColors.primaryGreen,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(width: 24),
+                                InkWell(
+                                  onTap: _cancelNavigation,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withValues(alpha: 0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),

@@ -8,6 +8,7 @@ import '../../../../core/services/appointment_notification_service.dart';
 import '../../../settings/presentation/settings_notifier.dart';
 import '../../../doctors/data/doctor_repository.dart';
 import '../../data/appointment_repository.dart';
+import '../../../profile/data/profile_repository.dart'; // Added ProfileRepository
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import 'package:intl/intl.dart';
@@ -49,6 +50,7 @@ class _AppointmentConfirmationScreenState
 
   final _doctorRepo = DoctorRepository();
   final _appointmentRepo = AppointmentRepository();
+  final _profileRepo = ProfileRepository(); // Initialized Profile Repo
   final _notificationService = AppointmentNotificationService.instance;
 
   final TextStyle _sectionHeaderStyle = AppTextStyles.h3;
@@ -222,6 +224,15 @@ class _AppointmentConfirmationScreenState
       } else {
         persistedAppointmentId = await _appointmentRepo.createAppointment(data);
       }
+
+      // --- SAVE CUSTOM CATEGORY IF ONE EXISTS ---
+      if (widget.patientDetails.containsKey('newCategoryToSave')) {
+        final newCat = widget.patientDetails['newCategoryToSave'];
+        if (newCat != null && newCat.toString().isNotEmpty) {
+          await _profileRepo.savePatientCategory(newCat.toString());
+        }
+      }
+      // ------------------------------------------
 
       bool reminderFailed = false;
       try {
