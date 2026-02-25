@@ -226,7 +226,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           if (_selectedProfileIndex == 1) {
             setState(() {
               _nameController.text = profile.fullName;
-              _phoneController.text = profile.phoneNumber ?? "";
+              _phoneController.text = (profile.countryCode != null && profile.phoneNumber != null)
+                  ? '${profile.countryCode} ${profile.phoneNumber}'
+                  : (profile.phoneNumber ?? "");
               _emailController.text = userEmail ?? "";
 
               if (profile.dateOfBirth != null) {

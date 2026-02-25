@@ -9,15 +9,17 @@ class SettingsNotifier extends ChangeNotifier {
   static const String keyThemeMode = 'theme_mode';
   static const String keyInactivityTimeout = 'inactivity_timeout';
   static const String keyNotificationsEnabled = 'notifications_enabled';
-  // NEW: Key for medical records lock persistence
+  // Key for medical records lock persistence
   static const String keyMedicalRecordsLocked = 'medical_records_locked';
 
   bool _isLoaded = false;
   bool _showDrawerHint = true;
   ThemeMode _themeMode = ThemeMode.system;
+
+  // Note: 0 ms represents "Off", 3600000 ms represents "1 Hour"
   int _inactivityTimeoutMs = 300000; // default 5 minutes
   bool _notificationsEnabled = true;
-  // NEW: Internal state for medical records lock
+  // Internal state for medical records lock
   bool _medicalRecordsLocked = false;
 
   bool get isLoaded => _isLoaded;
@@ -25,7 +27,7 @@ class SettingsNotifier extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   int get inactivityTimeoutMs => _inactivityTimeoutMs;
   bool get notificationsEnabled => _notificationsEnabled;
-  // NEW: Getter for the medical records lock state
+  // Getter for the medical records lock state
   bool get medicalRecordsLocked => _medicalRecordsLocked;
 
   Future<void> loadSettings() async {
@@ -43,7 +45,7 @@ class SettingsNotifier extends ChangeNotifier {
       _inactivityTimeoutMs = prefs.getInt(keyInactivityTimeout) ?? 300000;
       _notificationsEnabled = prefs.getBool(keyNotificationsEnabled) ?? true;
 
-      // NEW: Load the saved medical records lock state
+      // Load the saved medical records lock state
       _medicalRecordsLocked = prefs.getBool(keyMedicalRecordsLocked) ?? false;
 
       _isLoaded = true;
@@ -53,7 +55,7 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
-  // NEW: Method to update and persist the medical records lock state
+  // Method to update and persist the medical records lock state
   Future<void> updateMedicalRecordsLock(bool value) async {
     _medicalRecordsLocked = value;
     notifyListeners();

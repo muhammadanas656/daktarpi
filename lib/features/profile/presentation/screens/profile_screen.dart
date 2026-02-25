@@ -34,18 +34,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _locationController = TextEditingController();
-  final _dobController = TextEditingController(); // New controller for DOB
+  final _dobController = TextEditingController();
 
   DateTime? _selectedDate;
-  String _countryCode = "+880";
+  String _countryCode = "+92"; // Default for region
 
   File? _imageFile;
   String? _avatarUrl;
 
   final _picker = ImagePicker();
   final _profileRepository = ProfileRepository();
-
-  // Define colors
 
   @override
   void initState() {
@@ -58,7 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _locationController.dispose();
-    _dobController.dispose(); // Dispose new controller
+    _dobController.dispose();
     super.dispose();
   }
 
@@ -69,9 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         final result = await context.push<bool>('/location_permission');
 
         if (result != true) {
@@ -153,21 +149,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ).format(_selectedDate!);
             }
 
-            String fullPhone = profile.phoneNumber ?? '';
-            if (fullPhone.isNotEmpty) {
-              if (fullPhone.startsWith('+')) {
-                // Improved split to reliably separate country code and phone digits.
-                final match = RegExp(r'^(\+[0-9]{1,4})\s?([0-9\-\s]+)$').firstMatch(fullPhone);
-                if (match != null) {
-                  _countryCode = match.group(1)!;
-                  _phoneController.text = match.group(2)!.replaceAll(RegExp(r'[\-\s]'), ''); // Store digits only
-                } else {
-                  _phoneController.text = fullPhone;
-                }
-              } else {
-                _phoneController.text = fullPhone;
-              }
-            }
+            // --- FIXED: Direct fetching from separate columns ---
+            _countryCode = profile.countryCode ?? "+92";
+            _phoneController.text = profile.phoneNumber ?? '';
 
             if (_nameController.text.trim().isNotEmpty) {
               _isEditing = true;
@@ -245,18 +229,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // --- SAVE PROFILE ---
   Future<void> _saveProfile() async {
     List<String> missingFields = [];
-    if (_nameController.text.trim().isEmpty) {
-      missingFields.add("Name");
-    }
+    if (_nameController.text.trim().isEmpty) missingFields.add("Name");
     if (_phoneController.text.trim().isEmpty) {
       missingFields.add("Contact Number");
     }
-    if (_selectedDate == null) {
-      missingFields.add("Date of Birth");
-    }
-    if (_locationController.text.trim().isEmpty) {
-      missingFields.add("Location");
-    }
+    if (_selectedDate == null) missingFields.add("Date of Birth");
+    if (_locationController.text.trim().isEmpty) missingFields.add("Location");
 
     if (missingFields.isNotEmpty) {
       if (missingFields.length == 4) {
@@ -264,15 +242,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           context,
           "Please complete your profile to continue.",
         );
-      } else if (missingFields.length == 1) {
-        return CustomSnackbar.showError(
-          context,
-          "${missingFields.first} is required.",
-        );
       } else {
         return CustomSnackbar.showError(
           context,
-          "${missingFields.join(', ')} are required.",
+          "${missingFields.join(', ')} required.",
         );
       }
     }
@@ -281,9 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final userId = _profileRepository.currentUserId;
-      if (userId == null) {
-        throw "No active session.";
-      }
+      if (userId == null) throw "No active session.";
 
       String? finalAvatarUrl = _avatarUrl;
 
@@ -295,13 +266,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
 
-      String fullPhoneNumber = "$_countryCode${_phoneController.text.trim()}";
-
+      // --- FIXED: Saving as distinct fields to the model ---
       await _profileRepository.updateProfile(
         UserProfile(
           id: userId,
           fullName: _nameController.text.trim(),
-          phoneNumber: fullPhoneNumber,
+          phoneNumber: _phoneController.text.trim(), // Subscriber only
+          countryCode: _countryCode, // Code only
           dateOfBirth: _selectedDate,
           location: _locationController.text.trim(),
           profilePictureUrl: finalAvatarUrl,
@@ -317,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
 
         await Future.delayed(const Duration(milliseconds: 500));
-        await ProfileNotifier.instance.loadProfile(); // Update global state
+        await ProfileNotifier.instance.loadProfile();
 
         if (mounted) {
           if (_isEditing && context.canPop()) {
@@ -335,9 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -360,13 +329,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isLoading = true);
       try {
         await _profileRepository.signOut();
-        if (mounted) {
-          context.go(AppRoutes.login);
-        }
+        if (mounted) context.go(AppRoutes.login);
       } catch (e) {
-        if (mounted) {
-          context.go(AppRoutes.login);
-        }
+        if (mounted) context.go(AppRoutes.login);
       }
     } else {
       if (context.canPop()) {
@@ -391,9 +356,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          return;
-        }
+        if (didPop) return;
         _onBackPress();
       },
       child: Scaffold(
@@ -403,7 +366,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                // --- HEADER (Updated Design) ---
+                // --- HEADER ---
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.only(
@@ -421,7 +384,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   child: Column(
                     children: [
-                      // --- APP BAR ROW ---
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -434,29 +396,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Icon(
+                              child: const Icon(
                                 Icons.arrow_back_ios_new,
                                 size: 18,
                                 color: AppColors.primaryGreen,
                               ),
                             ),
                           ),
-                          // Removed text here to reduce repetition and cleaner look
                           const SizedBox(width: 40),
                         ],
                       ),
                       const SizedBox(height: 30),
-
-                      // --- DISTINCT MAIN HEADER ---
                       Text(
                         _isEditing ? "Edit Profile" : "Set up your profile",
                         style: AppTextStyles.h1.copyWith(color: Colors.white),
                       ),
                       const SizedBox(height: 10),
-
                       Text(
                         _isEditing
-                            ? "Make changes to your personal information below."
+                            ? "Make changes to your information below."
                             : "Update your profile to connect with your doctor.",
                         textAlign: TextAlign.center,
                         style: AppTextStyles.body.copyWith(
@@ -465,7 +423,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 35),
-
                       // --- AVATAR ---
                       Stack(
                         children: [
@@ -534,7 +491,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // --- FORM INPUTS ---
+                // --- FORM ---
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Container(
@@ -545,18 +502,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // --- Reverted to standard Text Header ---
                         Text("Personal information", style: AppTextStyles.h3),
                         const SizedBox(height: 20),
-
-                        // Name
                         AppTextField(
                           controller: _nameController,
-                          hintText: "Enter your full name",
+                          hintText: "Enter full name",
                           label: "Full Name *",
                         ),
                         const SizedBox(height: 16),
-
                         AppTextField(
                           controller: _phoneController,
                           hintText: "Enter phone number",
@@ -568,7 +521,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           prefix: CountryCodePicker(
                             onChanged: (CountryCode country) {
                               setState(() {
-                                _countryCode = country.dialCode ?? "+880";
+                                _countryCode = country.dialCode ?? "+92";
                               });
                             },
                             initialSelection: _countryCode,
@@ -581,8 +534,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-
-                        // Date of Birth
                         AppTextField(
                           controller: _dobController,
                           hintText: "DD MM YYYY",
@@ -591,8 +542,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onTap: _selectDate,
                         ),
                         const SizedBox(height: 16),
-
-                        // --- LOCATION FIELD (MANDATORY) ---
                         AppTextField(
                           controller: _locationController,
                           hintText: "Use GPS to set location",
@@ -620,8 +569,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         const SizedBox(height: 28),
-
-                        // --- SUBMIT BUTTON ---
                         PrimaryButton(
                           label: _isEditing ? "Save Changes" : "Continue",
                           onTap: _saveProfile,
@@ -642,5 +589,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
-
-// Removed _ProfileInputCard as it is replaced by AppTextField

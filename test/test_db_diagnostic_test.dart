@@ -10,9 +10,7 @@ void main() {
 
     try {
       await client.from('trusted_devices').select().limit(1);
-      print('SUCCESS_TABLE_EXISTS');
     } catch (e) {
-      print('ERROR_CAUGHT: $e');
       fail(e.toString());
     }
   });

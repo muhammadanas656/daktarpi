@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/data/auth_repository.dart';
-import '../../features/auth/data/trusted_device_repository.dart'; // NEW IMPORT
+import '../../features/auth/data/trusted_device_repository.dart';
 import '../../features/settings/presentation/settings_notifier.dart';
 import '../constants/app_routes.dart';
 import '../theme/app_motion.dart';
@@ -33,7 +33,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   final AuthRepository _authRepository = AuthRepository();
   final BiometricAuthService _biometricAuthService = BiometricAuthService();
   final TrustedDeviceRepository _trustedDeviceRepository =
-      TrustedDeviceRepository(); // ADDED
+      TrustedDeviceRepository();
 
   Timer? _inactivityTimer;
   bool _isLocked = false;
@@ -46,6 +46,8 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // NEW: Listen to settings changes for real-time timer updates
+    SettingsNotifier.instance.addListener(_handleSettingsUpdate);
     _loadBiometricAvailability();
     _ensureSessionClock();
     _resetTimer();
@@ -54,17 +56,26 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   @override
   void didUpdateWidget(covariant InactivityLockGuard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.timeout != widget.timeout ||
-        oldWidget.absoluteTimeout != widget.absoluteTimeout) {
-      _resetTimer();
-    }
+    _resetTimer();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // NEW: Clean up listener
+    SettingsNotifier.instance.removeListener(_handleSettingsUpdate);
     _inactivityTimer?.cancel();
     super.dispose();
+  }
+
+  // Listener wrapper to ensure status and timer refresh together
+  void _handleSettingsUpdate() {
+    if (!mounted) {
+      return;
+    }
+    _loadBiometricAvailability().then((_) {
+      _resetTimer();
+    });
   }
 
   @override
@@ -76,7 +87,6 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     }
 
     if (state == AppLifecycleState.resumed) {
-      // Re-check security status on resume to catch settings changes
       _loadBiometricAvailability().then((_) {
         if (_isAbsoluteTimeoutExceeded()) {
           unawaited(_signOutFromLockScreen());
@@ -86,10 +96,10 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
         final pausedAt = _pausedAt;
         _pausedAt = null;
 
-        // Only enforce inactivity lock if biometrics are active/configured
-        if (pausedAt != null && _biometricAvailable) {
+        final savedTimeoutMs = SettingsNotifier.instance.inactivityTimeoutMs;
+        if (pausedAt != null && _biometricAvailable && savedTimeoutMs > 0) {
           final elapsed = DateTime.now().difference(pausedAt);
-          if (elapsed >= widget.timeout) {
+          if (elapsed >= Duration(milliseconds: savedTimeoutMs)) {
             _lockAndScheduleUnlock();
             return;
           }
@@ -118,7 +128,6 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     }
 
     setState(() {
-      // Feature only functions if hardware exists AND user enabled it
       _biometricAvailable = hasHardware && isConfigured;
     });
   }
@@ -131,14 +140,18 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
       return;
     }
 
-    // NEW Logic: If security is not configured, do not start the inactivity timer
-    if (!_biometricAvailable || _isLocked) {
+    final savedTimeoutMs = SettingsNotifier.instance.inactivityTimeoutMs;
+
+    if (!_biometricAvailable || _isLocked || savedTimeoutMs <= 0) {
       _inactivityTimer?.cancel();
       return;
     }
 
     _inactivityTimer?.cancel();
-    _inactivityTimer = Timer(widget.timeout, _handleSessionTimeout);
+    _inactivityTimer = Timer(
+      Duration(milliseconds: savedTimeoutMs),
+      _handleSessionTimeout,
+    );
   }
 
   void _handleSessionTimeout() {
@@ -146,7 +159,6 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
       return;
     }
 
-    // Ignore when there is no active authenticated user.
     if (_authRepository.currentUser == null) {
       _sessionStartedAt = null;
       _resetTimer();
@@ -157,9 +169,12 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   }
 
   void _lockAndScheduleUnlock() {
-    if (!mounted || !_biometricAvailable) {
+    if (!mounted ||
+        !_biometricAvailable ||
+        SettingsNotifier.instance.inactivityTimeoutMs <= 0) {
       return;
     }
+
     _inactivityTimer?.cancel();
     if (!_isLocked) {
       setState(() {
@@ -210,9 +225,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   Future<void> _signOutFromLockScreen() async {
     try {
       await _authRepository.signOut();
-    } catch (_) {
-      // force route transition even when sign-out API fails.
-    }
+    } catch (_) {}
 
     if (!mounted) {
       return;

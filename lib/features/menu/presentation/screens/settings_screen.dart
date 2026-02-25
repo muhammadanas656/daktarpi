@@ -39,7 +39,6 @@ class _SettingsScreenState extends State<SettingsScreen>
   late bool _is2FAEnabled;
   bool _is2FAToggleBusy = false;
   String? _verifiedFactorId;
-  bool _hasRecoveryCodes = false;
   bool _hasPromptedSecurity = false;
 
   late final AuthRepository _authRepository = AuthRepository();
@@ -79,7 +78,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     final user = _settingsRepository.currentUser;
 
     if (user == null || !hasHardware) {
-      if (mounted) setState(() => _hasBiometricHardware = false);
+      if (mounted) {
+        setState(() => _hasBiometricHardware = false);
+      }
       return;
     }
 
@@ -104,7 +105,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     try {
       final user = _settingsRepository.currentUser;
       final factors = await _settingsRepository.listMfaFactors();
-      final hasCodes = await _settingsRepository.userHasRecoveryCodes();
 
       if (mounted) {
         setState(() {
@@ -114,7 +114,6 @@ class _SettingsScreenState extends State<SettingsScreen>
               user?.appMetadata['is_2fa_enabled'] == true;
 
           _is2FAEnabled = hasFactor && isEnabledInMetadata;
-          _hasRecoveryCodes = hasCodes;
 
           if (hasFactor) {
             final verifiedFactor = totpFactors.firstWhere(
@@ -130,7 +129,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (!_is2FAEnabled && !_isBiometricEnabled && !_hasPromptedSecurity) {
           _hasPromptedSecurity = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showSecurityOnboardingPrompt();
+            if (mounted) {
+              _showSecurityOnboardingPrompt();
+            }
           });
         }
       }
@@ -197,12 +198,20 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<bool> _enforceSecurityGate(String actionReason) async {
-    // Note: To avoid recursion, we don't use _isBiometricEnabled check here
-    // when explicitly disabling biometrics. Standard TOTP/Recovery verification is used.
-
     final gateDecision = _securityGateService.evaluateAal2Gate();
-    if (gateDecision.isAllowed) return true;
-    if (gateDecision.isUnauthenticated) return false;
+    if (gateDecision.isAllowed) {
+      return true;
+    }
+    if (gateDecision.isUnauthenticated) {
+      return false;
+    }
+
+    final biometricSuccess = await _stepUpService.authenticateIfTrusted(
+      localizedReason: actionReason,
+    );
+    if (biometricSuccess) {
+      return true;
+    }
 
     bool success = false;
     final otpController = TextEditingController();
@@ -210,7 +219,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     bool isDialogLoading = false;
     bool isRecoveryMode = false;
 
-    if (!mounted) return false;
+    if (!mounted) {
+      return false;
+    }
 
     await showDialog(
       context: context,
@@ -240,12 +251,16 @@ class _SettingsScreenState extends State<SettingsScreen>
                   final rpcSuccess = await _authRepository.useRecoveryCode(
                     code,
                   );
-                  if (rpcSuccess != true) throw "Invalid backup code.";
+                  if (rpcSuccess != true) {
+                    throw "Invalid backup code.";
+                  }
                 } else {
                   await _authRepository.verifyTotpCode(code);
                 }
                 success = true;
-                if (ctx.mounted) Navigator.pop(ctx);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
               } catch (e) {
                 setDialogState(() => isDialogLoading = false);
                 otpController.clear();
@@ -298,6 +313,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                         controller: otpController,
                         autofocus: true,
                         defaultPinTheme: defaultPinTheme,
+                        // SECURITY HARDENING: DISABLE ALL AUTOFILL/PASTE
+                        onClipboardFound: null,
+                        autofillHints: null,
+                        enableInteractiveSelection: false,
                         focusedPinTheme: defaultPinTheme.copyWith(
                           decoration: defaultPinTheme.decoration!.copyWith(
                             border: Border.all(
@@ -315,6 +334,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         controller: recoveryController,
                         keyboardType: TextInputType.text,
                         textCapitalization: TextCapitalization.characters,
+                        enableInteractiveSelection: false, // DISABLE PASTE
                         inputFormatters: [BackupCodeFormatter()],
                         textAlign: TextAlign.center,
                         style: const TextStyle(
@@ -340,7 +360,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ),
                         ),
                         onChanged: (val) {
-                          if (val.length == 9) submitCode(val);
+                          if (val.length == 9) {
+                            submitCode(val);
+                          }
                         },
                         onSubmitted: submitCode,
                       ),
@@ -400,19 +422,24 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<bool> _handleBiometricToggle(bool enable) async {
-    if (_isBiometricToggleBusy) return _isBiometricEnabled;
+    if (_isBiometricToggleBusy) {
+      return _isBiometricEnabled;
+    }
     setState(() => _isBiometricToggleBusy = true);
 
     try {
       if (enable) {
-        if (!_hasBiometricHardware)
+        if (!_hasBiometricHardware) {
           throw Exception("Biometric hardware not available.");
+        }
 
         bool passedGate = await _enforceSecurityGate(
           'Verify your identity to enable Biometrics',
         );
 
-        if (!passedGate) return false;
+        if (!passedGate) {
+          return false;
+        }
 
         await Future.delayed(const Duration(milliseconds: 300));
 
@@ -425,7 +452,9 @@ class _SettingsScreenState extends State<SettingsScreen>
           await _trustedDeviceRepository.trustCurrentDevice(
             isBiometricEnabled: true,
           );
-          if (!mounted) return false;
+          if (!mounted) {
+            return false;
+          }
           CustomSnackbar.showSuccess(
             context,
             "Biometric login successfully linked",
@@ -435,16 +464,18 @@ class _SettingsScreenState extends State<SettingsScreen>
           return false;
         }
       } else {
-        // PROMPT 6 MODIFICATION: Require verification before disabling
-        // This ensures the user must verify their identity before removing security.
         bool passedGate = await _enforceSecurityGate(
           'Verify your identity to disable biometric authentication',
         );
 
-        if (!passedGate) return true; // Keep enabled if gate fails
+        if (!passedGate) {
+          return true;
+        }
 
         await _trustedDeviceRepository.revokeCurrentDevice();
-        if (!mounted) return false;
+        if (!mounted) {
+          return false;
+        }
         CustomSnackbar.showSuccess(
           context,
           "Biometric login removed from this device",
@@ -452,19 +483,25 @@ class _SettingsScreenState extends State<SettingsScreen>
         return false;
       }
     } catch (e) {
-      if (!mounted) return _isBiometricEnabled;
+      if (!mounted) {
+        return _isBiometricEnabled;
+      }
       CustomSnackbar.showError(
         context,
         "Failed to update biometric settings: ${e.toString().replaceAll('Exception: ', '')}",
       );
       return _isBiometricEnabled;
     } finally {
-      if (mounted) setState(() => _isBiometricToggleBusy = false);
+      if (mounted) {
+        setState(() => _isBiometricToggleBusy = false);
+      }
     }
   }
 
   Future<bool> _handleTwoFactorToggle(bool enable) async {
-    if (_is2FAToggleBusy) return _is2FAEnabled;
+    if (_is2FAToggleBusy) {
+      return _is2FAEnabled;
+    }
     setState(() => _is2FAToggleBusy = true);
 
     try {
@@ -684,6 +721,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                     controller: codeController,
                     autofocus: true,
                     defaultPinTheme: defaultPinTheme,
+                    // SECURITY HARDENING: DISABLE ALL AUTOFILL/PASTE
+                    onClipboardFound: null,
+                    autofillHints: null,
+                    enableInteractiveSelection: false,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     focusedPinTheme: defaultPinTheme.copyWith(
                       decoration: defaultPinTheme.decoration!.copyWith(
@@ -694,7 +735,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                       ),
                     ),
                     onCompleted: (code) {
-                      if (_activePinSubmit != null) _activePinSubmit!();
+                      if (_activePinSubmit != null) {
+                        _activePinSubmit!();
+                      }
                     },
                   ),
                   if (isDialogLoading)
@@ -846,7 +889,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    "Would you like to enable Biometric Login (Face ID/Touch ID) for faster access on this device?",
+                    "Would you like to enable Biometric Login for faster access on this device?",
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: AppColors.textLight),
                   ),
@@ -1075,9 +1118,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                       isPassword: true,
                     ),
                     if (isDialogLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 16),
-                        child: Center(
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 16),
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: AppColors.primaryGreen,
@@ -1167,7 +1210,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!passedGate || !mounted) return;
 
     final confirmController = TextEditingController();
-    bool isDialogLoading = false;
 
     await showDialog(
       context: context,
@@ -1232,7 +1274,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
+                  onPressed: () => Navigator.pop(ctx),
                   child: const Text(
                     "Cancel",
                     style: TextStyle(color: Colors.grey),
@@ -1240,32 +1282,22 @@ class _SettingsScreenState extends State<SettingsScreen>
                 ),
                 TextButton(
                   onPressed:
-                      (canDelete && !isDialogLoading)
+                      canDelete
                           ? () {
                             Navigator.pop(ctx);
                             _executeAccountDeletion();
                           }
                           : null,
-                  child:
-                      isDialogLoading
-                          ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.red,
-                            ),
-                          )
-                          : Text(
-                            "Delete",
-                            style: TextStyle(
-                              color:
-                                  canDelete
-                                      ? Colors.red
-                                      : Colors.red.withOpacity(0.5),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                  child: Text(
+                    "Delete",
+                    style: TextStyle(
+                      color:
+                          canDelete
+                              ? Colors.red
+                              : Colors.red.withValues(alpha: 0.5),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             );
@@ -1329,7 +1361,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                   subtitle: "Facebook, Google",
                   onTap: () => context.push(AppRoutes.linkedAccounts),
                 ),
-
                 if (_hasBiometricHardware && _is2FAEnabled)
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -1338,7 +1369,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
+                          color: Colors.black.withValues(alpha: 0.03),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -1352,7 +1383,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       leading: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withOpacity(0.1),
+                          color: AppColors.primaryGreen.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -1420,7 +1451,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                       ),
                     ),
                   ),
-
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
@@ -1428,7 +1458,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
+                        color: Colors.black.withValues(alpha: 0.03),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1442,7 +1472,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     leading: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryGreen.withOpacity(0.1),
+                        color: AppColors.primaryGreen.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -1507,7 +1537,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                 ),
-
                 _buildSettingsTile(
                   context,
                   icon: Icons.delete_forever,
@@ -1515,10 +1544,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                   isDestructive: true,
                   onTap: _showDeleteConfirmation,
                 ),
-
                 const SizedBox(height: 32),
                 _buildSectionHeader("Preferences"),
-
                 AnimatedBuilder(
                   animation: SettingsNotifier.instance,
                   builder: (context, child) {
@@ -1529,7 +1556,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       secondary: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withOpacity(0.1),
+                          color: AppColors.primaryGreen.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -1566,8 +1593,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     );
                   },
                 ),
-
-                if (_isBiometricEnabled) ...[
+                if (_isBiometricEnabled)
                   AnimatedBuilder(
                     animation: SettingsNotifier.instance,
                     builder: (context, child) {
@@ -1582,8 +1608,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                       );
                     },
                   ),
-                ],
-
                 _buildSettingsTile(
                   context,
                   icon: Icons.attach_money,
@@ -1596,7 +1620,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                         "Currency is automatically configured based on your profile location.",
                       ),
                 ),
-
                 _buildSettingsTile(
                   context,
                   icon: Icons.dark_mode_outlined,
@@ -1686,7 +1709,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                     if (mounted) setState(() {});
                   },
                 ),
-
                 AnimatedBuilder(
                   animation: SettingsNotifier.instance,
                   builder: (context, child) {
@@ -1697,7 +1719,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       secondary: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withOpacity(0.1),
+                          color: AppColors.primaryGreen.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -1729,7 +1751,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                     );
                   },
                 ),
-
                 const SizedBox(height: 32),
                 _buildSectionHeader("Support & Legal"),
                 _buildSettingsTile(
@@ -1764,7 +1785,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
         if (_isLoading)
           Container(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             child: const Center(
               child: CircularProgressIndicator(color: AppColors.primaryGreen),
             ),
@@ -1804,7 +1825,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1818,8 +1839,8 @@ class _SettingsScreenState extends State<SettingsScreen>
           decoration: BoxDecoration(
             color:
                 isDestructive
-                    ? Colors.red.withOpacity(0.1)
-                    : AppColors.primaryGreen.withOpacity(0.1),
+                    ? Colors.red.withValues(alpha: 0.1)
+                    : AppColors.primaryGreen.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -1883,10 +1904,12 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   String _getTimeoutName(int ms) {
+    if (ms == 0) return "Off";
     if (ms == 60000) return "1 Minute";
     if (ms == 300000) return "5 Minutes";
     if (ms == 900000) return "15 Minutes";
     if (ms == 1800000) return "30 Minutes";
+    if (ms == 3600000) return "1 Hour";
     return "5 Minutes";
   }
 
@@ -1907,7 +1930,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              ...[60000, 300000, 900000, 1800000].map((timeout) {
+              ...[0, 60000, 300000, 900000, 1800000, 3600000].map((timeout) {
                 return ListTile(
                   title: Text(_getTimeoutName(timeout)),
                   trailing:

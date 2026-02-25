@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 Future<void> main() async {
@@ -9,9 +8,8 @@ Future<void> main() async {
   );
   try {
     await Supabase.instance.client.from('trusted_devices').select().limit(1);
-    print('SUCCESS: trusted_devices table exists');
   } catch (e) {
-    print('ERROR: $e');
+    // ignore: empty_catches
   }
   exit(0);
 }

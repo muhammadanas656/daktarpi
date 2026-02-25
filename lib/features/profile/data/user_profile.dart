@@ -16,10 +16,14 @@ DateTime? _nullableDateFromJson(Object? value) {
 
 @freezed
 abstract class UserProfile with _$UserProfile {
+  const UserProfile._();
+
   const factory UserProfile({
     required String id,
     @JsonKey(name: 'full_name', defaultValue: '') required String fullName,
     @JsonKey(name: 'phone_number') String? phoneNumber,
+    // NEW: Added separate column for country code
+    @JsonKey(name: 'country_code', defaultValue: '+92') String? countryCode,
     @JsonKey(name: 'date_of_birth', fromJson: _nullableDateFromJson)
     DateTime? dateOfBirth,
     String? location,

@@ -81,6 +81,10 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     bool isDialogLoading = false;
     bool isRecoveryMode = false;
 
+    if (!mounted) {
+      return false;
+    }
+
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -182,6 +186,11 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                         controller: otpController,
                         autofocus: true,
                         defaultPinTheme: defaultPinTheme,
+                        // SECURITY FIXES:
+                        onClipboardFound: null, // Disables auto-paste popup
+                        autofillHints: null, // Disables OS autofill suggestions
+                        enableInteractiveSelection:
+                            false, // Disables manual paste context menu
                         focusedPinTheme: defaultPinTheme.copyWith(
                           decoration: defaultPinTheme.decoration!.copyWith(
                             border: Border.all(
@@ -192,16 +201,16 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                         ),
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
-                        ], // Digits only
-                        onCompleted: submitCode,
+                        ],
+                        onCompleted: submitCode, // Keeps automatic submit
                       ),
                       secondChild: TextField(
                         controller: recoveryController,
                         keyboardType: TextInputType.text,
                         textCapitalization: TextCapitalization.characters,
-                        inputFormatters: [
-                          BackupCodeFormatter(),
-                        ], // AUTO-FORMATTER
+                        enableInteractiveSelection:
+                            false, // Disables paste for backup codes
+                        inputFormatters: [BackupCodeFormatter()],
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 18,

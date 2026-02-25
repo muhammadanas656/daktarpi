@@ -21,7 +21,13 @@ class ProfileNotifier extends ChangeNotifier {
 
   String get fullName => _profile?.fullName ?? 'User';
   String? get avatarUrl => _profile?.profilePictureUrl;
-  String? get phoneNumber => _profile?.phoneNumber;
+  
+  String? get phoneNumber {
+    if (_profile?.countryCode != null && _profile?.phoneNumber != null) {
+      return '${_profile!.countryCode} ${_profile!.phoneNumber}';
+    }
+    return _profile?.phoneNumber;
+  }
 
   String get currencySymbol {
     final loc = _profile?.location?.toLowerCase() ?? '';

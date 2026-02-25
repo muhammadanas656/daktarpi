@@ -54,7 +54,9 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
     // Use Notifier Data
     final profile = _profileNotifier.profile;
     final name = profile?.fullName ?? 'No Name';
-    final phone = profile?.phoneNumber ?? 'No Phone';
+    final String phone = (profile?.countryCode != null && profile?.phoneNumber != null)
+        ? '${profile!.countryCode} ${profile.phoneNumber}'
+        : (profile?.phoneNumber ?? 'No Phone');
     final location = profile?.location ?? 'No Location';
     final avatarUrl = profile?.profilePictureUrl;
 
