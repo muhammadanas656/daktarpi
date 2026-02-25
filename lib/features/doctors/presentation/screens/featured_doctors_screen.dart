@@ -7,6 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../profile/presentation/profile_notifier.dart';
 import '../../data/doctor_repository.dart';
 import '../../../../presentation/widgets/featured_doctor_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
@@ -22,6 +23,7 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
   final _searchController = TextEditingController();
   final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
+  final _profileNotifier = ProfileNotifier.instance;
   Timer? _debounce;
 
   // Data State
@@ -32,7 +34,8 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
   @override
   void initState() {
     super.initState();
-    _favNotifier.addListener(_onFavoritesChanged);
+    _favNotifier.addListener(_onStateChanged);
+    _profileNotifier.addListener(_onStateChanged);
     _fetchData();
 
     _searchController.addListener(() {
@@ -45,13 +48,14 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
 
   @override
   void dispose() {
-    _favNotifier.removeListener(_onFavoritesChanged);
+    _favNotifier.removeListener(_onStateChanged);
+    _profileNotifier.removeListener(_onStateChanged);
     _searchController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
-  void _onFavoritesChanged() {
+  void _onStateChanged() {
     if (mounted) setState(() {});
   }
 
@@ -73,9 +77,11 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
 
   Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
     try {
+      final countryIso = _profileNotifier.profile?.countryIso;
       final doctors = await _doctorRepo.fetchFeaturedDoctors(
         query: query,
         forceRefresh: forceRefresh,
+        countryIso: countryIso,
       );
 
       if (mounted) {

@@ -6,6 +6,7 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../profile/presentation/profile_notifier.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../data/doctor_repository.dart';
@@ -28,6 +29,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   final _searchController = TextEditingController();
   final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
+  final _profileNotifier = ProfileNotifier.instance;
   Timer? _debounce;
 
   // Data State
@@ -38,7 +40,8 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   @override
   void initState() {
     super.initState();
-    _favNotifier.addListener(_onFavoritesChanged);
+    _favNotifier.addListener(_onStateChanged);
+    _profileNotifier.addListener(_onStateChanged);
     _fetchData();
 
     // Listen to text changes for UI (X icon) and Search Logic
@@ -52,13 +55,14 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
 
   @override
   void dispose() {
-    _favNotifier.removeListener(_onFavoritesChanged);
+    _favNotifier.removeListener(_onStateChanged);
+    _profileNotifier.removeListener(_onStateChanged);
     _searchController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
-  void _onFavoritesChanged() {
+  void _onStateChanged() {
     if (mounted) setState(() {});
   }
 
@@ -81,9 +85,11 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   // --- FETCH DATA ---
   Future<void> _fetchData({String? query}) async {
     try {
+      final countryIso = _profileNotifier.profile?.countryIso;
       final doctors = await _doctorRepo.fetchDoctorsBySpecialty(
         widget.specialtyId,
         query: query,
+        countryIso: countryIso,
       );
 
       if (mounted) {
@@ -190,8 +196,11 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                           ],
                         ),
                       )
-                      : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      : RefreshIndicator(
+                        onRefresh: () => _fetchData(query: _searchController.text),
+                        color: AppColors.primaryGreen,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                         itemCount: _doctors.length,
                         separatorBuilder:
                             (context, index) => const SizedBox(height: 16),
@@ -220,6 +229,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                           );
                         },
                       ),
+                    ),
             ),
           ],
         ),

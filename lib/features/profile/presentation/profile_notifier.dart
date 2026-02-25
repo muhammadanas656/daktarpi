@@ -30,19 +30,21 @@ class ProfileNotifier extends ChangeNotifier {
   }
 
   String get currencySymbol {
-    final loc = _profile?.location?.toLowerCase() ?? '';
-    if (loc.contains('bangladesh') || loc.contains(' bd')) return '৳';
-    if (loc.contains('pakistan') || loc.contains(' pk')) return 'Rs';
-    if (loc.contains('india') || loc.contains(' in')) return '₹';
-    if (loc.contains('united kingdom') || loc.contains(' uk')) return '£';
-    if (loc.contains('euro') ||
-        loc.contains('germany') ||
-        loc.contains('france') ||
-        loc.contains('italy') ||
-        loc.contains('spain')) {
-      return '€';
+    final iso = _profile?.countryIso?.toUpperCase() ?? '';
+    
+    switch (iso) {
+      case 'PK': return 'Rs';
+      case 'BD': return '৳';
+      case 'IN': return '₹';
+      case 'US': return '\$';
+      case 'GB': return '£';
+      case 'DE':
+      case 'FR':
+      case 'IT':
+      case 'ES':
+      case 'EU': return '€';
+      default: return '\$';
     }
-    return '\$';
   }
 
   /// Load profile from database. Safe to call multiple times.
@@ -51,11 +53,12 @@ class ProfileNotifier extends ChangeNotifier {
     if (userId == null) return;
 
     final cachedProfile = await _cacheRepo.loadProfile();
-    if (cachedProfile != null) {
-      _profile = cachedProfile;
-      _loaded = true;
-      notifyListeners();
-    }
+    // Bypass returning cachedProfile to ensure we always fetch from network during debug
+    // if (cachedProfile != null) {
+    //   _profile = cachedProfile;
+    //   _loaded = true;
+    //   notifyListeners();
+    // }
 
     try {
       _profile = await _profileRepo.getProfile(userId);

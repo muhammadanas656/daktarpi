@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../favorites_notifier.dart';
+import '../../../profile/presentation/profile_notifier.dart';
 import '../../data/doctor_repository.dart';
 
 import '../../../../presentation/widgets/doctor_list_card.dart';
@@ -22,6 +23,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   final _searchController = TextEditingController();
   final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
+  final _profileNotifier = ProfileNotifier.instance;
   Timer? _debounce;
 
   // Data State
@@ -33,7 +35,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   void initState() {
     super.initState();
     _fetchData();
-    _favNotifier.addListener(_onFavoritesChanged);
+    _favNotifier.addListener(_onStateChanged);
+    _profileNotifier.addListener(_onStateChanged);
 
     // Listen to text changes for UI (X icon) and Search Logic
     _searchController.addListener(() {
@@ -48,11 +51,12 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   void dispose() {
     _searchController.dispose();
     _debounce?.cancel();
-    _favNotifier.removeListener(_onFavoritesChanged);
+    _favNotifier.removeListener(_onStateChanged);
+    _profileNotifier.removeListener(_onStateChanged);
     super.dispose();
   }
 
-  void _onFavoritesChanged() {
+  void _onStateChanged() {
     if (mounted) setState(() {});
   }
 
@@ -75,9 +79,11 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   // --- FETCH DATA ---
   Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
     try {
+      final countryIso = _profileNotifier.profile?.countryIso;
       final doctors = await _doctorRepo.fetchPopularDoctors(
         query: query,
         forceRefresh: forceRefresh,
+        countryIso: countryIso,
       );
 
       if (!_favNotifier.isLoaded) {

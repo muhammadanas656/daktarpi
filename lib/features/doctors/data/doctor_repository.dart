@@ -17,9 +17,11 @@ class DoctorRepository {
 
   List<Map<String, dynamic>> _cachedPopularDoctors = [];
   DateTime? _lastPopularDoctorsFetch;
+  String? _lastPopularDoctorsCountryIso;
 
   List<Map<String, dynamic>> _cachedFeaturedDoctors = [];
   DateTime? _lastFeaturedDoctorsFetch;
+  String? _lastFeaturedDoctorsCountryIso;
 
   static const _cacheDuration = Duration(minutes: 5);
 
@@ -52,13 +54,14 @@ class DoctorRepository {
   // ─── Doctor Lists ────────────────────────────────────────────
 
   /// Fetches all doctors with optional search and sort.
-  /// Fetches all doctors with optional search and sort.
   Future<List<Map<String, dynamic>>> fetchAllDoctors({
     String? query,
     String sortBy = 'rating',
     bool ascending = false,
     double? userLat,
     double? userLng,
+    String? userLocation,
+    String? countryIso,
   }) async {
     try {
       // 1. Fetch doctors AND their clinics to get location data
@@ -72,6 +75,12 @@ class DoctorRepository {
 
       if (query != null && query.isNotEmpty) {
         dbQuery = dbQuery.ilike('full_name', '%$query%');
+      }
+
+      if (countryIso != null && countryIso.isNotEmpty) {
+        dbQuery = dbQuery.eq('country_iso', countryIso);
+      } else if (userLocation != null && userLocation.isNotEmpty) {
+        dbQuery = dbQuery.eq('location', userLocation);
       }
 
       // If sorting by distance, we fetch generic list first, then sort in Dart.
@@ -143,10 +152,14 @@ class DoctorRepository {
     String? query,
     int? limit,
     bool forceRefresh = false,
+    String? userLocation,
+    String? countryIso,
   }) async {
     // Return cached if valid and no query (queries override cache for simplicity)
     if (!forceRefresh &&
         query == null &&
+        userLocation == null &&
+        countryIso == _lastPopularDoctorsCountryIso &&
         _isCacheValid(_lastPopularDoctorsFetch) &&
         _cachedPopularDoctors.isNotEmpty) {
       if (limit != null) return _cachedPopularDoctors.take(limit).toList();
@@ -163,6 +176,12 @@ class DoctorRepository {
         dbQuery = dbQuery.ilike('full_name', '%$query%');
       }
 
+      if (countryIso != null && countryIso.isNotEmpty) {
+        dbQuery = dbQuery.eq('country_iso', countryIso);
+      } else if (userLocation != null && userLocation.isNotEmpty) {
+        dbQuery = dbQuery.eq('location', userLocation);
+      }
+
       // Order by rating descending
       var finalQuery = dbQuery.order('rating', ascending: false);
 
@@ -173,9 +192,10 @@ class DoctorRepository {
       final response = await finalQuery;
       final data = List<Map<String, dynamic>>.from(response);
 
-      if (query == null) {
+      if (query == null && userLocation == null) {
         _cachedPopularDoctors = data;
         _lastPopularDoctorsFetch = DateTime.now();
+        _lastPopularDoctorsCountryIso = countryIso;
       }
 
       if (limit != null) {
@@ -196,9 +216,13 @@ class DoctorRepository {
     String? query,
     int? limit,
     bool forceRefresh = false,
+    String? userLocation,
+    String? countryIso,
   }) async {
     if (!forceRefresh &&
         query == null &&
+        userLocation == null &&
+        countryIso == _lastFeaturedDoctorsCountryIso &&
         _isCacheValid(_lastFeaturedDoctorsFetch) &&
         _cachedFeaturedDoctors.isNotEmpty) {
       if (limit != null) return _cachedFeaturedDoctors.take(limit).toList();
@@ -215,14 +239,21 @@ class DoctorRepository {
         dbQuery = dbQuery.ilike('full_name', '%$query%');
       }
 
+      if (countryIso != null && countryIso.isNotEmpty) {
+        dbQuery = dbQuery.eq('country_iso', countryIso);
+      } else if (userLocation != null && userLocation.isNotEmpty) {
+        dbQuery = dbQuery.eq('location', userLocation);
+      }
+
       var finalQuery = dbQuery.order('rating', ascending: false);
 
       final response = await finalQuery;
       final data = List<Map<String, dynamic>>.from(response);
 
-      if (query == null) {
+      if (query == null && userLocation == null) {
         _cachedFeaturedDoctors = data;
         _lastFeaturedDoctorsFetch = DateTime.now();
+        _lastFeaturedDoctorsCountryIso = countryIso;
       }
 
       if (limit != null) {
@@ -241,6 +272,8 @@ class DoctorRepository {
   Future<List<Map<String, dynamic>>> fetchDoctorsBySpecialty(
     String specialtyId, {
     String? query,
+    String? userLocation,
+    String? countryIso,
   }) async {
     try {
       var dbQuery = _client
@@ -250,6 +283,12 @@ class DoctorRepository {
 
       if (query != null && query.isNotEmpty) {
         dbQuery = dbQuery.ilike('full_name', '%$query%');
+      }
+
+      if (countryIso != null && countryIso.isNotEmpty) {
+        dbQuery = dbQuery.eq('country_iso', countryIso);
+      } else if (userLocation != null && userLocation.isNotEmpty) {
+        dbQuery = dbQuery.eq('location', userLocation);
       }
 
       final response = await dbQuery.order('rating', ascending: false);

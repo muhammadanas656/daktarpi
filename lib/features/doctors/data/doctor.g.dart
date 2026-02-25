@@ -30,6 +30,7 @@ _Doctor _$DoctorFromJson(Map<String, dynamic> json) => _Doctor(
   visitPrice:
       json['hourly_rate'] == null ? 0 : _intFromJson(json['hourly_rate']),
   about: json['about'] as String?,
+  location: json['location'] as String?,
   phoneNumber: json['phone_number'] as String?,
 );
 
@@ -45,5 +46,6 @@ Map<String, dynamic> _$DoctorToJson(_Doctor instance) => <String, dynamic>{
   'views_count': instance.viewsCount,
   'hourly_rate': instance.visitPrice,
   'about': instance.about,
+  'location': instance.location,
   'phone_number': instance.phoneNumber,
 };

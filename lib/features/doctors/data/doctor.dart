@@ -66,6 +66,7 @@ abstract class Doctor with _$Doctor {
     @Default(0)
     int visitPrice,
     String? about,
+    @JsonKey(name: 'location') String? location,
     @JsonKey(name: 'phone_number') String? phoneNumber,
   }) = _Doctor;
 

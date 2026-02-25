@@ -23,7 +23,9 @@ class DoctorDetailsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final specialty =
-        doctor['specialties']?['name']?.toString() ?? 'Specialist';
+        doctor['specialty']?.toString() ??
+        doctor['specialties']?['name']?.toString() ??
+        'Specialist';
     final doctorName = doctor['full_name']?.toString() ?? 'Unknown';
     final displayPrice =
         (visitPrice ?? doctor['hourly_rate']?.toString() ?? '0').toString();
@@ -71,7 +73,7 @@ class DoctorDetailsHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Specialist $specialty",
+                  " $specialty",
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

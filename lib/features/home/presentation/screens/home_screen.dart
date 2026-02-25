@@ -7,6 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../doctors/presentation/favorites_notifier.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../doctors/data/doctor_repository.dart';
+import '../../../home/data/home_repository.dart';
 import '../../../doctors/presentation/models/doctors_route_args.dart';
 
 import '../../../../presentation/widgets/custom_search_bar.dart';
@@ -23,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   final _doctorRepo = DoctorRepository();
+  final _homeRepo = HomeRepository();
   final _favNotifier = FavoritesNotifier.instance;
   final _profileNotifier = ProfileNotifier.instance;
 
@@ -33,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _specialties = [];
   List<Map<String, dynamic>> _popularDoctors = [];
   List<Map<String, dynamic>> _featuredDoctors = [];
+  List<Map<String, dynamic>> _banners = [];
 
   @override
   void initState() {
@@ -77,10 +80,14 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       // Load screen-specific data with caching
+      final userLocation = _profileNotifier.profile?.location;
+      final countryIso = _profileNotifier.profile?.countryIso;
+      
       final results = await Future.wait([
         _doctorRepo.fetchSpecialties(forceRefresh: forceRefresh),
-        _doctorRepo.fetchPopularDoctors(limit: 5, forceRefresh: forceRefresh),
-        _doctorRepo.fetchFeaturedDoctors(limit: 5, forceRefresh: forceRefresh),
+        _doctorRepo.fetchPopularDoctors(limit: 5, forceRefresh: forceRefresh, userLocation: userLocation, countryIso: countryIso),
+        _doctorRepo.fetchFeaturedDoctors(limit: 5, forceRefresh: forceRefresh, userLocation: userLocation, countryIso: countryIso),
+        _homeRepo.fetchBanners(countryIso),
       ]);
 
       if (mounted) {
@@ -88,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _specialties = results[0];
           _popularDoctors = results[1];
           _featuredDoctors = results[2];
+          _banners = results[3];
           _isLoading = false;
         });
       }
@@ -123,10 +131,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFBFBFB),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [_buildHeader(), _buildBanner(), _buildContentSections()],
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        color: AppColors.primaryGreen,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [_buildHeader(), _buildBanner(), _buildContentSections()],
+          ),
         ),
       ),
     );
@@ -211,6 +224,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBanner() {
+    if (_banners.isEmpty) return const SizedBox.shrink();
+
+    // For simplicity, showing the first banner. Could be converted to a carousel.
+    final banner = _banners.first;
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Container(
@@ -242,12 +260,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Medical Center",
+                      banner['title'] ?? "Medical Center",
                       style: AppTextStyles.h3.copyWith(color: Colors.white),
                     ),
                     SizedBox(height: 8),
                     Text(
-                      "Yorem ipsum dolor sit amet, consectetur adipiscing elit.",
+                      banner['subtitle'] ?? "Find the best doctors in your area.",
                       style: AppTextStyles.bodySmall.copyWith(
                         color: Colors.white70,
                       ),
@@ -256,15 +274,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            Positioned(
-              right: 10,
-              bottom: 0,
-              child: Image.network(
-                "https://pngimg.com/d/doctor_PNG15988.png",
-                height: 140,
-                fit: BoxFit.cover,
+            if (banner['image_url'] != null)
+              Positioned(
+                right: 10,
+                bottom: 0,
+                child: Image.network(
+                  banner['image_url'],
+                  height: 140,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                ),
               ),
-            ),
           ],
         ),
       ),

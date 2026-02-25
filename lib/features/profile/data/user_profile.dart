@@ -22,8 +22,11 @@ abstract class UserProfile with _$UserProfile {
     required String id,
     @JsonKey(name: 'full_name', defaultValue: '') required String fullName,
     @JsonKey(name: 'phone_number') String? phoneNumber,
-    // NEW: Added separate column for country code
     @JsonKey(name: 'country_code', defaultValue: '+92') String? countryCode,
+
+    // NEW: Added country_iso to fix the getter/parameter errors
+    @JsonKey(name: 'country_iso') String? countryIso,
+
     @JsonKey(name: 'date_of_birth', fromJson: _nullableDateFromJson)
     DateTime? dateOfBirth,
     String? location,

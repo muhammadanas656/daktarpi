@@ -39,6 +39,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   DateTime? _selectedDate;
   String _countryCode = "+92"; // Default for region
 
+  // NEW: Added to hold the ISO code for database filtering
+  String? _selectedCountryIso;
+
   File? _imageFile;
   String? _avatarUrl;
 
@@ -109,6 +112,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         setState(() {
           _locationController.text = formattedAddress;
+          // NEW: Capture the ISO code from GPS
+          _selectedCountryIso = place.isoCountryCode;
         });
 
         if (mounted) {
@@ -149,9 +154,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ).format(_selectedDate!);
             }
 
-            // --- FIXED: Direct fetching from separate columns ---
             _countryCode = profile.countryCode ?? "+92";
             _phoneController.text = profile.phoneNumber ?? '';
+
+            // NEW: Load existing ISO code if they have one saved
+            _selectedCountryIso = profile.countryIso;
 
             if (_nameController.text.trim().isNotEmpty) {
               _isEditing = true;
@@ -266,13 +273,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
 
-      // --- FIXED: Saving as distinct fields to the model ---
       await _profileRepository.updateProfile(
         UserProfile(
           id: userId,
           fullName: _nameController.text.trim(),
-          phoneNumber: _phoneController.text.trim(), // Subscriber only
-          countryCode: _countryCode, // Code only
+          phoneNumber: _phoneController.text.trim(),
+          countryCode: _countryCode,
+          countryIso: _selectedCountryIso, // NEW: Save the ISO code
           dateOfBirth: _selectedDate,
           location: _locationController.text.trim(),
           profilePictureUrl: finalAvatarUrl,

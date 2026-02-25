@@ -12,6 +12,7 @@ import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../profile/presentation/profile_notifier.dart';
 
 class DoctorsScreen extends StatefulWidget {
   const DoctorsScreen({super.key});
@@ -23,6 +24,7 @@ class DoctorsScreen extends StatefulWidget {
 class _DoctorsScreenState extends State<DoctorsScreen> {
   final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
+  final _profileNotifier = ProfileNotifier.instance;
 
   // --- STATE ---
   final TextEditingController _searchController = TextEditingController();
@@ -47,6 +49,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     _fetchDoctors();
     _searchController.addListener(_onSearchChanged);
     _favNotifier.addListener(_onFavoritesChanged);
+    _profileNotifier.addListener(_onProfileChanged);
   }
 
   @override
@@ -54,10 +57,15 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     _searchController.dispose();
     _debounce?.cancel();
     _favNotifier.removeListener(_onFavoritesChanged);
+    _profileNotifier.removeListener(_onProfileChanged);
     super.dispose();
   }
 
   void _onFavoritesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onProfileChanged() {
     if (mounted) setState(() {});
   }
 
@@ -134,6 +142,9 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           }
         }
       }
+      // Extract user location from profile
+      final userLocation = _profileNotifier.profile?.location;
+      final countryIso = _profileNotifier.profile?.countryIso;
 
       final doctors = await _doctorRepo.fetchAllDoctors(
         query: query,
@@ -141,7 +152,11 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         ascending: ascending,
         userLat: userLat,
         userLng: userLng,
+        userLocation: userLocation,
+        countryIso: countryIso,
       );
+      
+      debugPrint("DoctorsScreen: Found ${doctors.length} doctors for ISO $countryIso");
 
       // Fetch hospitals
       final hospitals = await _doctorRepo.fetchHospitals(query: query);
@@ -206,11 +221,15 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                             color: AppColors.primaryGreen,
                           ),
                         )
-                        : _selectedFilter == 'Hospital'
-                        ? _buildHospitalGrid()
-                        : _selectedFilter == 'Clinic'
-                        ? _buildClinicGrid()
-                        : _buildDoctorList(),
+                        : RefreshIndicator(
+                            onRefresh: () async => _fetchDoctors(),
+                            color: AppColors.primaryGreen,
+                            child: _selectedFilter == 'Hospital'
+                            ? _buildHospitalGrid()
+                            : _selectedFilter == 'Clinic'
+                            ? _buildClinicGrid()
+                            : _buildDoctorList(),
+                          ),
               ),
             ],
           ),

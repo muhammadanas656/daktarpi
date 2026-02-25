@@ -37,7 +37,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     with WidgetsBindingObserver {
   bool _isLoading = false;
 
-  // FIX: Statuses are now late initialized using immediate metadata for instant rendering
   late bool _is2FAEnabled;
   late bool _isBiometricEnabled;
 
@@ -674,17 +673,18 @@ class _SettingsScreenState extends State<SettingsScreen>
             }
 
             Widget buildQRStep() {
+              // FIX: Defined explicit pin dimensions to prevent stretching
               final defaultPinTheme = PinTheme(
-                width: 56,
-                height: 64,
+                width: 44,
+                height: 54,
                 textStyle: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 22,
                   color: AppColors.textDark,
                   fontWeight: FontWeight.bold,
                 ),
                 decoration: BoxDecoration(
                   color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppColors.borderColor),
                 ),
               );
@@ -728,28 +728,31 @@ class _SettingsScreenState extends State<SettingsScreen>
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 12),
-                  Pinput(
-                    length: 6,
-                    controller: codeController,
-                    autofocus: true,
-                    defaultPinTheme: defaultPinTheme,
-                    onClipboardFound: null,
-                    autofillHints: null,
-                    enableInteractiveSelection: false,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    focusedPinTheme: defaultPinTheme.copyWith(
-                      decoration: defaultPinTheme.decoration!.copyWith(
-                        border: Border.all(
-                          color: AppColors.primaryGreen,
-                          width: 2,
+                  // FIX: Wrapped in Center to maintain proper proportions
+                  Center(
+                    child: Pinput(
+                      length: 6,
+                      controller: codeController,
+                      autofocus: true,
+                      defaultPinTheme: defaultPinTheme,
+                      onClipboardFound: null,
+                      autofillHints: null,
+                      enableInteractiveSelection: false,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      focusedPinTheme: defaultPinTheme.copyWith(
+                        decoration: defaultPinTheme.decoration!.copyWith(
+                          border: Border.all(
+                            color: AppColors.primaryGreen,
+                            width: 2,
+                          ),
                         ),
                       ),
+                      onCompleted: (code) {
+                        if (_activePinSubmit != null) {
+                          _activePinSubmit!();
+                        }
+                      },
                     ),
-                    onCompleted: (code) {
-                      if (_activePinSubmit != null) {
-                        _activePinSubmit!();
-                      }
-                    },
                   ),
                   if (isDialogLoading)
                     const Padding(
@@ -1019,7 +1022,10 @@ class _SettingsScreenState extends State<SettingsScreen>
       if (_isBiometricEnabled) {
         await _trustedDeviceRepository.revokeCurrentDevice();
         _isBiometricEnabled = false;
-        SettingsNotifier.instance.updateBiometricState(_hasBiometricHardware, false);
+        SettingsNotifier.instance.updateBiometricState(
+          _hasBiometricHardware,
+          false,
+        );
       }
 
       await Supabase.instance.client.auth.updateUser(
@@ -1373,100 +1379,96 @@ class _SettingsScreenState extends State<SettingsScreen>
                   subtitle: "Facebook, Google",
                   onTap: () => context.push(AppRoutes.linkedAccounts),
                 ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: (_hasBiometricHardware && _is2FAEnabled)
-                      ? Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.03),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
-                            ),
-                            leading: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.fingerprint_rounded,
-                                color: AppColors.primaryGreen,
-                                size: 20,
-                              ),
-                            ),
-                            title: const Text(
-                              "Enable Biometric Login",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                            subtitle: _isBiometricToggleBusy
-                                ? Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: Row(
-                                      children: [
-                                        const SizedBox(
-                                          width: 12,
-                                          height: 12,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: AppColors.primaryGreen,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Expanded(
-                                          child: Text(
-                                            "Updating...",
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: AppColors.textLight,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                if (_hasBiometricHardware && _is2FAEnabled)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.fingerprint_rounded,
+                          color: AppColors.primaryGreen,
+                          size: 20,
+                        ),
+                      ),
+                      title: const Text(
+                        "Enable Biometric Login",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      subtitle:
+                          _isBiometricToggleBusy
+                              ? Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Row(
+                                  children: [
+                                    const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.primaryGreen,
+                                      ),
                                     ),
-                                  )
-                                : Text(
-                                    _isBiometricEnabled
-                                        ? "Linked to this device"
-                                        : "Not configured",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: _isBiometricEnabled
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        "Updating...",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textLight,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              : Text(
+                                _isBiometricEnabled
+                                    ? "Linked to this device"
+                                    : "Not configured",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      _isBiometricEnabled
                                           ? AppColors.primaryGreen
                                           : AppColors.textLight,
-                                    ),
-                                  ),
-                            trailing: PessimisticSwitch(
-                              value: _isBiometricEnabled,
-                              enabled: !_isBiometricToggleBusy,
-                              activeColor: AppColors.primaryGreen,
-                              onAttemptChange: (val) async {
-                                final result = await _handleBiometricToggle(val);
-                                setState(() => _isBiometricEnabled = result);
-                                SettingsNotifier.instance.updateBiometricState(_hasBiometricHardware, result);
-                                return result;
-                              },
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
+                                ),
+                              ),
+                      trailing: PessimisticSwitch(
+                        value: _isBiometricEnabled,
+                        enabled: !_isBiometricToggleBusy,
+                        activeColor: AppColors.primaryGreen,
+                        onAttemptChange: (val) async {
+                          final result = await _handleBiometricToggle(val);
+                          setState(() => _isBiometricEnabled = result);
+                          return result;
+                        },
+                      ),
+                    ),
+                  ),
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
@@ -1609,26 +1611,21 @@ class _SettingsScreenState extends State<SettingsScreen>
                     );
                   },
                 ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: _isBiometricEnabled
-                      ? AnimatedBuilder(
-                          animation: SettingsNotifier.instance,
-                          builder: (context, child) {
-                            return _buildSettingsTile(
-                              context,
-                              icon: Icons.timer_outlined,
-                              title: "Inactivity Lock",
-                              value: _getTimeoutName(
-                                SettingsNotifier.instance.inactivityTimeoutMs,
-                              ),
-                              onTap: () => _showTimeoutSelectionDialog(),
-                            );
-                          },
-                        )
-                      : const SizedBox.shrink(),
-                ),
+                if (_isBiometricEnabled)
+                  AnimatedBuilder(
+                    animation: SettingsNotifier.instance,
+                    builder: (context, child) {
+                      return _buildSettingsTile(
+                        context,
+                        icon: Icons.timer_outlined,
+                        title: "Inactivity Lock",
+                        value: _getTimeoutName(
+                          SettingsNotifier.instance.inactivityTimeoutMs,
+                        ),
+                        onTap: () => _showTimeoutSelectionDialog(),
+                      );
+                    },
+                  ),
                 _buildSettingsTile(
                   context,
                   icon: Icons.attach_money,
