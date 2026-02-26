@@ -53,12 +53,11 @@ class ProfileNotifier extends ChangeNotifier {
     if (userId == null) return;
 
     final cachedProfile = await _cacheRepo.loadProfile();
-    // Bypass returning cachedProfile to ensure we always fetch from network during debug
-    // if (cachedProfile != null) {
-    //   _profile = cachedProfile;
-    //   _loaded = true;
-    //   notifyListeners();
-    // }
+    if (cachedProfile != null) {
+      _profile = cachedProfile;
+      _loaded = true;
+      notifyListeners();
+    }
 
     try {
       _profile = await _profileRepo.getProfile(userId);

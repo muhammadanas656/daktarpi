@@ -366,7 +366,17 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     if (clinicLat == null || clinicLng == null) return;
 
     double distance = 0.0;
-    if (_routePoints.isNotEmpty) {
+
+    // 1. If actively navigating AND we successfully loaded a route
+    if (_isNavigating && _routePoints.isNotEmpty) {
+      // Calculate distance from user to the start of the route
+      distance += Geolocator.distanceBetween(
+        _userLocation!.latitude,
+        _userLocation!.longitude,
+        _routePoints.first.latitude,
+        _routePoints.first.longitude,
+      );
+      // Add the entire length of the active route
       for (int i = 0; i < _routePoints.length - 1; i++) {
         distance += Geolocator.distanceBetween(
           _routePoints[i].latitude,
@@ -375,7 +385,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           _routePoints[i + 1].longitude,
         );
       }
-    } else {
+    }
+    // 2. Otherwise, use straight-line displacement
+    else {
       distance = Geolocator.distanceBetween(
         _userLocation!.latitude,
         _userLocation!.longitude,
@@ -422,24 +434,29 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   Future<void> _launchInAppDirection() async {
     _closeMenu();
-
     if (_selectedClinic == null) return;
-
     if (_isNavigating) {
       _cancelNavigation();
       return;
     }
 
     final isReady = await _ensureLocationReady();
-
     if (!isReady) return;
 
     setState(() {
       _isRouteLoading = true;
-
       _isNavigating = true;
-
       _isUserPanning = false;
+    });
+
+    Future.delayed(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
 
     try {
@@ -448,21 +465,26 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       );
 
       final clinicLat = _selectedClinic!['latitude'] as double;
-
       final clinicLng = _selectedClinic!['longitude'] as double;
 
       await _fetchRoute(
         start: LatLng(position.latitude, position.longitude),
-
         end: LatLng(clinicLat, clinicLng),
+        fitBounds: false,
       );
 
-      _positionStream?.cancel();
+      // Instantly snap to the user before the stream even starts
+      if (!_isUserPanning) {
+        _mapController.move(
+          LatLng(position.latitude, position.longitude),
+          17.0,
+        );
+      }
 
+      _positionStream?.cancel();
       _positionStream = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-
           distanceFilter: 5,
         ),
       ).listen((Position position) {
@@ -478,17 +500,19 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     } catch (e) {
       if (mounted) {
         CustomSnackbar.showError(context, "Could not start navigation");
+        setState(() {
+          _isRouteLoading = false;
+          _isNavigating = false;
+        });
       }
-
-      setState(() {
-        _isRouteLoading = false;
-
-        _isNavigating = false;
-      });
     }
   }
 
-  Future<void> _fetchRoute({required LatLng start, required LatLng end}) async {
+  Future<void> _fetchRoute({
+    required LatLng start,
+    required LatLng end,
+    bool fitBounds = true,
+  }) async {
     try {
       final points = await _routeRepo.fetchDrivingRoute(start: start, end: end);
 
@@ -499,14 +523,27 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           _isRouteLoading = false;
         });
         _updateDistance();
-        _fitMapBounds();
+
+        if (fitBounds) {
+          _fitMapBounds();
+        }
       }
     } catch (error) {
       debugPrint("Route error: $error");
       if (mounted) {
-        setState(() => _isRouteLoading = false);
+        // If route fetching fails, cancel navigation safely!
+        setState(() {
+          _isRouteLoading = false;
+          _isNavigating = false;
+        });
+        CustomSnackbar.showError(
+          context,
+          "Failed to load route data. Try again.",
+        );
         _updateDistance();
-        _fitMapBounds();
+        if (fitBounds) {
+          _fitMapBounds();
+        }
       }
     }
   }
@@ -514,6 +551,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   void _cancelNavigation() {
     _positionStream?.cancel();
     _positionStream = null;
+
+    // --- ADD THIS: Scroll up smoothly to prevent bottom layout snapping ---
+    _scrollToLocationSection();
+    // --------------------------------------------------------------------
+
     setState(() {
       _isNavigating = false;
       _routePoints.clear();
@@ -528,7 +570,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     if (_selectedClinic != null) {
       final clinicLat = _selectedClinic!['latitude'] as double? ?? 0.0;
       final clinicLng = _selectedClinic!['longitude'] as double? ?? 0.0;
-      _mapController.move(LatLng(clinicLat, clinicLng), 15.0);
+
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _mapController.move(LatLng(clinicLat, clinicLng), 15.0);
+        }
+      });
     }
   }
 
@@ -1049,6 +1096,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   _mapController.move(LatLng(lat, lng), 15.0);
 
                   if (_isNavigating && _userLocation != null) {
+                    // Stop camera tracking so they can see the new route overview
+                    setState(() => _isUserPanning = true);
                     _fetchRoute(start: _userLocation!, end: LatLng(lat, lng));
                   }
                 },
@@ -1299,141 +1348,237 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
             ),
           ),
 
-        if (_distanceToClinic != null)
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    if (_isNavigating) {
-                      setState(
-                        () => _isDistanceBarExpanded = !_isDistanceBarExpanded,
-                      );
-                    }
-                  },
-                  child: AnimatedContainer(
-                    duration: AppMotion.defaultDuration,
-                    curve: Curves.easeInOut,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _isDistanceBarExpanded ? 20 : 16,
-                      vertical: _isDistanceBarExpanded ? 16 : 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(
-                        _isDistanceBarExpanded ? 16 : 20,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: AnimatedSize(
-                      duration: AppMotion.defaultDuration,
-                      curve: Curves.easeInOut,
-                      alignment: Alignment.topCenter,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.route,
-                                color:
-                                    _isNavigating
-                                        ? AppColors.primaryGreen
-                                        : Colors.blueGrey,
-                                size: 16,
+        // Removed the 'if' statement here so the Positioned can animate the exit
+        Positioned(
+          top: 12,
+          left: 12,
+          right: 12,
+          child: AnimatedSwitcher(
+            duration: AppMotion.defaultDuration,
+            transitionBuilder:
+                (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(
+                        0,
+                        -0.5,
+                      ), // Slides up slightly while fading out
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+            // The condition now checks if we are actively navigating
+            child:
+                (_distanceToClinic != null && _isNavigating)
+                    ? Row(
+                      key: const ValueKey('nav_bar_visible'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            if (_isNavigating) {
+                              setState(
+                                () =>
+                                    _isDistanceBarExpanded =
+                                        !_isDistanceBarExpanded,
+                              );
+                            }
+                          },
+                          child: AnimatedContainer(
+                            duration: AppMotion.defaultDuration,
+                            curve: Curves.easeInOut,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: _isDistanceBarExpanded ? 20 : 16,
+                              vertical: _isDistanceBarExpanded ? 16 : 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.95),
+                              borderRadius: BorderRadius.circular(
+                                _isDistanceBarExpanded ? 16 : 20,
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _distanceToClinic! > 1000
-                                    ? "${(_distanceToClinic! / 1000).toStringAsFixed(1)} km away"
-                                    : "${_distanceToClinic!.toStringAsFixed(0)} m away",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textDark,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (_isNavigating) ...[
-                                const SizedBox(width: 8),
-                                Icon(
-                                  _isDistanceBarExpanded
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
-                                  color: Colors.grey,
-                                  size: 16,
-                                ),
-                              ],
-                            ],
-                          ),
-                          if (_isDistanceBarExpanded && _isNavigating) ...[
-                            const SizedBox(height: 12),
-                            const Divider(height: 1, color: Colors.black12),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text(
-                                  "Active Navigation",
-                                  style: TextStyle(
-                                    color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(width: 24),
-                                InkWell(
-                                  onTap: _cancelNavigation,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      color: Colors.red,
-                                      size: 18,
-                                    ),
-                                  ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                            child: AnimatedSize(
+                              duration: AppMotion.defaultDuration,
+                              curve: Curves.easeInOut,
+                              alignment: Alignment.topCenter,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.route,
+                                        color: _isNavigating
+                                            ? AppColors.primaryGreen
+                                            : Colors.blueGrey,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      
+                                      // --- THE FIX: Show a loading state while fetching the route ---
+                                      AnimatedSwitcher(
+                                        duration: AppMotion.fast,
+                                        child: _isRouteLoading
+                                            ? const Row(
+                                                key: ValueKey('calculating'),
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  SizedBox(
+                                                    width: 12,
+                                                    height: 12,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2, 
+                                                      color: AppColors.primaryGreen
+                                                    ),
+                                                  ),
+                                                  SizedBox(width: 8),
+                                                  Text(
+                                                    "Calculating...",
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppColors.primaryGreen,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              )
+                                            : Text(
+                                                key: const ValueKey('distance'),
+                                                _distanceToClinic! > 1000
+                                                    ? "${(_distanceToClinic! / 1000).toStringAsFixed(1)} km away"
+                                                    : "${_distanceToClinic!.toStringAsFixed(0)} m away",
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.textDark,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                      ),
+                                      // --------------------------------------------------------------
 
+                                      // Hide the expand arrow while loading so they can't open an empty menu
+                                      if (_isNavigating && !_isRouteLoading) ...[
+                                        const SizedBox(width: 8),
+                                        Icon(
+                                          _isDistanceBarExpanded
+                                              ? Icons.expand_less
+                                              : Icons.expand_more,
+                                          color: Colors.grey,
+                                          size: 16,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+
+                                  // --- WRAP IN ANIMATED SWITCHER FOR SMOOTH FADE ---
+                                  AnimatedSwitcher(
+                                    duration: AppMotion.fast,
+                                    transitionBuilder:
+                                        (child, animation) => FadeTransition(
+                                          opacity: animation,
+                                          child: SizeTransition(
+                                            sizeFactor: animation,
+                                            child: child,
+                                          ),
+                                        ),
+                                    child:
+                                        (_isDistanceBarExpanded &&
+                                                _isNavigating)
+                                            ? Column(
+                                              key: const ValueKey(
+                                                'expanded_nav',
+                                              ),
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const SizedBox(height: 12),
+                                                const Divider(
+                                                  height: 1,
+                                                  color: Colors.black12,
+                                                ),
+                                                const SizedBox(height: 12),
+                                                Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Text(
+                                                      "Active Navigation",
+                                                      style: TextStyle(
+                                                        color:
+                                                            AppColors
+                                                                .primaryGreen,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 24),
+                                                    InkWell(
+                                                      onTap: _cancelNavigation,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                              4,
+                                                            ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                              color: Colors.red
+                                                                  .withValues(
+                                                                    alpha: 0.1,
+                                                                  ),
+                                                              shape:
+                                                                  BoxShape
+                                                                      .circle,
+                                                            ),
+                                                        child: const Icon(
+                                                          Icons.close,
+                                                          color: Colors.red,
+                                                          size: 18,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            )
+                                            : const SizedBox.shrink(
+                                              key: ValueKey('collapsed_nav'),
+                                            ),
+                                  ),
+                                  // --------------------------------------------------
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                    // This is the empty state the Switcher animates to when navigation stops
+                    : const SizedBox.shrink(key: ValueKey('nav_bar_hidden')),
+          ),
+        ),
+
+        // --- FLOATING ACTION BUTTONS ---
         // --- FLOATING ACTION BUTTONS ---
         Positioned(
           bottom: 12,
-
           right: 12,
-
           child: Column(
             mainAxisSize: MainAxisSize.min,
-
             crossAxisAlignment: CrossAxisAlignment.end,
-
             children: [
+              // ROW 1: LOCATOR MENU (Restored to fix warnings!)
               Row(
                 mainAxisSize: MainAxisSize.min,
-
                 children: [
                   AnimatedSize(
                     duration: AppMotion.defaultDuration,
@@ -1455,7 +1600,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                             )
                             : const SizedBox.shrink(),
                   ),
-
                   if (_isNavigating) ...[
                     AnimatedSize(
                       duration: AppMotion.defaultDuration,
@@ -1469,7 +1613,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                   heroTag: "btn_route_overview",
                                   backgroundColor: Colors.white,
                                   onPressed: () {
-                                    setState(() => _isUserPanning = false);
+                                    setState(() => _isUserPanning = true);
                                     _fitMapBounds();
                                   },
                                   child: const Icon(
@@ -1501,7 +1645,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                               : const SizedBox.shrink(),
                     ),
                   ],
-
                   FloatingActionButton.small(
                     heroTag: "btn_locator_toggle",
                     backgroundColor: Colors.white,
@@ -1512,7 +1655,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                       curve: Curves.easeInOut,
                       child: Icon(
                         _isLocatorMenuOpen ? Icons.close : Icons.gps_fixed,
-                        color: primaryGreen,
+                        color: AppColors.primaryGreen,
                       ),
                     ),
                   ),
@@ -1521,6 +1664,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
               const SizedBox(height: 16),
 
+              // ROW 2: NAVIGATION MENU
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1545,12 +1689,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                             : const SizedBox.shrink(),
                   ),
 
+                  // Hide this specific button while navigating
                   AnimatedSize(
                     duration: AppMotion.defaultDuration,
                     curve: Curves.easeOutCubic,
                     alignment: Alignment.centerRight,
                     child:
-                        _isMenuOpen
+                        (_isMenuOpen && !_isNavigating)
                             ? Padding(
                               padding: const EdgeInsets.only(right: 8.0),
                               child: FloatingActionButton.small(
@@ -1559,16 +1704,15 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                 onPressed: _launchInAppDirection,
                                 child: const Icon(
                                   Icons.turn_sharp_right,
-                                  color: primaryGreen,
+                                  color: AppColors.primaryGreen,
                                 ),
                               ),
                             )
                             : const SizedBox.shrink(),
                   ),
-
                   FloatingActionButton.small(
                     heroTag: "btn_main_toggle",
-                    backgroundColor: primaryGreen,
+                    backgroundColor: AppColors.primaryGreen,
                     onPressed: _toggleDirectionMenu,
                     child: AnimatedRotation(
                       turns: _isMenuOpen ? 0.5 : 0.0,

@@ -82,9 +82,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   String? _selectedMonth;
   String? _selectedYear;
 
-  // 0 = Custom/Add, 1 = My Self, 2 = My Child
-  int _selectedProfileIndex = 1;
-  String _customCategoryLabel = "Add";
+  // Dynamic Category State
+  List<String> _savedCategories = [];
+  String? _newPendingCategory;
+  String _selectedCategoryName = "My Self";
 
   // Images
   String? _userProfileUrl;
@@ -155,8 +156,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         'day': _selectedDay,
         'month': _selectedMonth,
         'year': _selectedYear,
-        'selected_profile_index': _selectedProfileIndex,
-        'custom_category_label': _customCategoryLabel,
+        'selected_category_name': _selectedCategoryName,
+        'new_pending_category': _newPendingCategory,
         'patient_image_path': _newPatientImage?.path,
         'time_slot': widget.timeSlot,
         'appointment_date': widget.initialDate.toIso8601String(),
@@ -188,11 +189,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         _selectedDay = draft['day']?.toString();
         _selectedMonth = draft['month']?.toString();
         _selectedYear = draft['year']?.toString();
-        _selectedProfileIndex =
-            int.tryParse(draft['selected_profile_index']?.toString() ?? '') ??
-            _selectedProfileIndex;
-        _customCategoryLabel =
-            draft['custom_category_label']?.toString() ?? _customCategoryLabel;
+        _selectedCategoryName =
+            draft['selected_category_name']?.toString() ?? "My Self";
+        _newPendingCategory = draft['new_pending_category']?.toString();
+
         final imagePath = draft['patient_image_path']?.toString();
         if (imagePath != null && imagePath.isNotEmpty) {
           _newPatientImage = File(imagePath);
@@ -219,16 +219,20 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       try {
         final profile = await _profileRepo.getProfile(userId);
         final userEmail = _profileRepo.currentUserEmail;
+        final categories = await _profileRepo.getPatientCategories(userId);
 
         if (mounted && profile != null) {
           _userProfileUrl = profile.profilePictureUrl;
 
-          if (_selectedProfileIndex == 1) {
-            setState(() {
+          setState(() {
+            _savedCategories = categories;
+
+            if (_selectedCategoryName == "My Self") {
               _nameController.text = profile.fullName;
-              _phoneController.text = (profile.countryCode != null && profile.phoneNumber != null)
-                  ? '${profile.countryCode} ${profile.phoneNumber}'
-                  : (profile.phoneNumber ?? "");
+              _phoneController.text =
+                  (profile.countryCode != null && profile.phoneNumber != null)
+                      ? '${profile.countryCode} ${profile.phoneNumber}'
+                      : (profile.phoneNumber ?? "");
               _emailController.text = userEmail ?? "";
 
               if (profile.dateOfBirth != null) {
@@ -238,8 +242,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                 ).format(profile.dateOfBirth!);
                 _selectedYear = profile.dateOfBirth!.year.toString();
               }
-            });
-          }
+            }
+          });
         }
       } catch (e) {
         debugPrint("Error loading profile: $e");
@@ -375,8 +379,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
     if (category != null && category.isNotEmpty) {
       setState(() {
-        _customCategoryLabel = category;
-        _selectedProfileIndex = 0;
+        _newPendingCategory = category;
+        _selectedCategoryName = category;
         _nameController.clear();
         _phoneController.clear();
         _emailController.clear();
@@ -390,35 +394,44 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     }
   }
 
-  void _switchToMode(int index) {
-    if (index == 0) {
-      if (_customCategoryLabel == "Add") {
-        _showAddCategoryDialog();
-      } else {
-        setState(() => _selectedProfileIndex = 0);
-      }
-      return;
-    }
+  Future<void> _deleteCategory(String category) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text("Delete Category?"),
+            content: Text("Are you sure you want to remove '$category'?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  "Delete",
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
 
-    setState(() {
-      _selectedProfileIndex = index;
-      if (index == 1) {
-        // My Self
-        _newPatientImage = null;
-        _fetchUserProfile();
-      } else if (index == 2) {
-        // Child: Clear form
-        _nameController.clear();
-        _phoneController.clear();
-        _emailController.clear();
-        _selectedDay = null;
-        _selectedMonth = null;
-        _selectedYear = null;
-        _selectedGender = "Male";
-        _newPatientImage = null;
+    if (confirm == true) {
+      try {
+        await _profileRepo.removePatientCategory(category);
+        setState(() {
+          _savedCategories.remove(category);
+          if (_selectedCategoryName == category) {
+            _selectedCategoryName = "My Self";
+            _fetchUserProfile();
+          }
+        });
+        if (mounted) CustomSnackbar.showSuccess(context, "Category removed");
+      } catch (e) {
+        if (mounted) CustomSnackbar.showError(context, e.toString());
       }
-    });
-    _scheduleDraftSave();
+    }
   }
 
   void _handleContinue() {
@@ -438,17 +451,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       int.parse(_selectedDay!),
     );
 
-    String? imagePath;
-    if (_selectedProfileIndex == 1) {
-      imagePath = _userProfileUrl;
-    } else {
-      imagePath = _newPatientImage?.path;
-    }
-
-    String patientType = 'other';
-    if (_selectedProfileIndex == 1) patientType = 'self';
-    if (_selectedProfileIndex == 2) patientType = 'child';
-    if (_selectedProfileIndex == 0) patientType = _customCategoryLabel;
+    String? imagePath =
+        _selectedCategoryName == "My Self"
+            ? _userProfileUrl
+            : _newPatientImage?.path;
 
     unawaited(_clearDraft());
     context.push(
@@ -466,7 +472,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           'gender': _selectedGender,
           'dob': dob.toIso8601String(),
           'imagePath': imagePath,
-          'patientType': patientType,
+          'patientType': _selectedCategoryName,
+          'newCategoryToSave': _newPendingCategory,
         },
       ),
     );
@@ -518,7 +525,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
               Expanded(
                 child: SingleChildScrollView(
-                  // FIX: Increased bottom padding to 160 to clear bottom sheet + keyboard
                   padding: const EdgeInsets.fromLTRB(24, 10, 24, 160),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,83 +554,132 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                       const SizedBox(height: 32),
 
                       // 2. Patient Selector
-                      Text(
+                      const Text(
                         "Who is this patient?",
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: textDark,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // --- ADD / CUSTOM OPTION ---
-                          _buildOptionItem(
-                            index: 0,
-                            label: _customCategoryLabel,
-                            content:
-                                (_selectedProfileIndex == 0 &&
-                                        _newPatientImage != null)
-                                    ? Image.file(
-                                      _newPatientImage!,
-                                      fit: BoxFit.cover,
-                                    )
-                                    : Icon(
-                                      _customCategoryLabel == "Add"
-                                          ? Icons.add
-                                          : Icons.person_add,
-                                      color: primaryGreen,
-                                      size: 30,
-                                    ),
-                            bgColor: lightGreenBg,
-                            onTap: () => _switchToMode(0),
-                            onAvatarTap: _pickImage,
-                            showEditIcon: _selectedProfileIndex == 0,
-                          ),
-                          const SizedBox(width: 16),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        clipBehavior: Clip.none,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // --- MY SELF OPTION (Always present) ---
+                            _buildOptionItem(
+                              isSelected: _selectedCategoryName == "My Self",
+                              label: "My Self",
+                              content:
+                                  _userProfileUrl != null
+                                      ? Image.network(
+                                        _userProfileUrl!,
+                                        fit: BoxFit.cover,
+                                      )
+                                      : Icon(
+                                        Icons.person,
+                                        color: Colors.grey[400],
+                                        size: 30,
+                                      ),
+                              onTap: () {
+                                setState(() {
+                                  _selectedCategoryName = "My Self";
+                                  _newPatientImage = null;
+                                });
+                                _fetchUserProfile();
+                                _scheduleDraftSave();
+                              },
+                            ),
+                            const SizedBox(width: 16),
 
-                          // --- SELF OPTION ---
-                          _buildOptionItem(
-                            index: 1,
-                            label: "My Self",
-                            content:
-                                _userProfileUrl != null
-                                    ? Image.network(
-                                      _userProfileUrl!,
-                                      fit: BoxFit.cover,
-                                    )
-                                    : Icon(
-                                      Icons.person,
-                                      color: Colors.grey[400],
-                                      size: 30,
-                                    ),
-                            onTap: () => _switchToMode(1),
-                          ),
-                          const SizedBox(width: 16),
+                            // --- SAVED CATEGORIES (From DB) ---
+                            ..._savedCategories.map((category) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: _buildOptionItem(
+                                  isSelected: _selectedCategoryName == category,
+                                  label: category,
+                                  content: Icon(
+                                    Icons.person_outline,
+                                    color: Colors.grey[400],
+                                    size: 30,
+                                  ),
+                                  showDeleteIcon: true,
+                                  onDeleteTap: () => _deleteCategory(category),
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedCategoryName = category;
+                                      _nameController.clear();
+                                      _phoneController.clear();
+                                      _selectedDay = null;
+                                      _selectedMonth = null;
+                                      _selectedYear = null;
+                                      _newPatientImage = null;
+                                    });
+                                    _scheduleDraftSave();
+                                  },
+                                ),
+                              );
+                            }),
 
-                          // --- CHILD OPTION ---
-                          _buildOptionItem(
-                            index: 2,
-                            label: "My child",
-                            content:
-                                (_selectedProfileIndex == 2 &&
-                                        _newPatientImage != null)
-                                    ? Image.file(
-                                      _newPatientImage!,
-                                      fit: BoxFit.cover,
-                                    )
-                                    : Icon(
-                                      Icons.child_care,
-                                      color: Colors.grey[400],
-                                      size: 32,
+                            // --- NEW PENDING CATEGORY ---
+                            if (_newPendingCategory != null) ...[
+                              _buildOptionItem(
+                                isSelected:
+                                    _selectedCategoryName ==
+                                    _newPendingCategory,
+                                label: _newPendingCategory!,
+                                content:
+                                    _newPatientImage != null
+                                        ? Image.file(
+                                          _newPatientImage!,
+                                          fit: BoxFit.cover,
+                                        )
+                                        : const Icon(
+                                          Icons.person_add,
+                                          color: primaryGreen,
+                                          size: 30,
+                                        ),
+                                bgColor: lightGreenBg,
+                                showDeleteIcon: true,
+                                onDeleteTap: () {
+                                  setState(() {
+                                    _newPendingCategory = null;
+                                    _selectedCategoryName = "My Self";
+                                  });
+                                  _fetchUserProfile();
+                                },
+                                onTap:
+                                    () => setState(
+                                      () =>
+                                          _selectedCategoryName =
+                                              _newPendingCategory!,
                                     ),
-                            onTap: () => _switchToMode(2),
-                            onAvatarTap: _pickImage,
-                            showEditIcon: _selectedProfileIndex == 2,
-                          ),
-                        ],
+                                onAvatarTap: _pickImage,
+                                showEditIcon:
+                                    _selectedCategoryName ==
+                                    _newPendingCategory,
+                              ),
+                              const SizedBox(width: 16),
+                            ],
+
+                            // --- ADD BUTTON ---
+                            _buildOptionItem(
+                              isSelected: false,
+                              label: "Add",
+                              content: const Icon(
+                                Icons.add,
+                                color: textDark,
+                                size: 30,
+                              ),
+                              bgColor: const Color(0xFFF5F6F8),
+                              onTap: _showAddCategoryDialog,
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 32),
 
@@ -754,7 +809,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           color: Colors.white,
           border: Border(top: BorderSide(color: Color(0xFFF0F0F0))),
         ),
-        // Fix: Wrapped in SafeArea to prevent cut-off on modern phones
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -812,28 +866,31 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   }
 
   Widget _buildOptionItem({
-    required int index,
+    required bool isSelected,
     required String label,
     required Widget content,
     Color? bgColor,
     required VoidCallback onTap,
     VoidCallback? onAvatarTap,
     bool showEditIcon = false,
+    bool showDeleteIcon = false,
+    VoidCallback? onDeleteTap,
   }) {
-    final isSelected = _selectedProfileIndex == index;
-
     return Column(
       children: [
-        GestureDetector(
-          onTap: () {
-            onTap();
-            if (isSelected && onAvatarTap != null && _newPatientImage == null) {
-              onAvatarTap();
-            }
-          },
-          child: Stack(
-            children: [
-              Container(
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            GestureDetector(
+              onTap: () {
+                onTap();
+                if (isSelected &&
+                    onAvatarTap != null &&
+                    _newPatientImage == null) {
+                  onAvatarTap();
+                }
+              },
+              child: Container(
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
@@ -856,37 +913,61 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                   child: content,
                 ),
               ),
-              if (showEditIcon)
-                Positioned(
-                  bottom: -2,
-                  right: -2,
-                  child: GestureDetector(
-                    onTap: () {
-                      onTap();
-                      onAvatarTap?.call();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.add_a_photo,
-                        size: 14,
-                        color: primaryGreen,
-                      ),
+            ),
+
+            // Edit Icon
+            if (showEditIcon)
+              Positioned(
+                bottom: -2,
+                right: -2,
+                child: GestureDetector(
+                  onTap: () {
+                    onTap();
+                    onAvatarTap?.call();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.add_a_photo,
+                      size: 14,
+                      color: primaryGreen,
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+
+            // Delete Icon
+            if (showDeleteIcon)
+              Positioned(
+                top: -6,
+                right: -6,
+                child: GestureDetector(
+                  onTap: onDeleteTap,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      size: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 8),
         Text(
@@ -900,8 +981,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       ],
     );
   }
-
-  // Removed _buildLabel and _buildTextField as they are replaced by AppTextField
 
   Widget _buildDropdown(
     String hint,

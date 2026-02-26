@@ -44,6 +44,9 @@ class _SettingsScreenState extends State<SettingsScreen>
   String? _verifiedFactorId;
   bool _hasPromptedSecurity = false;
 
+  // NEW: State to track if the user has an email password provider
+  bool _hasEmailProvider = false;
+
   late final AuthRepository _authRepository = AuthRepository();
   late final SecurityGateService _securityGateService = SecurityGateService(
     authProvider: AuthRepositorySecurityProvider(_authRepository),
@@ -73,6 +76,15 @@ class _SettingsScreenState extends State<SettingsScreen>
     _isBiometricEnabled = SettingsNotifier.instance.isBiometricEnabled;
 
     SettingsNotifier.instance.loadSettings();
+
+    // NEW: Check if the user signed in with an email/password or just OAuth (Google)
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      final providers = List<String>.from(user.appMetadata?['providers'] ?? []);
+      final hasEmailMetadata = user.userMetadata?['has_email_password'] == true;
+      // It has an email if it's in the providers list OR if we set the hidden metadata flag
+      _hasEmailProvider = providers.contains('email') || hasEmailMetadata;
+    }
 
     // Run these in background to refresh the UI without blocking initial build
     _checkBiometricStatus();
@@ -1366,12 +1378,16 @@ class _SettingsScreenState extends State<SettingsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildSectionHeader("Account & Security"),
-                _buildSettingsTile(
-                  context,
-                  icon: Icons.lock_outline,
-                  title: "Change Password",
-                  onTap: _showChangePasswordDialog,
-                ),
+
+                // CONDITIONAL TILE: Only shown if email provider is attached
+                if (_hasEmailProvider)
+                  _buildSettingsTile(
+                    context,
+                    icon: Icons.lock_outline,
+                    title: "Change Password",
+                    onTap: _showChangePasswordDialog,
+                  ),
+
                 _buildSettingsTile(
                   context,
                   icon: Icons.link,
