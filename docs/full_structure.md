@@ -1,6 +1,9 @@
-DaktarPai — Exhaustive Directory & File Profile Map (Updated)
-1. Root & Core Application Structure
-Plaintext
+# DaktarPai — Comprehensive Directory & Architecture Profile Map
+
+This document serves as the master architectural map for the **DaktarPai** Flutter application. It aims to provide deep context on how features are structured, where state is managed, and how critical UI components operate to ensure any developer can quickly onboard and modify the codebase.
+
+## 1. Root & Core Application Structure
+```text
 lib/
 ├── main.dart 
 │   # App Entry: Calls `WidgetsFlutterBinding.ensureInitialized()`, loads `.env`, initializes Supabase. 
@@ -22,7 +25,6 @@ lib/
 │   ├── main_wrapper/
 │   │   └── main_wrapper.dart 
 │   │       # Shell Navigation: `StatefulShellRoute.indexedStack` for 4 branches (Home, Doctors, Appointments, Profile).
-│   │       # Drawer Animation: `AnimationController` and `GestureDetector` for swipe-to-reveal content scaling.
 │   │       # Nav Indicator: `AnimatedPositioned` for bottom nav selection.
 │   ├── network/
 │   │   └── offline_mode_guard.dart # Monitors connectivity with animated yellow banner.
@@ -32,18 +34,18 @@ lib/
 │   ├── security/
 │   │   ├── biometric_auth_service.dart # Wraps `local_auth` for secure biometric operations.
 │   │   ├── biometric_helper_service.dart # High-level biometric operation helpers.
-│   │   ├── biometric_security_service.dart # Extra security-focused utilities for biometrics.
 │   │   ├── device_integrity_service.dart # Root/jailbreak checks via MethodChannel; wipes storage on failure.
 │   │   ├── inactivity_lock_guard.dart # Enforces session timeouts with overlay and auto-biometric unlock.
 │   │   └── sensitive_action_step_up_service.dart # Bypasses TOTP via biometric/trusted device checks.
 │   ├── services/
-│   │   ├── appointment_notification_service.dart # Singleton for local notifications.
+│   │   ├── appointment_notification_service.dart 
+│   │   │   # Singleton for local notifications (`flutter_local_notifications`). Handles Android 13+ precise alarms.
+│   │   │   # Listens to `SettingsNotifier` to respect global notification opt-outs.
 │   │   └── error_telemetry_service.dart # Captures errors from FlutterError, PlatformDispatcher, and Zones.
 │   ├── theme/
 │   │   ├── app_colors.dart # Hex constants (primaryGreen: #00C689, dangerRed: #E53935, etc.).
 │   │   ├── app_dimens.dart # Stores page padding and elevation levels.
-│   │   ├── app_motion.dart # Timings (200-400ms) and Curves.
-│   │   ├── app_shapes.dart # Standardized BorderRadius (sm, md, lg).
+│   │   ├── app_motion.dart # Timings (200-400ms) and Curves for UI transitions.
 │   │   ├── app_styles.dart # Predefined Decorations (surfaceCard, pageGradient).
 │   │   ├── app_text_styles.dart # Google Fonts Poppins weights (h1 24px Bold, button 16px SemiBold).
 │   │   └── app_theme.dart # Material 3 ThemeData for Light/Dark modes.
@@ -57,8 +59,14 @@ lib/
 │
 ├── data/
 │   └── services/user_service.dart # Shared generic user utilities.
-2. Feature Modules Structure (lib/features/)
-Plaintext
+```
+
+---
+
+## 2. Feature Modules Structure (`lib/features/`)
+
+### 📇 Appointments & Booking Flow
+```text
 ├── appointments/
 │   ├── data/
 │   │   ├── appointment.dart # Freezed model for appointments.
@@ -67,12 +75,23 @@ Plaintext
 │   │   └── booking_draft_repository.dart # Caches multi-step booking data locally.
 │   └── presentation/
 │       ├── appointment_notifier.dart # Singleton state with Realtime subscription logic.
-│       ├── models/booking_route_args.dart # Carries doctor, clinic, and slot data through flow.
+│       ├── models/booking_route_args.dart # Carries doctor, clinic, and patient map data through flow.
 │       └── screens/
-│           ├── appointment_confirmation_screen.dart # Step 2 of booking (Payment/Confirmation).
-│           ├── my_appointments_screen.dart # Real-time list; action sheets for cancel/reschedule.
-│           └── patient_details_screen.dart # Step 1 of booking (Form input).
-│
+│           ├── patient_details_screen.dart 
+│           │   # Step 1 of Booking.
+│           │   # Context: Parses relational `saved_patients` from DB into interactive Draggable UI avatars. 
+│           │   # Action: Exclusively handles local state and form validation. Packages map and proceeds to Step 2.
+│           ├── appointment_confirmation_screen.dart 
+│           │   # Step 2 of Booking (Checkout). 
+│           │   # Context: Presents standard date/time calendars and a "Reminder Before" chip matrix.
+│           │   # Action: Executes `createAppointment` DB insert AND dynamically schedules the Local Push Notification.
+│           └── my_appointments_screen.dart 
+│               # Context: Real-time appointment list view.
+│               # Action: Cancels the native device push notification alarms if a user deletes or completes an appointment to prevent ghost rings.
+```
+
+### 🔐 Authentication & Session
+```text
 ├── auth/
 │   ├── data/
 │   │   ├── auth_entry_route_service.dart # Evaluates session for login/2FA/home redirection.
@@ -87,15 +106,17 @@ Plaintext
 │           ├── login_screen.dart # Email/Pass and Google login; 3-step animated forgot password sheet.
 │           ├── signup_screen.dart # Registration and ToS acceptance.
 │           └── verify_2fa_screen.dart # OTP/Recovery code crossfade with clipboard detection.
-│
-├── common/
-│   └── presentation/screens/enable_location_screen.dart # Location permission interface.
-│
+```
+
+### 🩺 Doctors & Interactive Maps
+```text
 ├── doctors/
 │   ├── data/
 │   │   ├── clinic.dart # Clinic Freezed model.
-│   │   ├── doctor.dart # Doctor Freezed model (Updated: includes `countryIso`).
-│   │   ├── doctor_repository.dart # Updated: Search/Filter logic now uses `country_iso` eq filters.
+│   │   ├── doctor.dart # Doctor Freezed model (Includes `countryIso` for global regional isolation).
+│   │   ├── doctor_repository.dart 
+│   │   │   # Context: Core data fetcher. 
+│   │   │   # Detail: Queries are rigidly filtered using `.eq('country_iso', userCountryIso)` to prevent region leakage.
 │   │   ├── route_repository.dart # OpenRouteService API wrapper for driving polylines.
 │   │   └── specialty.dart # Specialty Freezed model.
 │   └── presentation/
@@ -103,7 +124,9 @@ Plaintext
 │       ├── screens/
 │       │   ├── clinic_doctors_screen.dart # Lists doctors by specific clinic.
 │       │   ├── doctor_details_screen.dart 
-│       │   │   # Map integration with CartoDB Voyager; animated FAB and Distance bar expansion.
+│       │   │   # Map integration with CartoDB Voyager logic.
+│       │   │   # Context: Includes an animated `FloatingActionButton` that smoothly expands into a statistics route-pill.
+│       │   │   # Animation: Uses `AnimatedSwitcher` to show "Calculating..." spinners during API route generation.
 │       │   ├── doctors_screen.dart # Main directory; pulls state using `ProfileNotifier.userCountryIso`.
 │       │   ├── featured_doctors_screen.dart # Country-filtered featured list.
 │       │   ├── my_doctors_screen.dart # Maps FavoritesNotifier to list view.
@@ -114,52 +137,83 @@ Plaintext
 │           ├── doctor_details_header.dart # Hero avatar/specialty header.
 │           ├── doctor_stats_row.dart # Visual stat layout (Experience, patients, rating).
 │           └── doctor_timing_list.dart # UI for schedule availability.
-│
+```
+
+### 🏠 Home & Dashboard
+```text
 ├── home/
-│   ├── data/home_repository.dart # Pulls specialties/banners; Updated to accept `countryIso` parameter for RPC calls.
-│   └── presentation/screens/home_screen.dart # Dashboard with pull-to-refresh; dashboard data fetched based on user country.
+│   ├── data/home_repository.dart 
+│   │   # Pulls specialties and promotional banners. 
+│   │   # Context: `fetchBanners` strictly enforces `.eq('country_iso', userCountryIso)` to localize promotions.
+│   └── presentation/screens/home_screen.dart # Dashboard with pull-to-refresh; layouts data filtered by user's global region.
+```
+
+### 📋 Medical Records Security
+```text
+├── medical_records/
+│   ├── data/
+│   │   ├── medical_record.dart # MedicalRecord Freezed model.
+│   │   └── medical_record_repository.dart # Storage/CRUD with Supabase internal link logic.
+│   └── presentation/screens/
+│       ├── add_record_screen.dart # Upload form with `image_picker`.
+│       └── medical_records_screen.dart 
+│           # Context: Protected asset vault.
+│           # Security: Enforces Biometric/Aal1 authentication gates. Automatically unlocks if user disables 2FA in settings.
+```
+
+### ⚙️ Settings & Core Configuration
+```text
+├── menu/
+│   ├── data/settings_repository.dart # MFA API calls and recovery code generation.
+│   └── presentation/
+│       ├── screens/
+│       │   ├── linked_accounts_screen.dart # Manages Google OAuth arrays vs Email/Password identities.
+│       │   ├── privacy_policy_screen.dart # Renders privacy copy.
+│       │   └── settings_screen.dart 
+│       │       # Hub for MFA toggle wizards and sensitive action step-up routing.
+│       └── widgets/custom_drawer.dart # Drawer content with sliding animation via MainWrapper.
+│
+├── settings/
+│   └── presentation/settings_notifier.dart 
+│       # Global singleton for core app preferences.
+│       # Context: Manages User Theme, MFA requirements, Session Timeouts, and Notification opt-in.
+```
+
+### 🌍 Common, Legal & Support
+```text
+├── common/
+│   └── presentation/screens/enable_location_screen.dart # Prompts location permission setup.
 │
 ├── legal/
 │   └── presentation/screens/terms_of_service_screen.dart # Renders ToS content.
 │
-├── medical_records/
-│   ├── data/
-│   │   ├── medical_record.dart # MedicalRecord Freezed model.
-│   │   └── medical_record_repository.dart # Storage/CRUD with Aal2 security enforcement.
-│   └── presentation/screens/
-│       ├── add_record_screen.dart # Upload form with image_picker.
-│       └── medical_records_screen.dart # Security-gated UI (Biometric/Aal1 fallback sequence).
+├── splash/
+│   └── presentation/screens/splash_screen.dart # Logo animation & cold-boot routing logic.
 │
-├── menu/ & settings/
-│   ├── data/settings_repository.dart # MFA API calls and recovery code generation.
-│   ├── presentation/
-│   │   ├── settings_notifier.dart # Persisted UI state (theme, timeout, notifications).
-│   │   ├── screens/
-│   │   │   ├── linked_accounts_screen.dart # Google OAuth identity management.
-│   │   │   ├── privacy_policy_screen.dart # Renders privacy copy.
-│   │   │   └── settings_screen.dart 
-│   │   │       # MFA toggle wizard; sensitive action step-up workflows.
-│   │   └── widgets/custom_drawer.dart # Drawer content with sliding animation via MainWrapper.
-│
+├── support/
+│   └── presentation/screens/help_center_screen.dart # Help desk and FAQ interface.
+```
+
+### 👤 User Profile Management
+```text
 ├── profile/
 │   ├── data/
-│   │   ├── profile_repository.dart # Manages `profiles` table and avatar storage.
-│   │   └── user_profile.dart # Freezed model (Updated: includes `countryIso` and `countryCode`).
+│   │   ├── profile_repository.dart 
+│   │   │   # Manages `profiles` table and avatar storage.
+│   │   │   # Context: Contains full CRUD methods for the secondary `saved_patients` table (Family Members).
+│   │   └── user_profile.dart # Freezed model (`countryIso`, `currencySymbol`).
 │   └── presentation/
-│       ├── profile_notifier.dart # Updated: Holds `userCountryIso` as global state for repository filtering.
-│       └── screens/profile_screen.dart # Updated: Extracts ISO country code from GPS/Geolocator and CountryCodePicker.
-│
-├── splash/
-│   └── presentation/screens/splash_screen.dart # Logo animation; evaluates post-auth routing logic.
-│
-└── support/
-    └── presentation/screens/help_center_screen.dart # FAQ/Help Desk UI.
-3. Shared Presentation Widgets (lib/presentation/widgets/)
-Plaintext
+│       ├── profile_notifier.dart # Holds `userCountryIso` as the vital global state that dictates what region doctors/banners render.
+│       └── screens/profile_screen.dart # Captures strict ISO codes via Geolocator and UI Picker to lock user to their region.
+```
+
+---
+
+## 3. Shared Presentation Widgets (`lib/presentation/widgets/`)
+```text
 ├── app_network_image.dart # Network image loader with fallback icon.
 ├── app_text_field.dart # Primary text input.
 ├── appointment_card.dart # Generic appointment list item.
-├── auth_code_input.dart # Sized digit boxes for TOTP and recovery codes.
 ├── auth_text_field.dart # Styled input for auth backgrounds.
 ├── custom_search_bar.dart # Search bar with prefix/suffix icons.
 ├── custom_snackbar.dart # Animated Success/Error/Info alerts.
@@ -171,3 +225,4 @@ Plaintext
 ├── pessimistic_switch.dart # Toggle switch with async callback protection.
 ├── primary_button.dart # Main Green CTA (#00C689) with internal loading states.
 └── social_button.dart # Styled buttons for Google OAuth flows.
+```

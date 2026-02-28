@@ -28,7 +28,7 @@ graph LR
 | `themeMode` | `ThemeMode` | `ThemeMode.system` | Yes (local) |
 | `inactivityTimeoutMs` | `int` | 300000 (5 min) | Yes (local) |
 | `showDrawerHint` | `bool` | `true` | Yes (local) |
-| `notificationsEnabled` | `bool` | `true` | Yes (local) |
+| `notificationsEnabled` | `bool` | `true` | Yes (local) | Allows users to globally opt-out of appointment reminder alarms |
 
 **Methods:**
 - `loadSettings()` — Called once at startup from `main.dart`
@@ -59,6 +59,7 @@ AnimatedBuilder(
 |---|---|---|
 | `fullName` | `String?` | User's display name |
 | `avatarUrl` | `String?` | Profile picture URL |
+| `userCountryIso` | `String?` | Exact region code. Acts as the primary geographic lock restricting what Doctors/Banners the Repositories load. |
 | `currencySymbol` | `String` | Auto-detected from location |
 
 **Methods:**
@@ -145,12 +146,12 @@ Screen → Repository → Supabase Client → Supabase Backend
 | Repository | Table/API |
 |---|---|
 | `AuthRepository` | `supabase.auth.*` |
-| `HomeRepository` | `doctors`, `specialties` RPC calls |
-| `DoctorRepository` | `doctors`, `clinics`, `doctor_schedules`, `favorites` |
+| `HomeRepository` | `doctors`, `specialties` RPC calls — globally filtered by `userCountryIso` |
+| `DoctorRepository` | `doctors`, `clinics`, `doctor_schedules`, `favorites` — globally filtered by `userCountryIso` |
 | `RouteRepository` | OpenRouteService HTTP API |
 | `AppointmentRepository` | `appointments` |
 | `MedicalRecordRepository` | `medical_records`, `supabase.storage` |
-| `ProfileRepository` | `profiles`, `supabase.storage` |
+| `ProfileRepository` | `profiles` (primary), `saved_patients` (relational family records), `supabase.storage` |
 | `SettingsRepository` | Supabase MFA API, `recovery_codes` RPC |
 | `TrustedDeviceRepository` | `trusted_devices`, `FlutterSecureStorage` |
 | `BookingDraftRepository` | Local persistence for booking flow |
@@ -195,7 +196,7 @@ After successful authentication:
 
 | Service | File | Pattern |
 |---|---|---|
-| `AppointmentNotificationService` | [appointment_notification_service.dart](file:///C:/skills%20development/daktarpi/lib/core/services/appointment_notification_service.dart) | Singleton, local notifications for upcoming appointments |
+| `AppointmentNotificationService` | [appointment_notification_service.dart](file:///C:/skills%20development/daktarpi/lib/core/services/appointment_notification_service.dart) | Singleton wrapper for `flutter_local_notifications`. Discard logic evaluates global `notificationsEnabled` and per-booking 'No Alarm' selections. Native Android 13+ Exact Alarms. |
 | `ErrorTelemetryService` | [error_telemetry_service.dart](file:///C:/skills%20development/daktarpi/lib/core/services/error_telemetry_service.dart) | Error logging (Flutter, platform, zone errors) |
 | `UserService` | [user_service.dart](file:///C:/skills%20development/daktarpi/lib/data/services/user_service.dart) | Shared user utilities |
 | `BiometricAuthService` | [biometric_auth_service.dart](file:///C:/skills%20development/daktarpi/lib/core/security/biometric_auth_service.dart) | Wraps `local_auth` package |

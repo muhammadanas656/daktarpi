@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -720,7 +719,10 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                       },
                       child: const Text(
                         "Unlink",
-                        style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     )
                 else

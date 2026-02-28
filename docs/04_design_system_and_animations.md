@@ -126,6 +126,7 @@ Centralized `BorderRadius` tokens:
 | Splash screen gradient | `splash_screen.dart` | Static gradient | 3-color gradient with primaryGreen at 10% opacity |
 | Auth page gradient | Login/Signup/Verify2FA | `AppStyles.pageGradient` | 4-stop linear gradient |
 | Map height transition | `doctor_details_screen.dart` | `AnimatedContainer` | 150px → 350px when navigating |
+| Map routing loader | `doctor_details_screen.dart` | `AnimatedSwitcher` | Fades between distance text and "Calculating..." `CircularProgressIndicator` during API hit |
 | Distance bar expand | `doctor_details_screen.dart` | `AnimatedContainer` | Expands to show controls |
 | FAB reveal | `doctor_details_screen.dart` | `AnimatedSize` | Direction/locator menu buttons |
 | FAB rotation | `doctor_details_screen.dart` | `AnimatedRotation` | 180° turn for open/close icons |

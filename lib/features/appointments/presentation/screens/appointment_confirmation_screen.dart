@@ -8,7 +8,7 @@ import '../../../../core/services/appointment_notification_service.dart';
 import '../../../settings/presentation/settings_notifier.dart';
 import '../../../doctors/data/doctor_repository.dart';
 import '../../data/appointment_repository.dart';
-import '../../../profile/data/profile_repository.dart'; // Added ProfileRepository
+// Added ProfileRepository
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import 'package:intl/intl.dart';
@@ -50,7 +50,7 @@ class _AppointmentConfirmationScreenState
 
   final _doctorRepo = DoctorRepository();
   final _appointmentRepo = AppointmentRepository();
-  final _profileRepo = ProfileRepository(); // Initialized Profile Repo
+  // Initialized Profile Repo
   final _notificationService = AppointmentNotificationService.instance;
 
   final TextStyle _sectionHeaderStyle = AppTextStyles.h3;
@@ -63,7 +63,7 @@ class _AppointmentConfirmationScreenState
 
   int _selectedTimeSlotIndex = -1;
   int _selectedReminderIndex = 1;
-  final List<int> _reminderOptions = [15, 60, 1440];
+  final List<int> _reminderOptions = [0, 15, 30, 60, 1440]; // 0 = No reminder
 
   @override
   void initState() {
@@ -225,25 +225,22 @@ class _AppointmentConfirmationScreenState
         persistedAppointmentId = await _appointmentRepo.createAppointment(data);
       }
 
-      // --- SAVE CUSTOM CATEGORY IF ONE EXISTS ---
-      if (widget.patientDetails.containsKey('newCategoryToSave')) {
-        final newCat = widget.patientDetails['newCategoryToSave'];
-        if (newCat != null && newCat.toString().isNotEmpty) {
-          await _profileRepo.savePatientCategory(newCat.toString());
-        }
-      }
-      // ------------------------------------------
-
       bool reminderFailed = false;
       try {
-        if (SettingsNotifier.instance.notificationsEnabled) {
+        final selectedMins = _reminderOptions[_selectedReminderIndex];
+
+        // --- SCHEDULE NOTIFICATION LOGIC ---
+        // Only schedule if global settings are ON and they didn't choose 0 (No Reminder)
+        if (SettingsNotifier.instance.notificationsEnabled &&
+            selectedMins > 0) {
           await _notificationService.scheduleReminder(
             appointmentId: persistedAppointmentId,
             appointmentLocalDateTime: appointmentDateTime,
-            reminderMinutes: _reminderOptions[_selectedReminderIndex],
+            reminderMinutes: selectedMins,
             doctorName: widget.doctor['full_name']?.toString() ?? 'your doctor',
           );
         } else {
+          // If global notifications are OFF or they chose 0, cancel any existing alarms for this ID
           await _notificationService.cancelReminder(persistedAppointmentId);
         }
       } catch (error) {
@@ -593,6 +590,7 @@ class _AppointmentConfirmationScreenState
                         1) {
                   return const SizedBox();
                 }
+
                 final day =
                     index -
                     (DateTime(
@@ -602,17 +600,28 @@ class _AppointmentConfirmationScreenState
                         ).weekday -
                         1) +
                     1;
+
                 final date = DateTime(
                   _focusedDate.year,
                   _focusedDate.month,
                   day,
                 );
+
                 final isSelected = DateUtils.isSameDay(date, _selectedDate);
+
+                // --- NEW: Check if the date has passed ---
+                final today = DateUtils.dateOnly(DateTime.now());
+                final isPastDate = date.isBefore(today);
+
                 return InkWell(
-                  onTap: () {
-                    setState(() => _selectedDate = date);
-                    _fetchSchedulesAndBookings();
-                  },
+                  // --- NEW: Disable tapping for past dates ---
+                  onTap:
+                      isPastDate
+                          ? null
+                          : () {
+                            setState(() => _selectedDate = date);
+                            _fetchSchedulesAndBookings();
+                          },
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
                     decoration: BoxDecoration(
@@ -623,7 +632,11 @@ class _AppointmentConfirmationScreenState
                       child: Text(
                         "$day",
                         style: TextStyle(
-                          color: isSelected ? Colors.white : textDark,
+                          // --- NEW: Grey out the text if it's a past date ---
+                          color:
+                              isPastDate
+                                  ? Colors.grey[300]
+                                  : (isSelected ? Colors.white : textDark),
                           fontWeight:
                               isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
@@ -733,15 +746,10 @@ class _AppointmentConfirmationScreenState
 
   String _formatReminderDisplay(String minutesRaw) {
     final minutes = int.tryParse(minutesRaw);
-    if (minutes == null) {
-      return "$minutesRaw\nMin";
-    }
-    if (minutes == 60) {
-      return "1\nHour";
-    }
-    if (minutes == 1440) {
-      return "24\nHours";
-    }
+    if (minutes == null) return "$minutesRaw\nMin";
+    if (minutes == 0) return "No\nAlarm";
+    if (minutes == 60) return "1\nHour";
+    if (minutes == 1440) return "24\nHours";
     return "$minutes\nMin";
   }
 }

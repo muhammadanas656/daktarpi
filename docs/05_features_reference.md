@@ -46,7 +46,7 @@ Every feature module follows the same structure: `data/` (models + repositories)
 
 | File | Description |
 |---|---|
-| [home_repository.dart](file:///C:/skills%20development/daktarpi/lib/features/home/data/home_repository.dart) | Fetches home screen data: specialties, popular doctors, featured doctors, upcoming appointments |
+| [home_repository.dart](file:///C:/skills%20development/daktarpi/lib/features/home/data/home_repository.dart) | Fetches home screen data using `userCountryIso` to prevent regional leakage. |
 | [home_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/home/presentation/screens/home_screen.dart) | 441 lines. Dashboard layout: header with greeting + profile avatar, search bar, promotional banner, specialties grid, popular doctors horizontal list, featured doctors horizontal list, upcoming appointment card. Pull-to-refresh. |
 
 ### Home Screen Sections
@@ -68,10 +68,10 @@ Every feature module follows the same structure: `data/` (models + repositories)
 
 | File | Description |
 |---|---|
-| [doctor.dart](file:///C:/skills%20development/daktarpi/lib/features/doctors/data/doctor.dart) | `Doctor` Freezed model with JSON serialization |
+| [doctor.dart](file:///C:/skills%20development/daktarpi/lib/features/doctors/data/doctor.dart) | `Doctor` Freezed model (Includes `countryIso` for geographic isolation) |
 | [clinic.dart](file:///C:/skills%20development/daktarpi/lib/features/doctors/data/clinic.dart) | `Clinic` Freezed model |
 | [specialty.dart](file:///C:/skills%20development/daktarpi/lib/features/doctors/data/specialty.dart) | Specialty model |
-| [doctor_repository.dart](file:///C:/skills%20development/daktarpi/lib/features/doctors/data/doctor_repository.dart) | Doctor CRUD, search, filtering, favorites |
+| [doctor_repository.dart](file:///C:/skills%20development/daktarpi/lib/features/doctors/data/doctor_repository.dart) | Doctor CRUD, search, filtering. Extensively uses `.eq('country_iso', userCountryIso)` to segregate data by user's region. |
 | [route_repository.dart](file:///C:/skills%20development/daktarpi/lib/features/doctors/data/route_repository.dart) | OpenRouteService API for driving directions (polyline) |
 
 ### Presentation Layer — Screens
@@ -101,8 +101,8 @@ The `DoctorDetailsScreen` includes an embedded FlutterMap with:
 - **Map provider:** CartoDB Voyager tiles via OpenStreetMap
 - **Markers:** Clinic (green with gradient) + User (blue with navigation icon)
 - **Route polyline:** Blue line from user to clinic (via OpenRouteService API)
-- **Distance bar:** Floating overlay showing distance (km/m), expandable with "Cancel navigation" button
-- **Floating action buttons:** expandable menus for navigation controls (center clinic, center user, route overview) and direction launch (external maps, in-app navigation)
+- **Distance bar:** Floating overlay showing distance (km/m), animated expansion during "Calculating..." states.
+- **Floating action buttons:** expandable menus for navigation controls (center clinic, center user, route overview) and direction launch (external maps, in-app navigation). Smoothly animates into a standard FAB when panning.
 
 State management: `_isNavigating`, `_routePoints`, `_distanceToClinic`, `_isDistanceBarExpanded`, `_isUserPanning`, `_isMenuOpen`, `_isLocatorMenuOpen`
 
@@ -131,11 +131,11 @@ Singleton `ChangeNotifier` managing doctor favorites (Set of IDs). Has `clear()`
 
 | File | Description |
 |---|---|
-| [my_appointments_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/screens/my_appointments_screen.dart) | 571 lines. Lists upcoming/past appointments with Supabase realtime subscription. Actions: cancel, complete, reschedule. Action sheet with confirmation dialogs. |
-| [patient_details_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/screens/patient_details_screen.dart) | Booking flow step 1: patient details form |
-| [appointment_confirmation_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/screens/appointment_confirmation_screen.dart) | Booking flow step 2: payment + confirmation |
+| [my_appointments_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/screens/my_appointments_screen.dart) | 571 lines. Lists upcoming/past appointments with Supabase realtime subscription. Actions: cancel, complete, reschedule. Canceling/Completing directly removes local push notification alarms. |
+| [patient_details_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/screens/patient_details_screen.dart) | Booking flow (Step 1): parses relational `saved_patients` into UI components (draggable avatars) to capture form details. Passes mapped data downstream. |
+| [appointment_confirmation_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/screens/appointment_confirmation_screen.dart) | Booking flow (Step 2): Displays calendar tools and chip-based reminder selectors. Commits DB insertion and schedules exact alarms using `flutter_local_notifications`. |
 | [appointment_notifier.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/appointment_notifier.dart) | State management for appointment list |
-| [booking_route_args.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/models/booking_route_args.dart) | Route args: doctor, clinic, date, time slot, idempotency key |
+| [booking_route_args.dart](file:///C:/skills%20development/daktarpi/lib/features/appointments/presentation/models/booking_route_args.dart) | Route args: doctor, clinic, patient details map, idempotency key |
 
 ### Realtime Updates
 
@@ -171,15 +171,15 @@ Singleton `ChangeNotifier` managing doctor favorites (Set of IDs). Has `clear()`
 
 | File | Description |
 |---|---|
-| [user_profile.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/data/user_profile.dart) | `UserProfile` model |
-| [profile_repository.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/data/profile_repository.dart) | Fetch/update profile, avatar upload |
+| [user_profile.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/data/user_profile.dart) | `UserProfile` model (`countryIso`, `currencySymbol`) |
+| [profile_repository.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/data/profile_repository.dart) | Fetch/update core profile + CRUD operations for the secondary `saved_patients` table. Avatar upload logic. |
 
 ### Presentation Layer
 
 | File | Description |
 |---|---|
-| [profile_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/presentation/screens/profile_screen.dart) | 639 lines. Edit profile: full name, email (read-only), phone, DOB, blood group, location (with Geolocator reverse geocoding), avatar (image_picker + Supabase storage). Unsaved changes dialog on back press. |
-| [profile_notifier.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/presentation/profile_notifier.dart) | Singleton `ChangeNotifier` for profile data (name, avatar URL, currency). Has `clear()` for logout. |
+| [profile_screen.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/presentation/screens/profile_screen.dart) | 639 lines. Edit profile: retrieves rigorous `countryIso` codes via reverse geocoding/pickers. Validates and manages nested family member records. |
+| [profile_notifier.dart](file:///C:/skills%20development/daktarpi/lib/features/profile/presentation/profile_notifier.dart) | Singleton `ChangeNotifier` for profile data. Holds the vital `userCountryIso` driving app-wide regional segregation. |
 
 ---
 

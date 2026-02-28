@@ -80,7 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     // NEW: Check if the user signed in with an email/password or just OAuth (Google)
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
-      final providers = List<String>.from(user.appMetadata?['providers'] ?? []);
+      final providers = List<String>.from(user.appMetadata['providers'] ?? []);
       final hasEmailMetadata = user.userMetadata?['has_email_password'] == true;
       // It has an email if it's in the providers list OR if we set the hidden metadata flag
       _hasEmailProvider = providers.contains('email') || hasEmailMetadata;

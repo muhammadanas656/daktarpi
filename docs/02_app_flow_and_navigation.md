@@ -62,8 +62,8 @@ sequenceDiagram
 | `/specialty_doctors/:id` | SpecialtyDoctorsScreen | Root |
 | `/clinic_doctors/:id` | ClinicDoctorsScreen | Root |
 | `/my_doctors` | MyDoctorsScreen | Root |
-| `/appointment_booking` | PatientDetailsScreen | Root |
-| `/payment_method` | AppointmentConfirmationScreen | Root |
+| `/appointment_booking` | PatientDetailsScreen (Step 1) | Root |
+| `/payment_method` | AppointmentConfirmationScreen (Step 2) | Root |
 | `/privacy_policy` | PrivacyPolicyScreen | Root |
 | `/terms_of_service` | TermsOfServiceScreen | Root |
 | `/help-center` | HelpCenterScreen | Root |
@@ -117,12 +117,12 @@ Home → Specialty grid / Popular list / Featured list → Doctor list
     └── Doctor Details Screen
           ├── View info, stats, schedule
           ├── Select clinic location (location picker)
-          ├── View map (FlutterMap + OpenStreetMap)
+          ├── Map integration (FlutterMap + CartoDB Voyager)
           │     ├── Center on user / clinic
-          │     ├── In-app navigation (route polyline)
+          │     ├── In-app navigation (smooth polyline draw with "Calculating..." spinner)
           │     └── External maps (Google Maps / Apple Maps)
           ├── Select date + time slot
-          └── Book → Patient Details → Confirmation → My Appointments
+          └── Book → Patient Details (Step 1: Form) → Confirmation (Step 2: Checkout/Reminders) → My Appointments
 ```
 
 ### 4.3 Medical Records Flow

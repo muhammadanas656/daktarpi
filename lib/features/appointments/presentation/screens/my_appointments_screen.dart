@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/services/appointment_notification_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -76,6 +77,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   Future<void> _cancelAppointment(int id) async {
     try {
       await _appointmentNotifier.cancelAppointment(id);
+      await AppointmentNotificationService.instance.cancelReminder(id);
 
       if (mounted) {
         CustomSnackbar.showSuccess(context, "Appointment Cancelled");
@@ -90,6 +92,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   Future<void> _completeAppointment(int id) async {
     try {
       await _appointmentNotifier.completeAppointment(id);
+      await AppointmentNotificationService.instance.cancelReminder(id);
 
       if (mounted) {
         CustomSnackbar.showSuccess(context, "Appointment marked as completed");

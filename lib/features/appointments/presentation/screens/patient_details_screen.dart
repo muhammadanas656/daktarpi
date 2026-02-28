@@ -83,7 +83,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   String? _selectedYear;
 
   // Dynamic Category State
-  List<String> _savedCategories = [];
+  List<Map<String, dynamic>> _savedPatients = [];
   String? _newPendingCategory;
   String _selectedCategoryName = "My Self";
 
@@ -219,13 +219,13 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       try {
         final profile = await _profileRepo.getProfile(userId);
         final userEmail = _profileRepo.currentUserEmail;
-        final categories = await _profileRepo.getPatientCategories(userId);
+        final patients = await _profileRepo.getSavedPatients(userId);
 
         if (mounted && profile != null) {
           _userProfileUrl = profile.profilePictureUrl;
 
           setState(() {
-            _savedCategories = categories;
+            _savedPatients = patients;
 
             if (_selectedCategoryName == "My Self") {
               _nameController.text = profile.fullName;
@@ -237,9 +237,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
               if (profile.dateOfBirth != null) {
                 _selectedDay = profile.dateOfBirth!.day.toString();
-                _selectedMonth = DateFormat(
-                  'MMMM',
-                ).format(profile.dateOfBirth!);
+                _selectedMonth = DateFormat('MMMM').format(profile.dateOfBirth!);
                 _selectedYear = profile.dateOfBirth!.year.toString();
               }
             }
@@ -421,7 +419,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       try {
         await _profileRepo.removePatientCategory(category);
         setState(() {
-          _savedCategories.remove(category);
+          _savedPatients.removeWhere((p) => p['relation'] == category);
           if (_selectedCategoryName == category) {
             _selectedCategoryName = "My Self";
             _fetchUserProfile();
@@ -434,7 +432,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     }
   }
 
-  void _handleContinue() {
+  Future<void> _handleContinue() async {
     if (_nameController.text.isEmpty ||
         _phoneController.text.isEmpty ||
         _selectedDay == null ||
@@ -444,39 +442,51 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       return;
     }
 
-    final monthInt = _monthStringToInt(_selectedMonth!);
-    final dob = DateTime(
-      int.parse(_selectedYear!),
-      monthInt,
-      int.parse(_selectedDay!),
-    );
 
-    String? imagePath =
-        _selectedCategoryName == "My Self"
-            ? _userProfileUrl
-            : _newPatientImage?.path;
+
+    final monthInt = _monthStringToInt(_selectedMonth!);
+    final dob = DateTime(int.parse(_selectedYear!), monthInt, int.parse(_selectedDay!));
+    String? imagePath = _selectedCategoryName == "My Self" ? _userProfileUrl : _newPatientImage?.path;
+
+    // Preserve relational patient caching logic natively
+    final catToSave = _newPendingCategory ?? _selectedCategoryName;
+    if (catToSave != "My Self") {
+      final dobString = dob.toIso8601String().split('T')[0];
+      _profileRepo.savePatientDetails({
+        'relation': catToSave,
+        'full_name': _nameController.text,
+        'gender': _selectedGender,
+        'date_of_birth': dobString,
+        'image_path': _newPatientImage?.path,
+      });
+    }
+
+    // Bundle the data for Step 2
+    final patientDetails = {
+      'name': _nameController.text,
+      'phone': _phoneController.text,
+      'email': _emailController.text,
+      'gender': _selectedGender,
+      'dob': dob.toIso8601String().split('T')[0],
+      'image_url': imagePath,
+    };
 
     unawaited(_clearDraft());
-    context.push(
-      AppRoutes.paymentMethod,
-      extra: PaymentMethodArgs(
-        doctor: widget.doctor,
-        clinic: widget.clinic,
-        appointmentDate: widget.initialDate,
-        timeSlot: widget.timeSlot,
-        idempotencyKey: widget.idempotencyKey,
-        patientDetails: {
-          'name': _nameController.text,
-          'phone': _phoneController.text,
-          'email': _emailController.text,
-          'gender': _selectedGender,
-          'dob': dob.toIso8601String(),
-          'imagePath': imagePath,
-          'patientType': _selectedCategoryName,
-          'newCategoryToSave': _newPendingCategory,
-        },
-      ),
-    );
+
+    // Navigate to the Confirmation Screen!
+    if (mounted) {
+      context.push(
+        AppRoutes.paymentMethod, // This routes to your AppointmentConfirmationScreen
+        extra: PaymentMethodArgs(
+          doctor: widget.doctor,
+          clinic: widget.clinic,
+          patientDetails: patientDetails,
+          appointmentDate: widget.initialDate,
+          timeSlot: widget.timeSlot,
+          idempotencyKey: widget.idempotencyKey,
+        ),
+      );
+    }
   }
 
   int _monthStringToInt(String month) {
@@ -569,7 +579,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // --- MY SELF OPTION (Always present) ---
+                            // --- MY SELF OPTION (Always present, not draggable) ---
                             _buildOptionItem(
                               isSelected: _selectedCategoryName == "My Self",
                               label: "My Self",
@@ -595,32 +605,71 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                             ),
                             const SizedBox(width: 16),
 
-                            // --- SAVED CATEGORIES (From DB) ---
-                            ..._savedCategories.map((category) {
+                            // --- SAVED CATEGORIES (From new DB table) ---
+                            ..._savedPatients.map((patientMap) {
+                              final category = patientMap['relation'] as String;
+                              final savedImagePath = patientMap['image_path'] as String?;
+                              final hasValidImage = savedImagePath != null && savedImagePath.isNotEmpty && File(savedImagePath).existsSync();
+
                               return Padding(
                                 padding: const EdgeInsets.only(right: 16),
-                                child: _buildOptionItem(
-                                  isSelected: _selectedCategoryName == category,
-                                  label: category,
-                                  content: Icon(
-                                    Icons.person_outline,
-                                    color: Colors.grey[400],
-                                    size: 30,
+                                child: Draggable<String>(
+                                  data: category,
+                                  feedback: Material(
+                                    color: Colors.transparent,
+                                    child: Opacity(
+                                      opacity: 0.8,
+                                      child: _buildOptionItem(
+                                        isSelected: _selectedCategoryName == category,
+                                        label: category,
+                                        content: hasValidImage
+                                            ? Image.file(File(savedImagePath as String), fit: BoxFit.cover)
+                                            : Icon(Icons.person_outline, color: Colors.grey[400], size: 30),
+                                        onTap: () {}, 
+                                      ),
+                                    ),
                                   ),
-                                  showDeleteIcon: true,
-                                  onDeleteTap: () => _deleteCategory(category),
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedCategoryName = category;
-                                      _nameController.clear();
-                                      _phoneController.clear();
-                                      _selectedDay = null;
-                                      _selectedMonth = null;
-                                      _selectedYear = null;
-                                      _newPatientImage = null;
-                                    });
-                                    _scheduleDraftSave();
-                                  },
+                                  childWhenDragging: Opacity(
+                                    opacity: 0.3,
+                                    child: _buildOptionItem(
+                                      isSelected: _selectedCategoryName == category,
+                                      label: category,
+                                      content: hasValidImage
+                                          ? Image.file(File(savedImagePath as String), fit: BoxFit.cover)
+                                          : Icon(Icons.person_outline, color: Colors.grey[400], size: 30),
+                                      onTap: () {},
+                                    ),
+                                  ),
+                                  child: _buildOptionItem(
+                                    isSelected: _selectedCategoryName == category,
+                                    label: category,
+                                    content: hasValidImage
+                                        ? Image.file(File(savedImagePath as String), fit: BoxFit.cover)
+                                        : Icon(Icons.person_outline, color: Colors.grey[400], size: 30),
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedCategoryName = category;
+                                        
+                                        // Auto-Fill the fields from DB
+                                        _nameController.text = patientMap['full_name'] ?? '';
+                                        _selectedGender = patientMap['gender'] ?? 'Male';
+                                        
+                                        if (patientMap['date_of_birth'] != null) {
+                                          final dob = DateTime.parse(patientMap['date_of_birth']);
+                                          _selectedDay = dob.day.toString();
+                                          _selectedMonth = DateFormat('MMMM').format(dob);
+                                          _selectedYear = dob.year.toString();
+                                        }
+
+                                        if (hasValidImage) {
+                                          _newPatientImage = File(savedImagePath as String);
+                                        } else {
+                                          _newPatientImage = null;
+                                        }
+                                      });
+                                      _scheduleDraftSave();
+                                    },
+                                  ),
                                 ),
                               );
                             }),
@@ -644,7 +693,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                           size: 30,
                                         ),
                                 bgColor: lightGreenBg,
-                                showDeleteIcon: true,
+                                showDeleteIcon:
+                                    true, // Keep standard delete for un-saved pending item
                                 onDeleteTap: () {
                                   setState(() {
                                     _newPendingCategory = null;
@@ -681,8 +731,92 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                           ],
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 16),
 
+                      // --- DRAG TO DELETE BUCKET ---
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        child:
+                            _savedPatients.isNotEmpty
+                                ? DragTarget<String>(
+                                  onAcceptWithDetails: (details) {
+                                    // Triggers the exact same delete function when dropped!
+                                    _deleteCategory(details.data);
+                                  },
+                                  builder: (
+                                    context,
+                                    candidateData,
+                                    rejectedData,
+                                  ) {
+                                    // candidateData contains the category name when hovered over the bucket
+                                    final isHovering = candidateData.isNotEmpty;
+
+                                    return AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      width: double.infinity,
+                                      margin: const EdgeInsets.only(bottom: 16),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 16,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            isHovering
+                                                ? Colors.red.withValues(
+                                                  alpha: 0.1,
+                                                )
+                                                : Colors.grey.withValues(
+                                                  alpha: 0.03,
+                                                ),
+                                        border: Border.all(
+                                          color:
+                                              isHovering
+                                                  ? Colors.red
+                                                  : Colors.grey.withValues(
+                                                    alpha: 0.3,
+                                                  ),
+                                          width: isHovering ? 2 : 1,
+                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            isHovering
+                                                ? Icons.delete_forever
+                                                : Icons.delete_outline,
+                                            color:
+                                                isHovering
+                                                    ? Colors.red
+                                                    : Colors.grey,
+                                            size: 28,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            isHovering
+                                                ? "Drop to Delete '${candidateData.first}'!"
+                                                : "Drag a category here to delete",
+                                            style: TextStyle(
+                                              color:
+                                                  isHovering
+                                                      ? Colors.red
+                                                      : Colors.grey,
+                                              fontSize: 13,
+                                              fontWeight:
+                                                  isHovering
+                                                      ? FontWeight.bold
+                                                      : FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                )
+                                : const SizedBox.shrink(),
+                      ),
+                      const SizedBox(height: 16),
                       // 3. Form Fields
                       Container(
                         padding: const EdgeInsets.all(20),

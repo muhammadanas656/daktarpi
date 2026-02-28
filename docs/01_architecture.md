@@ -25,7 +25,7 @@ lib/
 ├── data/                       # Shared data services
 │   └── services/user_service.dart
 ├── features/                   # Feature modules (vertical slices)
-│   ├── appointments/           # Booking flow, my appointments, confirmation
+│   ├── appointments/           # Split booking flow (Step 1: Patient form, Step 2: Confirmation/Reminders), my appointments
 │   ├── auth/                   # Login, signup, 2FA verify, repositories, security gate
 │   ├── common/                 # Enable location screen
 │   ├── doctors/                # Doctor list, details, clinics, favorites, map/navigation
@@ -103,10 +103,11 @@ main.dart
 | User auth (email/password, Google) | `supabase.auth` |
 | MFA (TOTP enrollment, challenge, verify) | `supabase.auth.mfa` |
 | Recovery codes | `supabase.rpc('use_recovery_code')` |
-| Doctor/clinic/schedule data | `supabase.from('doctors')`, etc. |
+| Doctor/clinic/schedule data | `supabase.from('doctors')`, etc. filtered by `country_iso` |
 | Appointments CRUD + realtime | `supabase.from('appointments')` + channels |
 | Medical records + file storage | `supabase.from('medical_records')` + `supabase.storage` |
 | Profile data + avatar upload | `supabase.from('profiles')` + `supabase.storage` |
+| Family members / secondary profiles | `supabase.from('saved_patients')` (relational table) |
 | Trusted devices | `supabase.from('trusted_devices')` |
 
 ## 7. File Inventory

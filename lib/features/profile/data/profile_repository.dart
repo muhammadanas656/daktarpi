@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/errors/app_failure.dart';
 import 'user_profile.dart';
@@ -125,54 +126,51 @@ class ProfileRepository {
       );
     }
   }
-  // --- PATIENT CATEGORIES LOGIC ---
+  // --- SAVED PATIENTS (RELATIONAL) LOGIC ---
 
-  Future<List<String>> getPatientCategories(String userId) async {
+  /// Fetches all saved patients for the user as a list of Maps
+  Future<List<Map<String, dynamic>>> getSavedPatients(String userId) async {
     try {
-      final response =
-          await _client
-              .from('profiles')
-              .select('saved_patient_categories')
-              .eq('id', userId)
-              .maybeSingle();
-
-      if (response != null && response['saved_patient_categories'] != null) {
-        final list = response['saved_patient_categories'] as List<dynamic>;
-        return list.map((e) => e.toString()).toList();
-      }
-      return [];
+      final response = await _client
+          .from('saved_patients')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: true);
+          
+      return List<Map<String, dynamic>>.from(response);
     } catch (e) {
+      debugPrint("Error fetching saved patients: $e");
       return [];
     }
   }
 
-  Future<void> savePatientCategory(String category) async {
+  /// Upserts (Inserts or Updates) a patient category
+  Future<void> savePatientDetails(Map<String, dynamic> patientData) async {
     final userId = currentUserId;
     if (userId == null) return;
 
     try {
-      final currentCategories = await getPatientCategories(userId);
-      if (!currentCategories.contains(category)) {
-        currentCategories.add(category);
-        await _client
-            .from('profiles')
-            .update({'saved_patient_categories': currentCategories})
-            .eq('id', userId);
-      }
-    } catch (_) {} // Fails silently to not disrupt booking flow
+      patientData['user_id'] = userId; // Ensure it's tied to the logged-in user
+      
+      await _client
+          .from('saved_patients')
+          .upsert(patientData, onConflict: 'user_id, relation');
+    } catch (e) {
+      debugPrint("Error saving patient details: $e");
+    }
   }
 
-  Future<void> removePatientCategory(String category) async {
+  /// Deletes a specific patient category
+  Future<void> removePatientCategory(String relation) async {
     final userId = currentUserId;
     if (userId == null) return;
 
     try {
-      final currentCategories = await getPatientCategories(userId);
-      currentCategories.remove(category);
       await _client
-          .from('profiles')
-          .update({'saved_patient_categories': currentCategories})
-          .eq('id', userId);
+          .from('saved_patients')
+          .delete()
+          .eq('user_id', userId)
+          .eq('relation', relation);
     } catch (e) {
       throw AppFailure.fromError(
         e,
