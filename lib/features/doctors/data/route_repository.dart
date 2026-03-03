@@ -17,9 +17,9 @@ class RouteRepository {
     required LatLng end,
   }) async {
     try {
-      // First attempt direct public OSRM lookup to bypass non-deployed edge functions
+      // First attempt direct public OSRM lookup with maximum geometry precision
       final uri = Uri.parse(
-        'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson',
+        'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson&overview=full',
       );
 
       try {

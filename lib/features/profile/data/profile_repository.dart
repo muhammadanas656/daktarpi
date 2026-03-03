@@ -126,18 +126,45 @@ class ProfileRepository {
       );
     }
   }
+
   // --- SAVED PATIENTS (RELATIONAL) LOGIC ---
 
+  // 1. Caching Variables
+  List<Map<String, dynamic>> _cachedSavedPatients = [];
+  DateTime? _lastSavedPatientsFetch;
+  static const _cacheDuration = Duration(minutes: 5);
+
+  bool _isCacheValid(DateTime? lastFetch) {
+    if (lastFetch == null) return false;
+    return DateTime.now().difference(lastFetch) < _cacheDuration;
+  }
+
   /// Fetches all saved patients for the user as a list of Maps
-  Future<List<Map<String, dynamic>>> getSavedPatients(String userId) async {
+  Future<List<Map<String, dynamic>>> getSavedPatients(
+    String userId, {
+    bool forceRefresh = false,
+  }) async {
+    // 2. Return cached data instantly if valid
+    if (!forceRefresh &&
+        _isCacheValid(_lastSavedPatientsFetch) &&
+        _cachedSavedPatients.isNotEmpty) {
+      return _cachedSavedPatients;
+    }
+
     try {
       final response = await _client
           .from('saved_patients')
           .select()
           .eq('user_id', userId)
           .order('created_at', ascending: true);
-          
-      return List<Map<String, dynamic>>.from(response);
+
+      final data = List<Map<String, dynamic>>.from(response);
+
+      // 3. Save to cache
+      _cachedSavedPatients = data;
+      _lastSavedPatientsFetch = DateTime.now();
+
+      return data;
     } catch (e) {
       debugPrint("Error fetching saved patients: $e");
       return [];
@@ -150,11 +177,14 @@ class ProfileRepository {
     if (userId == null) return;
 
     try {
-      patientData['user_id'] = userId; // Ensure it's tied to the logged-in user
-      
+      patientData['user_id'] = userId;
+
       await _client
           .from('saved_patients')
           .upsert(patientData, onConflict: 'user_id, relation');
+
+      // 4. INVALIDATE CACHE: Force a fresh fetch next time so the new category shows!
+      _lastSavedPatientsFetch = null;
     } catch (e) {
       debugPrint("Error saving patient details: $e");
     }
@@ -171,6 +201,9 @@ class ProfileRepository {
           .delete()
           .eq('user_id', userId)
           .eq('relation', relation);
+
+      // 4. INVALIDATE CACHE: Force a fresh fetch next time
+      _lastSavedPatientsFetch = null;
     } catch (e) {
       throw AppFailure.fromError(
         e,

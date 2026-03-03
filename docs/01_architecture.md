@@ -1,121 +1,131 @@
-# DaktarPai — Architecture Overview
+﻿# DaktarPai - Architecture Overview
 
 ## 1. High-Level Summary
 
-DaktarPai is a healthcare mobile application built with **Flutter** (Material 3, Dart) and **Supabase** as the backend (auth, database, storage, realtime). It connects patients with doctors — enabling appointment booking, medical record management, and secure account handling with multi-factor authentication.
+DaktarPai is a Flutter healthcare app with Supabase as the primary backend (auth, database, realtime, storage, and edge functions). The app includes doctor discovery, appointment booking, reviews, profile/settings security, and medical records.
+
+Current architecture reflected in source:
+- Doctor map/navigation moved into a dedicated `ClinicLocationMapSection` widget.
+- Doctor view analytics is tracked via delayed screen-stay timer plus Supabase RPC (`increment_doctor_views_smart`).
+- Appointment realtime subscription is now owned globally by `AppointmentNotifier` rather than screen-local wiring.
+- `MainWrapper` refreshes critical notifiers when app lifecycle returns to `resumed`.
+- Appointment cancellation now throws typed `AppFailure` fallback messages instead of raw debug exceptions.
 
 ## 2. Project Structure
 
-```
+```text
 lib/
-├── main.dart                   # App entry point, Supabase init, error telemetry, device integrity
-├── app.dart                    # MaterialApp.router with theme, locale, guards
-├── core/                       # Cross-cutting concerns (theme, routing, security, utils)
-│   ├── constants/              # Route paths (AppRoutes)
-│   ├── errors/                 # AppFailure (typed error class)
-│   ├── localization/           # AppLocalizations (en/bn)
-│   ├── main_wrapper/           # Bottom-nav shell + custom drawer
-│   ├── network/                # OfflineModeGuard (connectivity_plus)
-│   ├── router/                 # GoRouter config + auth refresh stream
-│   ├── security/               # Biometric, device integrity, inactivity lock, step-up
-│   ├── services/               # Appointment notifications, error telemetry
-│   ├── theme/                  # Colors, typography, motion, shapes, dimensions, styles
-│   ├── utils/                  # Formatters (backup code), navigation helpers
-│   └── widgets/                # App-wide error fallback, route error screen
-├── data/                       # Shared data services
-│   └── services/user_service.dart
-├── features/                   # Feature modules (vertical slices)
-│   ├── appointments/           # Split booking flow (Step 1: Patient form, Step 2: Confirmation/Reminders), my appointments
-│   ├── auth/                   # Login, signup, 2FA verify, repositories, security gate
-│   ├── common/                 # Enable location screen
-│   ├── doctors/                # Doctor list, details, clinics, favorites, map/navigation
-│   ├── home/                   # Home screen (dashboard), home repository
-│   ├── legal/                  # Terms of service screen
-│   ├── medical_records/        # Record CRUD, file viewer, security-gated access
-│   ├── menu/                   # Settings screen, privacy policy, linked accounts, drawer
-│   ├── profile/                # Profile edit screen, notifier, repository, model
-│   ├── settings/               # SettingsNotifier (theme, notifications, timeout)
-│   ├── splash/                 # Splash screen with auth redirect
-│   └── support/                # Help center screen
-├── presentation/               # Shared reusable widgets
-│   └── widgets/                # Buttons, cards, inputs, snackbar, search bar
-└── services/                   # Global services
+  main.dart
+  app.dart
+  core/
+    constants/
+    errors/
+    localization/
+    main_wrapper/
+    network/
+    router/
+    security/
+    services/
+    theme/
+    utils/
+    widgets/
+  features/
+    appointments/
+    auth/
+    common/
+    doctors/
+    home/
+    legal/
+    medical_records/
+    menu/
+    profile/
+    settings/
+    splash/
+    support/
+  presentation/
+    widgets/
 ```
 
 ## 3. Architectural Pattern
 
-The app follows a **feature-first, layered architecture**:
+Feature-first layered architecture:
+- Presentation layer: screens/widgets and local UI state.
+- Shared state layer: singleton `ChangeNotifier` instances.
+- Data layer: repositories for Supabase and external APIs.
+- Core layer: router, guards, security, telemetry, theme, and app shell.
 
 ```mermaid
 graph TD
-    A[Presentation Layer<br/>Screens & Widgets] --> B[Data Layer<br/>Repositories]
-    B --> C[Backend<br/>Supabase Client]
-    A --> D[State<br/>ChangeNotifier Singletons]
-    D --> B
-    A --> E[Core Services<br/>Security, Theme, Router]
+    UI[Presentation] --> N[Notifiers]
+    UI --> R[Repositories]
+    N --> R
+    R --> B[Supabase / External APIs]
+    UI --> C[Core Services + Guards]
 ```
-
-Each feature module is structured as:
-
-| Sub-folder | Purpose |
-|---|---|
-| `data/` | Models (Freezed + JSON), repositories (Supabase CRUD) |
-| `presentation/screens/` | Full-page screen widgets |
-| `presentation/widgets/` | Feature-specific reusable UI components |
-| `presentation/models/` | Route argument classes |
-| `presentation/` | Notifiers (ChangeNotifier singletons for state) |
 
 ## 4. Key Architectural Decisions
 
 | Decision | Rationale |
 |---|---|
-| **GoRouter** | Declarative routing with auth redirects, deep linking, shell routes for bottom nav |
-| **Supabase** | Unified backend: Postgres DB, Auth (email + Google + MFA), Storage, Realtime |
-| **ChangeNotifier singletons** | Lightweight state management without external packages (Provider/Riverpod) |
-| **Freezed models** | Immutable, union-typed data classes with JSON serialization |
-| **Feature-first modules** | Each feature owns its data + presentation layers; core is shared |
-| **Security-first design** | Device integrity, inactivity lock, biometric step-up, trusted devices, AAL2 gates |
+| GoRouter + shell routing | Centralized redirects with persistent tab scaffolding |
+| Supabase-first backend | Unified auth/data/realtime/storage/edge-function path |
+| Singleton notifiers | Lightweight global state without introducing extra frameworks |
+| Global notifier-owned realtime | Background appointment freshness across all tabs/screens |
+| Feature modularization | Isolates complex UI logic (for example, map/navigation widget) |
+| Security-first startup | Device integrity checks before app render |
+| Production-friendly failures | `AppFailure` normalization with user-safe fallback messaging |
 
-## 5. Dependency Graph
+## 5. Runtime Composition
 
-```
-main.dart
-  └── app.dart (MyApp)
-        ├── AppTheme (light/dark)
-        ├── SettingsNotifier (theme mode listener)
-        ├── appRouter (GoRouter)
-        │     ├── SplashScreen → AuthEntryRouteService → home/login/verify2fa
-        │     ├── Auth screens (login, signup, verify2fa)
-        │     ├── StatefulShellRoute (MainWrapper)
-        │     │     ├── HomeScreen
-        │     │     ├── DoctorsScreen
-        │     │     ├── MyAppointmentsScreen
-        │     │     └── ProfileTab (view + edit)
-        │     └── Standalone screens (settings, medical records, doctor details, etc.)
-        ├── OfflineModeGuard (connectivity banner)
-        └── InactivityLockGuard (session timeout + biometric unlock)
-```
+Startup (`main.dart`):
+1. Initialize bindings and environment.
+2. Initialize Supabase.
+3. Load settings and notification services.
+4. Run device-integrity enforcement.
+5. Configure telemetry/error handlers.
+6. Start app inside `runZonedGuarded`.
 
-## 6. Backend Integration (Supabase)
+Global wrappers and shell:
+- `app.dart` applies `OfflineModeGuard` and `InactivityLockGuard`.
+- `MainWrapper` initializes appointment realtime, does initial profile/appointment sync, and triggers silent refresh on app resume.
 
-| Feature | Supabase Service |
+## 6. Backend Integration Snapshot
+
+| Area | Source |
 |---|---|
-| User auth (email/password, Google) | `supabase.auth` |
-| MFA (TOTP enrollment, challenge, verify) | `supabase.auth.mfa` |
-| Recovery codes | `supabase.rpc('use_recovery_code')` |
-| Doctor/clinic/schedule data | `supabase.from('doctors')`, etc. filtered by `country_iso` |
-| Appointments CRUD + realtime | `supabase.from('appointments')` + channels |
-| Medical records + file storage | `supabase.from('medical_records')` + `supabase.storage` |
-| Profile data + avatar upload | `supabase.from('profiles')` + `supabase.storage` |
-| Family members / secondary profiles | `supabase.from('saved_patients')` (relational table) |
-| Trusted devices | `supabase.from('trusted_devices')` |
+| Authentication and MFA | `supabase.auth`, `supabase.auth.mfa` |
+| Doctors, specialties, clinics, schedules | `doctors`, `specialties`, `clinics`, `doctor_clinics`, `doctor_schedules` |
+| Doctor view analytics | RPC `increment_doctor_views_smart` |
+| Appointments and history | `appointments`, `appointment_history` |
+| Reviews | `reviews` via submit + pending-review/activity correlation |
+| Appointment realtime | Supabase channel on `public.appointments` (managed by notifier) |
+| Route geometry | OSRM direct call with Supabase edge-function fallback (`route-proxy`) |
+| Profiles and saved patients | `profiles`, `saved_patients` |
+| Medical records | `medical_records` + storage |
+| Trusted devices | `trusted_devices` |
 
-## 7. File Inventory
+## 7. Native and Plugin Integration
 
-| Layer | File Count |
+| Capability | Implementation |
 |---|---|
-| `core/` | 28 files |
-| `features/` | 72+ files (12 feature modules) |
-| `presentation/widgets/` | 15 shared widgets |
-| `data/services/` | 1 file |
-| **Total** | **~120 Dart files** |
+| Calendar event creation | `add_2_calendar` from appointment flows |
+| Android calendar intent visibility | Manifest `<queries>` for calendar insert intent/mime |
+| Android predictive back compatibility | `android:enableOnBackInvokedCallback="true"` |
+| iOS calendar/contacts disclosure | `NSCalendarsUsageDescription`, `NSContactsUsageDescription` |
+
+## 8. Current Behavior Notes
+
+- Cancellation path uses typed `AppFailure` mapping and user-friendly fallback messages.
+- Pending review UX is backed by completed appointments without existing reviews.
+- Activity log injects `has_review` from `reviews` lookup to suppress duplicate review prompts.
+
+## 9. Relevant Packages
+
+- `supabase_flutter`
+- `go_router`
+- `flutter_map`
+- `latlong2`
+- `geolocator`
+- `flutter_local_notifications`
+- `local_auth`
+- `add_2_calendar`

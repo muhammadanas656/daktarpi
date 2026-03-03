@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/services/appointment_notification_service.dart';
-import '../../../settings/presentation/settings_notifier.dart';
 import '../../../doctors/data/doctor_repository.dart';
 import '../../data/appointment_repository.dart';
 // Added ProfileRepository
@@ -45,13 +43,11 @@ class _AppointmentConfirmationScreenState
   static const Color primaryGreen = AppColors.primaryGreen;
   static const Color textDark = AppColors.textDark;
   static const Color textGrey = AppColors.textGrey;
-  static const Color textLight = AppColors.textLight;
   static const Color borderColor = AppColors.borderColor;
 
   final _doctorRepo = DoctorRepository();
   final _appointmentRepo = AppointmentRepository();
   // Initialized Profile Repo
-  final _notificationService = AppointmentNotificationService.instance;
 
   final TextStyle _sectionHeaderStyle = AppTextStyles.h3;
 
@@ -182,13 +178,9 @@ class _AppointmentConfirmationScreenState
       return;
     }
 
-    setState(() => _isLoading = true);
     final userId = _appointmentRepo.currentUserId;
     if (userId == null) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        CustomSnackbar.showError(context, "Please sign in again to continue.");
-      }
+      CustomSnackbar.showError(context, "Please sign in again to continue.");
       return;
     }
 
@@ -199,6 +191,7 @@ class _AppointmentConfirmationScreenState
       'yyyy-MM-dd HH:mm',
     ).parse('$formattedDate ${times[0]}');
 
+    // Prepare the final payload for the database
     final data = {
       'user_id': userId,
       'doctor_id': widget.doctor['id'],
@@ -216,157 +209,23 @@ class _AppointmentConfirmationScreenState
       'idempotency_key': widget.idempotencyKey,
     };
 
-    try {
-      int persistedAppointmentId;
-      if (widget.appointmentId != null) {
-        await _appointmentRepo.updateAppointment(widget.appointmentId!, data);
-        persistedAppointmentId = widget.appointmentId!;
-      } else {
-        persistedAppointmentId = await _appointmentRepo.createAppointment(data);
-      }
-
-      bool reminderFailed = false;
-      try {
-        final selectedMins = _reminderOptions[_selectedReminderIndex];
-
-        // --- SCHEDULE NOTIFICATION LOGIC ---
-        // Only schedule if global settings are ON and they didn't choose 0 (No Reminder)
-        if (SettingsNotifier.instance.notificationsEnabled &&
-            selectedMins > 0) {
-          await _notificationService.scheduleReminder(
-            appointmentId: persistedAppointmentId,
-            appointmentLocalDateTime: appointmentDateTime,
-            reminderMinutes: selectedMins,
-            doctorName: widget.doctor['full_name']?.toString() ?? 'your doctor',
-          );
-        } else {
-          // If global notifications are OFF or they chose 0, cancel any existing alarms for this ID
-          await _notificationService.cancelReminder(persistedAppointmentId);
-        }
-      } catch (error) {
-        debugPrint('Reminder scheduling failed for appointment: $error');
-        reminderFailed = true;
-      }
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (reminderFailed) {
-          CustomSnackbar.showInfo(
-            context,
-            "Appointment confirmed. Reminder could not be scheduled.",
-          );
-        }
-        _showSuccessDialog(times[0]);
-      }
-    } catch (e) {
-      if (mounted) {
-        CustomSnackbar.showError(context, "Action failed: $e");
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  void _showSuccessDialog(String startTime24h) {
-    final timeObj = DateFormat("HH:mm").parse(startTime24h);
+    // Format display strings for the success popup later
+    final timeObj = DateFormat("HH:mm").parse(times[0]);
     final timeStr = DateFormat("hh:mm a").format(timeObj);
     final dateStr = DateFormat("MMMM d").format(_selectedDate);
-    final doctorName = widget.doctor['full_name'] ?? "Doctor";
-    final isReschedule = widget.appointmentId != null;
 
-    showDialog(
-      context: context,
-      useRootNavigator: true,
-      barrierDismissible: false,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            backgroundColor: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    height: 80,
-                    width: 80,
-                    decoration: BoxDecoration(
-                      color: primaryGreen.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.check_rounded,
-                        color: primaryGreen,
-                        size: 40,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    isReschedule ? "Rescheduled!" : "Thank You!",
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isReschedule
-                        ? "Appointment Updated Successfully"
-                        : "Your Appointment Successful",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: textLight,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    "You have booked with $doctorName on $dateStr, at $timeStr",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: textGrey,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        // Redirect logic remains the same
-                        context.go(
-                          AppRoutes.appointments,
-                          extra: const AppointmentsRouteArgs(refresh: true),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryGreen,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const Text(
-                        "Done",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    // Proceed to Dummy Payment Screen!
+    context.push(
+      AppRoutes.dummyPayment,
+      extra: DummyPaymentRouteArgs(
+        appointmentData: data,
+        appointmentDateTime: appointmentDateTime,
+        reminderMinutes: _reminderOptions[_selectedReminderIndex],
+        doctorName: widget.doctor['full_name']?.toString() ?? 'Doctor',
+        displayDate: dateStr,
+        displayTime: timeStr,
+        appointmentId: widget.appointmentId,
+      ),
     );
   }
 
@@ -459,7 +318,7 @@ class _AppointmentConfirmationScreenState
           ),
         ),
       ),
-      bottomSheet: _buildBottomButton(),
+      bottomNavigationBar: _buildBottomButton(),
     );
   }
 

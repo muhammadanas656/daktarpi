@@ -6,6 +6,10 @@
     <string>We need your location to find doctors and clinics near you.</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>We need your location to find doctors and clinics near you.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>DaktarPai needs access to your calendar so you can save your upcoming appointments.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>DaktarPai needs contacts access to add doctor details to your calendar events.</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>

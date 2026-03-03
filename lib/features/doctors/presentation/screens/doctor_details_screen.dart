@@ -15,20 +15,14 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../doctors/data/doctor_repository.dart';
-import '../../../doctors/data/route_repository.dart';
 import '../../../appointments/data/appointment_repository.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart' hide Path;
-import 'package:uuid/uuid.dart';
-
-import '../../../../core/utils/navigation_helper.dart';
-
-import 'package:geolocator/geolocator.dart';
 
 import '../widgets/doctor_details_header.dart';
 import '../widgets/doctor_stats_row.dart';
 import '../widgets/doctor_appointment_card.dart';
 import '../widgets/doctor_timing_list.dart';
+import '../widgets/clinic_location_map_section.dart';
+import 'package:uuid/uuid.dart';
 import '../../../appointments/presentation/models/booking_route_args.dart';
 
 class DoctorDetailsScreen extends StatefulWidget {
@@ -48,12 +42,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   static const Color bgColor = AppColors.bgColor;
 
-  static const Color textDark = AppColors.textDark;
-
   // --- DATA STATE ---
 
   final _doctorRepo = DoctorRepository();
-  final _routeRepo = RouteRepository();
   final _appointmentRepo = AppointmentRepository();
   final _favNotifier = FavoritesNotifier.instance;
 
@@ -62,9 +53,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   Map<String, dynamic>? _doctor;
 
-  List<Map<String, dynamic>> _clinics = [];
+  final List<Map<String, dynamic>> _clinics = [];
 
-  List<Map<String, dynamic>> _schedules = [];
+  final List<Map<String, dynamic>> _schedules = [];
 
   // Tracks the user's selected clinic/location
   Map<String, dynamic>? _selectedClinic;
@@ -73,7 +64,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   DateTime _selectedDate = DateTime.now();
 
-  List<String> _bookedSlots = [];
+  final List<String> _bookedSlots = [];
 
   String? _selectedTimeSlot;
 
@@ -82,36 +73,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   final ScrollController _scrollController = ScrollController();
 
   final GlobalKey _locationSectionKey = GlobalKey();
-
-  // --- ANIMATION CONTROLLERS ---
-
-  bool _isMenuOpen = false;
-
-  Timer? _autoCloseTimer;
-
-  bool _isLocatorMenuOpen = false;
-
-  Timer? _locatorAutoCloseTimer;
-
-  // --- NAVIGATION STATE ---
-
-  LatLng? _userLocation;
-
-  List<LatLng> _routePoints = [];
-
-  double? _distanceToClinic;
-
-  bool _isRouteLoading = false;
-
-  bool _isNavigating = false;
-
-  bool _isDistanceBarExpanded = false;
-
-  bool _isUserPanning = false;
-
-  final MapController _mapController = MapController();
-
-  StreamSubscription<Position>? _positionStream;
+  Timer? _viewTimer;
+  bool _hasRecordedView = false;
 
   @override
   void initState() {
@@ -122,14 +85,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   @override
   void dispose() {
+    _viewTimer?.cancel();
     _favNotifier.removeListener(_onFavoritesChanged);
     _scrollController.dispose();
-
-    _autoCloseTimer?.cancel();
-
-    _locatorAutoCloseTimer?.cancel();
-
-    _positionStream?.cancel();
 
     super.dispose();
   }
@@ -145,118 +103,87 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   void _scrollToLocationSection() {
-    final context = _locationSectionKey.currentContext;
-    if (context == null) return;
-    Scrollable.ensureVisible(
-      context,
-      duration: AppMotion.defaultDuration,
-      curve: Curves.easeInOut,
-      alignment: 0.05,
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final sectionContext = _locationSectionKey.currentContext;
+      if (sectionContext == null) return;
+      try {
+        Scrollable.ensureVisible(
+          sectionContext,
+          duration: AppMotion.defaultDuration,
+          curve: Curves.easeInOut,
+          alignment: 0.05,
+        );
+      } catch (e) {
+        debugPrint('Scroll to location skipped before layout is ready: $e');
+      }
+    });
   }
 
-  // --- ANIMATION LOGIC ---
+  // --- ANALYTICS LOGIC ---
 
-  void _toggleDirectionMenu() {
-    if (_isMenuOpen) {
-      _closeMenu();
-    } else {
-      _openMenu();
-
-      if (_isLocatorMenuOpen) _closeLocatorMenu();
-    }
+  void _startViewTimer() {
+    _viewTimer?.cancel();
+    _viewTimer = Timer(const Duration(seconds: 3), () {
+      unawaited(_recordView());
+    });
   }
 
-  void _openMenu() {
-    setState(() => _isMenuOpen = true);
-    _autoCloseTimer?.cancel();
-    _autoCloseTimer = Timer(const Duration(seconds: 5), _closeMenu);
+  Future<void> _recordView() async {
+    if (_hasRecordedView) return;
+    _hasRecordedView = true;
+    await _doctorRepo.incrementDoctorViewCount(widget.doctorId);
   }
 
-  void _closeMenu() {
-    if (!mounted) return;
-    _autoCloseTimer?.cancel();
-    setState(() => _isMenuOpen = false);
-  }
-
-  void _toggleLocatorMenu() {
-    if (_isLocatorMenuOpen) {
-      _closeLocatorMenu();
-    } else {
-      _openLocatorMenu();
-
-      if (_isMenuOpen) _closeMenu();
-    }
-  }
-
-  void _openLocatorMenu() {
-    setState(() => _isLocatorMenuOpen = true);
-    _locatorAutoCloseTimer?.cancel();
-    _locatorAutoCloseTimer = Timer(
-      const Duration(seconds: 5),
-      _closeLocatorMenu,
-    );
-  }
-
-  void _closeLocatorMenu() {
-    if (!mounted) return;
-    _locatorAutoCloseTimer?.cancel();
-    setState(() => _isLocatorMenuOpen = false);
-  }
-
-  // --- DATA FETCHING ---
+  // --- BOOKING LOGIC ---
 
   Future<void> _fetchInitialData() async {
-    final userId = _doctorRepo.currentUserId;
-
     try {
-      // 1. Fetch Doctor Details FIRST (Vital)
       final doctor = await _doctorRepo.fetchDoctorDetails(widget.doctorId);
+      List<Map<String, dynamic>> clinics = const [];
+      List<Map<String, dynamic>> schedules = const [];
+      String? partialError;
 
-      if (mounted) {
-        setState(() {
-          _doctor = doctor.toJson();
-          _isLoading = false; // Show UI as soon as doctor is loaded
-        });
+      try {
+        final results = await Future.wait([
+          _doctorRepo.fetchClinics(widget.doctorId),
+          _doctorRepo.fetchSchedules(widget.doctorId),
+        ]);
+        clinics = List<Map<String, dynamic>>.from(results[0]);
+        schedules = List<Map<String, dynamic>>.from(results[1]);
+      } catch (e) {
+        debugPrint("Error fetching clinics/schedules: $e");
+        partialError =
+            "Some location or schedule data couldn't be loaded right now.";
       }
 
-      // 2. Fetch Secondary Data (Clinics, Schedules, Favorites)
-      // We do this concurrently but separately so UI is already visible
-      final results = await Future.wait<dynamic>([
-        _doctorRepo.fetchClinics(widget.doctorId),
-        _doctorRepo.fetchSchedules(widget.doctorId),
-        if (userId != null) _doctorRepo.isFavorite(widget.doctorId, userId),
-      ]);
+      if (partialError == null && clinics.isEmpty) {
+        partialError = "No clinic location data is available for this doctor.";
+      }
 
-      final clinicsResponse = results[0] as List<Map<String, dynamic>>;
-      final schedulesResponse = results[1] as List<Map<String, dynamic>>;
-      final isFav = userId != null ? results[2] as bool : false;
+      if (!mounted) return;
 
-      if (mounted) {
-        setState(() {
-          _clinics = clinicsResponse;
-          _schedules = schedulesResponse;
+      setState(() {
+        _doctor = doctor.toJson();
+        _clinics.clear();
+        _clinics.addAll(clinics);
+        _schedules.clear();
+        _schedules.addAll(schedules);
+        _selectedClinic = _clinics.isNotEmpty ? _clinics.first : null;
+        _errorMessage = partialError;
+        _isLoading = false;
+      });
 
-          if (_clinics.isNotEmpty) {
-            _selectedClinic = _clinics.first;
-          }
-
-          // Sync notifier
-          final docIdInt = int.tryParse(widget.doctorId);
-          if (docIdInt != null && isFav != _favNotifier.isFavorite(docIdInt)) {
-            _favNotifier.syncSingle(docIdInt, isFav);
-          }
-        });
-
+      if (_selectedClinic != null) {
         _fetchBookedSlots();
       }
+      _startViewTimer();
     } catch (e) {
       debugPrint("Error fetching data: $e");
-      // Only set loading to false if we haven't successfully loaded the doctor yet
-      if (mounted && _doctor == null) {
+      if (mounted) {
         setState(() {
+          _errorMessage = "Failed to load doctor details.";
           _isLoading = false;
-          _errorMessage = e.toString();
         });
       }
     }
@@ -264,342 +191,23 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   Future<void> _fetchBookedSlots() async {
     if (_selectedClinic == null) return;
-
     try {
-      final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
-
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
       final slots = await _appointmentRepo.fetchBookedSlots(
         doctorId: widget.doctorId,
         clinicId: _selectedClinic!['id'].toString(),
-        date: formattedDate,
+        date: dateStr,
       );
-
       if (mounted) {
         setState(() {
-          _bookedSlots = slots;
+          _bookedSlots.clear();
+          _bookedSlots.addAll(slots);
         });
       }
     } catch (e) {
-      if (mounted) setState(() {});
+      debugPrint("Error fetching booked slots: $e");
     }
   }
-
-  // --- LOCATION & MAP LOGIC ---
-
-  Future<bool> _ensureLocationReady() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
-    if (!serviceEnabled) {
-      if (!mounted) return false;
-
-      final result = await context.push<bool>('/location_permission');
-
-      if (result != true) {
-        serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
-        if (!serviceEnabled) return false;
-      }
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-
-      if (permission == LocationPermission.denied) {
-        if (mounted) {
-          CustomSnackbar.showError(context, "Location permission denied");
-        }
-
-        return false;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        CustomSnackbar.showError(
-          context,
-          "Location permissions are permanently denied",
-        );
-      }
-
-      return false;
-    }
-
-    return true;
-  }
-
-  Future<void> _centerOnUser() async {
-    _closeLocatorMenu();
-
-    final isReady = await _ensureLocationReady();
-
-    if (!isReady) return;
-
-    if (_userLocation == null) {
-      try {
-        Position position = await Geolocator.getCurrentPosition();
-
-        setState(() {
-          _userLocation = LatLng(position.latitude, position.longitude);
-        });
-      } catch (e) {
-        if (mounted) {
-          CustomSnackbar.showError(context, "Could not fetch location");
-        }
-
-        return;
-      }
-    }
-
-    if (_userLocation != null) {
-      setState(() => _isUserPanning = false);
-      _mapController.move(_userLocation!, 16.0);
-    }
-  }
-
-  void _updateDistance() {
-    if (_userLocation == null || _selectedClinic == null) return;
-
-    final clinicLat = _selectedClinic!['latitude'] as double?;
-    final clinicLng = _selectedClinic!['longitude'] as double?;
-    if (clinicLat == null || clinicLng == null) return;
-
-    double distance = 0.0;
-
-    // 1. If actively navigating AND we successfully loaded a route
-    if (_isNavigating && _routePoints.isNotEmpty) {
-      // Calculate distance from user to the start of the route
-      distance += Geolocator.distanceBetween(
-        _userLocation!.latitude,
-        _userLocation!.longitude,
-        _routePoints.first.latitude,
-        _routePoints.first.longitude,
-      );
-      // Add the entire length of the active route
-      for (int i = 0; i < _routePoints.length - 1; i++) {
-        distance += Geolocator.distanceBetween(
-          _routePoints[i].latitude,
-          _routePoints[i].longitude,
-          _routePoints[i + 1].latitude,
-          _routePoints[i + 1].longitude,
-        );
-      }
-    }
-    // 2. Otherwise, use straight-line displacement
-    else {
-      distance = Geolocator.distanceBetween(
-        _userLocation!.latitude,
-        _userLocation!.longitude,
-        clinicLat,
-        clinicLng,
-      );
-    }
-
-    setState(() {
-      _distanceToClinic = distance;
-    });
-  }
-
-  void _centerOnClinic() {
-    _closeLocatorMenu();
-
-    if (_selectedClinic != null) {
-      setState(() => _isUserPanning = true);
-
-      final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
-
-      final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
-
-      _mapController.move(LatLng(lat, lng), 16.0);
-    }
-  }
-
-  Future<void> _launchExternalMaps() async {
-    _closeMenu();
-
-    if (_selectedClinic == null) return;
-
-    final lat = _selectedClinic!['latitude'] as double? ?? 0.0;
-    final lng = _selectedClinic!['longitude'] as double? ?? 0.0;
-    final title = _selectedClinic!['name'] as String? ?? 'Clinic';
-
-    await NavigationHelper.showMapOptions(
-      context: context,
-      latitude: lat,
-      longitude: lng,
-      title: title,
-    );
-  }
-
-  Future<void> _launchInAppDirection() async {
-    _closeMenu();
-    if (_selectedClinic == null) return;
-    if (_isNavigating) {
-      _cancelNavigation();
-      return;
-    }
-
-    final isReady = await _ensureLocationReady();
-    if (!isReady) return;
-
-    setState(() {
-      _isRouteLoading = true;
-      _isNavigating = true;
-      _isUserPanning = false;
-    });
-
-    Future.delayed(const Duration(milliseconds: 350), () {
-      if (mounted) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-
-    try {
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
-      final clinicLat = _selectedClinic!['latitude'] as double;
-      final clinicLng = _selectedClinic!['longitude'] as double;
-
-      await _fetchRoute(
-        start: LatLng(position.latitude, position.longitude),
-        end: LatLng(clinicLat, clinicLng),
-        fitBounds: false,
-      );
-
-      // Instantly snap to the user before the stream even starts
-      if (!_isUserPanning) {
-        _mapController.move(
-          LatLng(position.latitude, position.longitude),
-          17.0,
-        );
-      }
-
-      _positionStream?.cancel();
-      _positionStream = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-        ),
-      ).listen((Position position) {
-        if (!mounted) return;
-
-        final newLoc = LatLng(position.latitude, position.longitude);
-
-        setState(() => _userLocation = newLoc);
-        _updateDistance();
-
-        if (!_isUserPanning) _mapController.move(newLoc, 17.0);
-      });
-    } catch (e) {
-      if (mounted) {
-        CustomSnackbar.showError(context, "Could not start navigation");
-        setState(() {
-          _isRouteLoading = false;
-          _isNavigating = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _fetchRoute({
-    required LatLng start,
-    required LatLng end,
-    bool fitBounds = true,
-  }) async {
-    try {
-      final points = await _routeRepo.fetchDrivingRoute(start: start, end: end);
-
-      if (mounted) {
-        setState(() {
-          _routePoints = points;
-          _userLocation = start;
-          _isRouteLoading = false;
-        });
-        _updateDistance();
-
-        if (fitBounds) {
-          _fitMapBounds();
-        }
-      }
-    } catch (error) {
-      debugPrint("Route error: $error");
-      if (mounted) {
-        // If route fetching fails, cancel navigation safely!
-        setState(() {
-          _isRouteLoading = false;
-          _isNavigating = false;
-        });
-        CustomSnackbar.showError(
-          context,
-          "Failed to load route data. Try again.",
-        );
-        _updateDistance();
-        if (fitBounds) {
-          _fitMapBounds();
-        }
-      }
-    }
-  }
-
-  void _cancelNavigation() {
-    _positionStream?.cancel();
-    _positionStream = null;
-
-    // --- ADD THIS: Scroll up smoothly to prevent bottom layout snapping ---
-    _scrollToLocationSection();
-    // --------------------------------------------------------------------
-
-    setState(() {
-      _isNavigating = false;
-      _routePoints.clear();
-      _isUserPanning = false;
-      _isDistanceBarExpanded = false;
-      // Removed: _distanceToClinic = null; to allow smooth shrink animation
-    });
-
-    _updateDistance(); // Added: Revert to straight-line distance smoothly
-
-    // Reset view to Clinic
-    if (_selectedClinic != null) {
-      final clinicLat = _selectedClinic!['latitude'] as double? ?? 0.0;
-      final clinicLng = _selectedClinic!['longitude'] as double? ?? 0.0;
-
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _mapController.move(LatLng(clinicLat, clinicLng), 15.0);
-        }
-      });
-    }
-  }
-
-  void _fitMapBounds() {
-    if (_userLocation == null || _selectedClinic == null) return;
-
-    final clinicLat = _selectedClinic!['latitude'] as double?;
-    final clinicLng = _selectedClinic!['longitude'] as double?;
-    if (clinicLat == null || clinicLng == null) return;
-
-    final bounds =
-        _routePoints.isNotEmpty
-            ? LatLngBounds.fromPoints(_routePoints)
-            : LatLngBounds.fromPoints([
-              _userLocation!,
-              LatLng(clinicLat, clinicLng),
-            ]);
-
-    _mapController.fitCamera(
-      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
-    );
-  }
-
-  // --- BOOKING LOGIC ---
 
   Future<void> _handleBooking() async {
     // Validation for clinic is still required, but time slot is now optional at this stage.
@@ -868,123 +476,153 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         child: Column(
           children: [
             Expanded(
-              child: SingleChildScrollView(
-                controller: _scrollController,
+              child: RefreshIndicator(
+                onRefresh: _fetchInitialData,
+                color: AppColors.primaryGreen,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
 
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 10,
-                ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
 
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
 
-                  children: [
+                    children: [
                     DoctorDetailsHeader(
                       doctor: _doctor!,
                       onFavoriteTap: _toggleFavorite,
                       isFavorite: _favNotifier.isFavorite(
                         int.tryParse(widget.doctorId) ?? 0,
+                        ),
+                        visitPrice:
+                            (_clinics.isNotEmpty && _selectedClinic != null)
+                                ? "${_selectedClinic!['visit_price']}"
+                                : "${_doctor!['hourly_rate'] ?? '0'}",
+                        onBookNowTap: _handleBooking,
                       ),
-                      visitPrice:
-                          (_clinics.isNotEmpty && _selectedClinic != null)
-                              ? "${_selectedClinic!['visit_price']}"
-                              : "${_doctor!['hourly_rate'] ?? '0'}",
-                      onBookNowTap: _handleBooking,
-                    ),
 
-                    const SizedBox(height: 14),
+                      const SizedBox(height: 14),
 
-                    DoctorStatsRow(
-                      patients:
-                          _doctor!['patients_served']?.toString() ?? '100',
-                      experience:
-                          _doctor!['experience_years']?.toString() ?? '5',
-                      rating: _doctor!['rating']?.toString() ?? '0.0',
-                    ),
+                      DoctorStatsRow(
+                        patients:
+                            _doctor!['patients_served']?.toString() ?? '100',
+                        experience:
+                            _doctor!['experience_years']?.toString() ?? '5',
+                        rating: _doctor!['rating']?.toString() ?? '0.0',
+                      ),
 
-                    const SizedBox(height: 14),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(
+                              color: Colors.deepOrange,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
 
-                    Builder(
-                      builder: (context) {
-                        final now = DateTime.now();
-                        final today = now;
-                        final tomorrow = now.add(const Duration(days: 1));
-                        DateTime thirdDate = now.add(const Duration(days: 2));
-                        bool isCustomDate =
-                            !_isSameDay(_selectedDate, today) &&
-                            !_isSameDay(_selectedDate, tomorrow);
-                        if (isCustomDate) {
-                          thirdDate = _selectedDate;
-                        }
-                        final datesToShow = [today, tomorrow, thirdDate];
+                      const SizedBox(height: 14),
 
-                        return DoctorAppointmentCard(
-                          clinics: _clinics,
-                          selectedClinic: _selectedClinic,
-                          selectedDate: _selectedDate,
-                          datesToShow: datesToShow,
-                          timeSlots: _getSlotsForSelectedDate(),
-                          bookedSlots: _bookedSlots.toList(),
-                          selectedTimeSlot:
-                              _selectedTimeSlot, // Pass selected slot
-                          onClinicChanged: (clinic) {
-                            if (clinic != null) {
+                      Builder(
+                        builder: (context) {
+                          final now = DateTime.now();
+                          final today = now;
+                          final tomorrow = now.add(const Duration(days: 1));
+                          DateTime thirdDate = now.add(const Duration(days: 2));
+                          bool isCustomDate =
+                              !_isSameDay(_selectedDate, today) &&
+                              !_isSameDay(_selectedDate, tomorrow);
+                          if (isCustomDate) {
+                            thirdDate = _selectedDate;
+                          }
+                          final datesToShow = [today, tomorrow, thirdDate];
+
+                          return DoctorAppointmentCard(
+                            clinics: _clinics,
+                            selectedClinic: _selectedClinic,
+                            selectedDate: _selectedDate,
+                            datesToShow: datesToShow,
+                            timeSlots: _getSlotsForSelectedDate(),
+                            bookedSlots: _bookedSlots.toList(),
+                            selectedTimeSlot:
+                                _selectedTimeSlot, // Pass selected slot
+                            onClinicChanged: (clinic) {
+                              if (clinic != null) {
+                                setState(() {
+                                  _selectedClinic = clinic;
+                                  _selectedTimeSlot =
+                                      null; // Reset slot on clinic change
+                                });
+                                _fetchBookedSlots();
+                              }
+                            },
+                            onDateSelected: (date) {
                               setState(() {
-                                _selectedClinic = clinic;
+                                _selectedDate = date;
                                 _selectedTimeSlot =
-                                    null; // Reset slot on clinic change
+                                    null; // Reset slot on date change
                               });
                               _fetchBookedSlots();
-                            }
-                          },
-                          onDateSelected: (date) {
-                            setState(() {
-                              _selectedDate = date;
-                              _selectedTimeSlot =
-                                  null; // Reset slot on date change
-                            });
-                            _fetchBookedSlots();
-                          },
-                          onCustomDateTap: _openDatePicker,
-                          onTimeSlotSelected: (slot) {
-                            setState(() {
-                              _selectedTimeSlot = slot;
-                            });
-                          },
-                          onMoreClinicTap: _scrollToLocationSection,
-                        );
-                      },
-                    ),
+                            },
+                            onCustomDateTap: _openDatePicker,
+                            onTimeSlotSelected: (slot) {
+                              setState(() {
+                                _selectedTimeSlot = slot;
+                              });
+                            },
+                            onMoreClinicTap: _scrollToLocationSection,
+                          );
+                        },
+                      ),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 18),
 
-                    Text("Timing", style: AppTextStyles.h3),
+                      Text("Timing", style: AppTextStyles.h3),
 
-                    const SizedBox(height: 10),
+                      const SizedBox(height: 10),
 
-                    DoctorTimingList(schedules: _schedules),
+                      DoctorTimingList(schedules: _schedules),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 18),
 
-                    Text(
-                      "Location",
+                      Text(
+                        "Location",
 
-                      key: _locationSectionKey,
+                        key: _locationSectionKey,
 
-                      style: AppTextStyles.h3,
-                    ),
+                        style: AppTextStyles.h3,
+                      ),
 
-                    const SizedBox(height: 10),
+                      ClinicLocationMapSection(
+                        clinics: _clinics,
+                        selectedClinic: _selectedClinic,
+                        onClinicSelected: (clinic) {
+                          setState(() {
+                            _selectedClinic = clinic;
+                            _selectedTimeSlot = null;
+                          });
+                          _fetchBookedSlots();
+                        },
+                        scrollToTop: _scrollToLocationSection,
+                      ),
 
-                    _buildLocationSelector(),
-
-                    const SizedBox(height: 12),
-
-                    RepaintBoundary(child: _buildMap()),
-
-                    const SizedBox(height: 24),
-                  ],
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1067,669 +705,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         preferredSize: const Size.fromHeight(8),
         child: Container(),
       ),
-    );
-  }
-
-  Widget _buildLocationSelector() {
-    if (_clinics.isEmpty) return const SizedBox.shrink();
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-
-      child: Row(
-        children:
-            _clinics.map((clinic) {
-              final isSelected = _selectedClinic == clinic;
-
-              final shortName = clinic['name'].toString().split(' ').first;
-
-              return GestureDetector(
-                onTap: () {
-                  setState(() => _selectedClinic = clinic);
-
-                  _fetchBookedSlots();
-
-                  final lat = clinic['latitude'] as double? ?? 0.0;
-
-                  final lng = clinic['longitude'] as double? ?? 0.0;
-
-                  _mapController.move(LatLng(lat, lng), 15.0);
-
-                  if (_isNavigating && _userLocation != null) {
-                    // Stop camera tracking so they can see the new route overview
-                    setState(() => _isUserPanning = true);
-                    _fetchRoute(start: _userLocation!, end: LatLng(lat, lng));
-                  }
-                },
-
-                child: Container(
-                  margin: const EdgeInsets.only(right: 12),
-
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-
-                  width: 136,
-
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF4F6F8),
-
-                    borderRadius: BorderRadius.circular(10),
-
-                    border: Border.all(
-                      color: isSelected ? primaryGreen : Colors.transparent,
-
-                      width: 1.2,
-                    ),
-                  ),
-
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-
-                    children: [
-                      Text(
-                        shortName,
-
-                        maxLines: 1,
-
-                        overflow: TextOverflow.ellipsis,
-
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-
-                          color: isSelected ? textDark : Colors.grey[600],
-                        ),
-                      ),
-
-                      const SizedBox(height: 4),
-
-                      Text(
-                        clinic['name'],
-
-                        maxLines: 1,
-
-                        overflow: TextOverflow.ellipsis,
-
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          color: Color(0xFF97A0AB),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildMap() {
-    if (_selectedClinic == null) {
-      return Container(
-        height: 150,
-
-        width: double.infinity,
-
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-
-          borderRadius: BorderRadius.circular(12),
-        ),
-
-        child: const Center(
-          child: Icon(Icons.map, color: Colors.grey, size: 40),
-        ),
-      );
-    }
-
-    final lat = _selectedClinic!['latitude'] as double? ?? 23.8103;
-
-    final lng = _selectedClinic!['longitude'] as double? ?? 90.4125;
-
-    return Stack(
-      children: [
-        AnimatedContainer(
-          duration: AppMotion.defaultDuration,
-          curve: Curves.easeInOut,
-          height: _isNavigating ? 350 : 150,
-          width: double.infinity,
-
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-
-            child: FlutterMap(
-              mapController: _mapController,
-
-              options: MapOptions(
-                initialCenter: LatLng(lat, lng),
-
-                initialZoom: 15.0,
-
-                onPositionChanged: (pos, hasGesture) {
-                  if (hasGesture && _isNavigating) {
-                    setState(() => _isUserPanning = true);
-                  }
-                },
-
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-                ),
-              ),
-
-              children: [
-                TileLayer(
-                  urlTemplate:
-                      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-
-                  subdomains: const ['a', 'b', 'c', 'd'],
-
-                  userAgentPackageName: 'com.example.daktarpi',
-                ),
-
-                if (_routePoints.isNotEmpty)
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: _routePoints,
-
-                        strokeWidth: 4.0,
-
-                        color: Colors.blueAccent,
-                      ),
-                    ],
-                  ),
-
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: LatLng(lat, lng),
-
-                      width: 36,
-
-                      height: 36,
-
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-
-                          border: Border.all(color: Colors.white, width: 2),
-
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-
-                              blurRadius: 6,
-
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-
-                          gradient: const RadialGradient(
-                            center: Alignment.center,
-
-                            radius: 0.8,
-
-                            colors: [primaryGreen, Colors.white],
-                          ),
-                        ),
-
-                        child: const Icon(
-                          Icons.location_on_rounded,
-
-                          color: Colors.white,
-
-                          size: 18,
-                        ),
-                      ),
-                    ),
-
-                    if (_userLocation != null)
-                      Marker(
-                        point: _userLocation!,
-
-                        width: 30,
-
-                        height: 30,
-
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.blueAccent,
-
-                            shape: BoxShape.circle,
-
-                            border: Border.all(color: Colors.white, width: 2),
-
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-
-                                blurRadius: 5,
-                              ),
-                            ],
-                          ),
-
-                          child: const Icon(
-                            Icons.navigation,
-
-                            color: Colors.white,
-
-                            size: 14,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        if (_isRouteLoading)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.1),
-
-                borderRadius: BorderRadius.circular(12),
-              ),
-
-              child: const Center(child: CircularProgressIndicator()),
-            ),
-          ),
-
-        // Removed the 'if' statement here so the Positioned can animate the exit
-        Positioned(
-          top: 12,
-          left: 12,
-          right: 12,
-          child: AnimatedSwitcher(
-            duration: AppMotion.defaultDuration,
-            transitionBuilder:
-                (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(
-                        0,
-                        -0.5,
-                      ), // Slides up slightly while fading out
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                ),
-            // The condition now checks if we are actively navigating
-            child:
-                (_distanceToClinic != null && _isNavigating)
-                    ? Row(
-                      key: const ValueKey('nav_bar_visible'),
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            if (_isNavigating) {
-                              setState(
-                                () =>
-                                    _isDistanceBarExpanded =
-                                        !_isDistanceBarExpanded,
-                              );
-                            }
-                          },
-                          child: AnimatedContainer(
-                            duration: AppMotion.defaultDuration,
-                            curve: Curves.easeInOut,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: _isDistanceBarExpanded ? 20 : 16,
-                              vertical: _isDistanceBarExpanded ? 16 : 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.95),
-                              borderRadius: BorderRadius.circular(
-                                _isDistanceBarExpanded ? 16 : 20,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: AnimatedSize(
-                              duration: AppMotion.defaultDuration,
-                              curve: Curves.easeInOut,
-                              alignment: Alignment.topCenter,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.route,
-                                        color: _isNavigating
-                                            ? AppColors.primaryGreen
-                                            : Colors.blueGrey,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      
-                                      // --- THE FIX: Show a loading state while fetching the route ---
-                                      AnimatedSwitcher(
-                                        duration: AppMotion.fast,
-                                        child: _isRouteLoading
-                                            ? const Row(
-                                                key: ValueKey('calculating'),
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  SizedBox(
-                                                    width: 12,
-                                                    height: 12,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2, 
-                                                      color: AppColors.primaryGreen
-                                                    ),
-                                                  ),
-                                                  SizedBox(width: 8),
-                                                  Text(
-                                                    "Calculating...",
-                                                    style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      color: AppColors.primaryGreen,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              )
-                                            : Text(
-                                                key: const ValueKey('distance'),
-                                                _distanceToClinic! > 1000
-                                                    ? "${(_distanceToClinic! / 1000).toStringAsFixed(1)} km away"
-                                                    : "${_distanceToClinic!.toStringAsFixed(0)} m away",
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.textDark,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                      ),
-                                      // --------------------------------------------------------------
-
-                                      // Hide the expand arrow while loading so they can't open an empty menu
-                                      if (_isNavigating && !_isRouteLoading) ...[
-                                        const SizedBox(width: 8),
-                                        Icon(
-                                          _isDistanceBarExpanded
-                                              ? Icons.expand_less
-                                              : Icons.expand_more,
-                                          color: Colors.grey,
-                                          size: 16,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-
-                                  // --- WRAP IN ANIMATED SWITCHER FOR SMOOTH FADE ---
-                                  AnimatedSwitcher(
-                                    duration: AppMotion.fast,
-                                    transitionBuilder:
-                                        (child, animation) => FadeTransition(
-                                          opacity: animation,
-                                          child: SizeTransition(
-                                            sizeFactor: animation,
-                                            child: child,
-                                          ),
-                                        ),
-                                    child:
-                                        (_isDistanceBarExpanded &&
-                                                _isNavigating)
-                                            ? Column(
-                                              key: const ValueKey(
-                                                'expanded_nav',
-                                              ),
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const SizedBox(height: 12),
-                                                const Divider(
-                                                  height: 1,
-                                                  color: Colors.black12,
-                                                ),
-                                                const SizedBox(height: 12),
-                                                Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Text(
-                                                      "Active Navigation",
-                                                      style: TextStyle(
-                                                        color:
-                                                            AppColors
-                                                                .primaryGreen,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 13,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 24),
-                                                    InkWell(
-                                                      onTap: _cancelNavigation,
-                                                      child: Container(
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              4,
-                                                            ),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                              color: Colors.red
-                                                                  .withValues(
-                                                                    alpha: 0.1,
-                                                                  ),
-                                                              shape:
-                                                                  BoxShape
-                                                                      .circle,
-                                                            ),
-                                                        child: const Icon(
-                                                          Icons.close,
-                                                          color: Colors.red,
-                                                          size: 18,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            )
-                                            : const SizedBox.shrink(
-                                              key: ValueKey('collapsed_nav'),
-                                            ),
-                                  ),
-                                  // --------------------------------------------------
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                    // This is the empty state the Switcher animates to when navigation stops
-                    : const SizedBox.shrink(key: ValueKey('nav_bar_hidden')),
-          ),
-        ),
-
-        // --- FLOATING ACTION BUTTONS ---
-        // --- FLOATING ACTION BUTTONS ---
-        Positioned(
-          bottom: 12,
-          right: 12,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // ROW 1: LOCATOR MENU (Restored to fix warnings!)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedSize(
-                    duration: AppMotion.defaultDuration,
-                    curve: Curves.easeOutCubic,
-                    alignment: Alignment.centerRight,
-                    child:
-                        _isLocatorMenuOpen
-                            ? Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: FloatingActionButton.small(
-                                heroTag: "btn_center_clinic",
-                                backgroundColor: Colors.white,
-                                onPressed: _centerOnClinic,
-                                child: const Icon(
-                                  Icons.medical_services_outlined,
-                                  color: Colors.redAccent,
-                                ),
-                              ),
-                            )
-                            : const SizedBox.shrink(),
-                  ),
-                  if (_isNavigating) ...[
-                    AnimatedSize(
-                      duration: AppMotion.defaultDuration,
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.centerRight,
-                      child:
-                          _isLocatorMenuOpen
-                              ? Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: FloatingActionButton.small(
-                                  heroTag: "btn_route_overview",
-                                  backgroundColor: Colors.white,
-                                  onPressed: () {
-                                    setState(() => _isUserPanning = true);
-                                    _fitMapBounds();
-                                  },
-                                  child: const Icon(
-                                    Icons.map_outlined,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              )
-                              : const SizedBox.shrink(),
-                    ),
-                    AnimatedSize(
-                      duration: AppMotion.defaultDuration,
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.centerRight,
-                      child:
-                          _isLocatorMenuOpen
-                              ? Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: FloatingActionButton.small(
-                                  heroTag: "btn_center_user",
-                                  backgroundColor: Colors.white,
-                                  onPressed: _centerOnUser,
-                                  child: const Icon(
-                                    Icons.accessibility_new_rounded,
-                                    color: Colors.blueAccent,
-                                  ),
-                                ),
-                              )
-                              : const SizedBox.shrink(),
-                    ),
-                  ],
-                  FloatingActionButton.small(
-                    heroTag: "btn_locator_toggle",
-                    backgroundColor: Colors.white,
-                    onPressed: _toggleLocatorMenu,
-                    child: AnimatedRotation(
-                      turns: _isLocatorMenuOpen ? 0.5 : 0.0,
-                      duration: AppMotion.defaultDuration,
-                      curve: Curves.easeInOut,
-                      child: Icon(
-                        _isLocatorMenuOpen ? Icons.close : Icons.gps_fixed,
-                        color: AppColors.primaryGreen,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // ROW 2: NAVIGATION MENU
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedSize(
-                    duration: AppMotion.defaultDuration,
-                    curve: Curves.easeOutCubic,
-                    alignment: Alignment.centerRight,
-                    child:
-                        _isMenuOpen
-                            ? Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: FloatingActionButton.small(
-                                heroTag: "btn_external_map",
-                                backgroundColor: Colors.white,
-                                onPressed: _launchExternalMaps,
-                                child: const Icon(
-                                  Icons.public,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                            )
-                            : const SizedBox.shrink(),
-                  ),
-
-                  // Hide this specific button while navigating
-                  AnimatedSize(
-                    duration: AppMotion.defaultDuration,
-                    curve: Curves.easeOutCubic,
-                    alignment: Alignment.centerRight,
-                    child:
-                        (_isMenuOpen && !_isNavigating)
-                            ? Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: FloatingActionButton.small(
-                                heroTag: "btn_inapp_map",
-                                backgroundColor: Colors.white,
-                                onPressed: _launchInAppDirection,
-                                child: const Icon(
-                                  Icons.turn_sharp_right,
-                                  color: AppColors.primaryGreen,
-                                ),
-                              ),
-                            )
-                            : const SizedBox.shrink(),
-                  ),
-                  FloatingActionButton.small(
-                    heroTag: "btn_main_toggle",
-                    backgroundColor: AppColors.primaryGreen,
-                    onPressed: _toggleDirectionMenu,
-                    child: AnimatedRotation(
-                      turns: _isMenuOpen ? 0.5 : 0.0,
-                      duration: AppMotion.defaultDuration,
-                      curve: Curves.easeInOut,
-                      child: Icon(
-                        _isMenuOpen ? Icons.close : Icons.directions,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

@@ -16,6 +16,8 @@ class DoctorListCard extends StatelessWidget {
   final bool isFavorite;
   final VoidCallback onFavoriteTap;
   final VoidCallback onCardTap;
+  final String heroTagPrefix;
+  final Widget? trailingWidget;
 
   const DoctorListCard({
     super.key,
@@ -28,28 +30,20 @@ class DoctorListCard extends StatelessWidget {
     required this.isFavorite,
     required this.onFavoriteTap,
     required this.onCardTap,
+    this.heroTagPrefix = 'doctor-list-',
     this.trailingWidget,
   });
 
-  final Widget? trailingWidget;
-
   @override
   Widget build(BuildContext context) {
-    // 1. Calculate star values
-    final double ratingVal = double.tryParse(rating) ?? 0.0;
-    final int fullStars = ratingVal.floor();
-    final bool hasHalfStar = (ratingVal - fullStars) >= 0.5;
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: AppShapes.xl, // Premium Radius
+        borderRadius: AppShapes.xl,
         border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: const Color(
-              0xFF1C222E,
-            ).withValues(alpha: 0.06), // Soft Shadow
+            color: const Color(0xFF1C222E).withValues(alpha: 0.06),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -66,9 +60,8 @@ class DoctorListCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- IMAGE ---
                 Hero(
-                  tag: 'doctor-hero-$id',
+                  tag: '$heroTagPrefix$id',
                   child: ClipRRect(
                     borderRadius: AppShapes.md,
                     child: SizedBox(
@@ -85,8 +78,6 @@ class DoctorListCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppDimens.spaceLg),
-
-                // --- INFO COLUMN ---
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,12 +93,9 @@ class DoctorListCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          // 4. Favorite / Custom Action
                           trailingWidget ??
                               Material(
-                                color: const Color(
-                                  0xFFF2F4F7,
-                                ), // Neutral background
+                                color: const Color(0xFFF2F4F7),
                                 borderRadius: AppShapes.md,
                                 child: InkWell(
                                   onTap: onFavoriteTap,
@@ -141,51 +129,28 @@ class DoctorListCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: AppDimens.spaceXs),
-
-                      // --- DYNAMIC STAR ROW ---
                       Row(
                         children: [
-                          ...List.generate(5, (index) {
-                            if (index < fullStars) {
-                              return const Icon(
-                                Icons.star,
-                                color: Colors.amber,
-                                size: 14,
-                              );
-                            } else if (index == fullStars && hasHalfStar) {
-                              return const Icon(
-                                Icons.star_half,
-                                color: Colors.amber,
-                                size: 14,
-                              );
-                            } else {
-                              return Icon(
-                                Icons.star_border,
-                                color: Colors.grey[300],
-                                size: 14,
-                              );
-                            }
-                          }),
-                          const SizedBox(width: AppDimens.spaceXs),
-                          Flexible(
-                            child: RichText(
-                              overflow: TextOverflow.ellipsis,
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: rating,
-                                    style: AppTextStyles.bodyBold.copyWith(
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: "  ($views views)",
-                                    style: AppTextStyles.bodySmall.copyWith(
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          const Icon(Icons.star, color: Colors.amber, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            rating,
+                            style: AppTextStyles.bodyBold.copyWith(
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Icon(
+                            Icons.visibility_outlined,
+                            color: Color(0xFF9FA8DA),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            views,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontSize: 12,
+                              color: AppColors.textLight,
                             ),
                           ),
                         ],

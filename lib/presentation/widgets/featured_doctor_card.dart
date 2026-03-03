@@ -12,11 +12,13 @@ class FeaturedDoctorCard extends StatelessWidget {
   final String name;
   final String specialty;
   final String rating;
+  final String views;
   final String price;
   final String? imageUrl;
   final bool isFavorite;
   final VoidCallback onFavoriteTap;
   final VoidCallback onCardTap;
+  final String heroTagPrefix;
 
   const FeaturedDoctorCard({
     super.key,
@@ -24,11 +26,13 @@ class FeaturedDoctorCard extends StatelessWidget {
     required this.name,
     required this.specialty,
     required this.rating,
+    required this.views,
     required this.price,
     required this.imageUrl,
     required this.isFavorite,
     required this.onFavoriteTap,
     required this.onCardTap,
+    this.heroTagPrefix = 'doctor-featured-',
   });
 
   @override
@@ -36,13 +40,11 @@ class FeaturedDoctorCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: AppShapes.xl, // Premium Radius
+        borderRadius: AppShapes.xl,
         border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: const Color(
-              0xFF1C222E,
-            ).withValues(alpha: 0.06), // Soft Shadow
+            color: const Color(0xFF1C222E).withValues(alpha: 0.06),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -60,7 +62,7 @@ class FeaturedDoctorCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Hero(
-                  tag: 'doctor-hero-$id',
+                  tag: '$heroTagPrefix$id',
                   child: ClipRRect(
                     borderRadius: AppShapes.md,
                     child: SizedBox(
@@ -126,11 +128,25 @@ class FeaturedDoctorCard extends StatelessWidget {
                       Row(
                         children: [
                           const Icon(Icons.star, color: Colors.amber, size: 14),
-                          const SizedBox(width: AppDimens.space2xs),
+                          const SizedBox(width: 4),
                           Text(
                             rating,
                             style: AppTextStyles.bodyBold.copyWith(
                               fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Icon(
+                            Icons.visibility_outlined,
+                            color: Color(0xFF9FA8DA),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            views,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontSize: 12,
+                              color: AppColors.textLight,
                             ),
                           ),
                           const Spacer(),

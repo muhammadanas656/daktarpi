@@ -124,15 +124,17 @@ lib/
 │       ├── screens/
 │       │   ├── clinic_doctors_screen.dart # Lists doctors by specific clinic.
 │       │   ├── doctor_details_screen.dart 
-│       │   │   # Map integration with CartoDB Voyager logic.
+│       │   │   # Main screen connecting individual modules.
 │       │   │   # Context: Includes an animated `FloatingActionButton` that smoothly expands into a statistics route-pill.
-│       │   │   # Animation: Uses `AnimatedSwitcher` to show "Calculating..." spinners during API route generation.
 │       │   ├── doctors_screen.dart # Main directory; pulls state using `ProfileNotifier.userCountryIso`.
 │       │   ├── featured_doctors_screen.dart # Country-filtered featured list.
 │       │   ├── my_doctors_screen.dart # Maps FavoritesNotifier to list view.
 │       │   ├── popular_doctors_screen.dart # Country-filtered popular list.
 │       │   └── specialty_doctors_screen.dart # Doctors separated by specialty.
 │       └── widgets/
+│           ├── clinic_location_map_section.dart 
+│           │   # Map integration with CartoDB Voyager logic.
+│           │   # Animation: Uses `AnimatedSwitcher` to show "Calculating..." spinners during API route generation.
 │           ├── doctor_appointment_card.dart # In-profile appointment list item.
 │           ├── doctor_details_header.dart # Hero avatar/specialty header.
 │           ├── doctor_stats_row.dart # Visual stat layout (Experience, patients, rating).
@@ -145,7 +147,13 @@ lib/
 │   ├── data/home_repository.dart 
 │   │   # Pulls specialties and promotional banners. 
 │   │   # Context: `fetchBanners` strictly enforces `.eq('country_iso', userCountryIso)` to localize promotions.
-│   └── presentation/screens/home_screen.dart # Dashboard with pull-to-refresh; layouts data filtered by user's global region.
+│   └── presentation/
+│       ├── screens/home_screen.dart # Dashboard with pull-to-refresh; layouts data filtered by user's global region.
+│       └── widgets/
+│           ├── home_banner.dart # Promotion hero space
+│           ├── home_header.dart # Dynamic greeted profile search top string
+│           ├── home_section_header.dart # List headers stringed with 'See all' tap
+│           └── home_specialties_row.dart # Icon horizontal circular row
 ```
 
 ### 📋 Medical Records Security
@@ -167,16 +175,24 @@ lib/
 │   ├── data/settings_repository.dart # MFA API calls and recovery code generation.
 │   └── presentation/
 │       ├── screens/
+│       │   ├── account_activity_screen.dart # Reads audit logs from appointment_history.
 │       │   ├── linked_accounts_screen.dart # Manages Google OAuth arrays vs Email/Password identities.
 │       │   ├── privacy_policy_screen.dart # Renders privacy copy.
 │       │   └── settings_screen.dart 
 │       │       # Hub for MFA toggle wizards and sensitive action step-up routing.
-│       └── widgets/custom_drawer.dart # Drawer content with sliding animation via MainWrapper.
+│       └── widgets/
+│           ├── custom_drawer.dart # Drawer content with sliding animation via MainWrapper.
+│           └── review_dialog.dart # Stateful review overlay invoked from activity timeline.
 │
 ├── settings/
-│   └── presentation/settings_notifier.dart 
-│       # Global singleton for core app preferences.
-│       # Context: Manages User Theme, MFA requirements, Session Timeouts, and Notification opt-in.
+│   └── presentation/
+│       ├── settings_notifier.dart 
+│       │   # Global singleton for core app preferences.
+│       │   # Context: Manages User Theme, MFA requirements, Session Timeouts, and Notification opt-in.
+│       └── widgets/
+│           ├── settings_account_security_section.dart # Isolated logic slice managing auth behaviors
+│           ├── settings_preferences_section.dart # Isolated slice managing visuals/metrics
+│           └── settings_support_legal_section.dart # Informational and auxiliary items
 ```
 
 ### 🌍 Common, Legal & Support

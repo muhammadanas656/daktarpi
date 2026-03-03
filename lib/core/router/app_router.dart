@@ -25,6 +25,7 @@ import '../../features/legal/presentation/screens/terms_of_service_screen.dart';
 import '../../features/appointments/presentation/screens/my_appointments_screen.dart';
 import '../../features/appointments/presentation/screens/appointment_confirmation_screen.dart';
 import '../../features/appointments/presentation/screens/patient_details_screen.dart';
+import '../../features/appointments/presentation/screens/dummy_payment_screen.dart';
 import '../../features/appointments/presentation/models/booking_route_args.dart';
 import '../../features/menu/presentation/screens/linked_accounts_screen.dart';
 
@@ -190,6 +191,15 @@ final appRouter = GoRouter(
           timeSlot: extra.timeSlot,
           idempotencyKey: extra.idempotencyKey,
         );
+      },
+    ),
+
+    GoRoute(
+      path: AppRoutes.dummyPayment,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) {
+        final extra = state.extra as DummyPaymentRouteArgs;
+        return DummyPaymentScreen(args: extra);
       },
     ),
 

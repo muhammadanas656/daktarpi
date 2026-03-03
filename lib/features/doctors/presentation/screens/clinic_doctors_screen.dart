@@ -68,7 +68,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
   }
 
   void _navigateToDoctorDetails(int doctorId) {
-    context.push('${AppRoutes.doctorDetails}/$doctorId');
+    context.push(AppRoutes.doctorDetailsById('$doctorId'));
   }
 
   @override

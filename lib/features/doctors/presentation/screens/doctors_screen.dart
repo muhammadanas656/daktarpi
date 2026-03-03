@@ -155,8 +155,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         userLocation: userLocation,
         countryIso: countryIso,
       );
-      
-      debugPrint("DoctorsScreen: Found ${doctors.length} doctors for ISO $countryIso");
+
+      debugPrint(
+        "DoctorsScreen: Found ${doctors.length} doctors for ISO $countryIso",
+      );
 
       // Fetch hospitals
       final hospitals = await _doctorRepo.fetchHospitals(query: query);
@@ -222,14 +224,15 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                           ),
                         )
                         : RefreshIndicator(
-                            onRefresh: () async => _fetchDoctors(),
-                            color: AppColors.primaryGreen,
-                            child: _selectedFilter == 'Hospital'
-                            ? _buildHospitalGrid()
-                            : _selectedFilter == 'Clinic'
-                            ? _buildClinicGrid()
-                            : _buildDoctorList(),
-                          ),
+                          onRefresh: () async => _fetchDoctors(),
+                          color: AppColors.primaryGreen,
+                          child:
+                              _selectedFilter == 'Hospital'
+                                  ? _buildHospitalGrid()
+                                  : _selectedFilter == 'Clinic'
+                                  ? _buildClinicGrid()
+                                  : _buildDoctorList(),
+                        ),
               ),
             ],
           ),

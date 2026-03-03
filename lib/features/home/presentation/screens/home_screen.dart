@@ -10,9 +10,13 @@ import '../../../doctors/data/doctor_repository.dart';
 import '../../../home/data/home_repository.dart';
 import '../../../doctors/presentation/models/doctors_route_args.dart';
 
-import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/home_popular_doctor_card.dart';
 import '../../../../presentation/widgets/home_featured_doctor_card.dart';
+
+import '../widgets/home_header.dart';
+import '../widgets/home_banner.dart';
+import '../widgets/home_specialties_row.dart';
+import '../widgets/home_section_header.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -82,11 +86,21 @@ class _HomeScreenState extends State<HomeScreen> {
       // Load screen-specific data with caching
       final userLocation = _profileNotifier.profile?.location;
       final countryIso = _profileNotifier.profile?.countryIso;
-      
+
       final results = await Future.wait([
         _doctorRepo.fetchSpecialties(forceRefresh: forceRefresh),
-        _doctorRepo.fetchPopularDoctors(limit: 5, forceRefresh: forceRefresh, userLocation: userLocation, countryIso: countryIso),
-        _doctorRepo.fetchFeaturedDoctors(limit: 5, forceRefresh: forceRefresh, userLocation: userLocation, countryIso: countryIso),
+        _doctorRepo.fetchPopularDoctors(
+          limit: 5,
+          forceRefresh: forceRefresh,
+          userLocation: userLocation,
+          countryIso: countryIso,
+        ),
+        _doctorRepo.fetchFeaturedDoctors(
+          limit: 5,
+          forceRefresh: forceRefresh,
+          userLocation: userLocation,
+          countryIso: countryIso,
+        ),
         _homeRepo.fetchBanners(countryIso),
       ]);
 
@@ -148,147 +162,19 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- WIDGETS ---
 
   Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 70, 24, 30),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF00C689), Color(0xFF008FA0)], // Richer Gradient
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x33008FA0),
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Hi ${_profileNotifier.fullName}!",
-                    style: AppTextStyles.body.copyWith(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "Find Your Doctor",
-                    style: AppTextStyles.h1.copyWith(color: Colors.white),
-                  ),
-                ],
-              ),
-              _profileNotifier.avatarUrl != null
-                  ? CircleAvatar(
-                    radius: 24,
-                    backgroundImage: NetworkImage(_profileNotifier.avatarUrl!),
-                  )
-                  : const CircleAvatar(
-                    radius: 24,
-                    backgroundColor: Colors.white24,
-                    child: Icon(Icons.person, color: Colors.white, size: 28),
-                  ),
-            ],
-          ),
-          const SizedBox(height: 25),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 0,
-            ), // Removed padding from container
-            child: CustomSearchBar(
-              controller: _searchController,
-              readOnly: true,
-              hintText: "Search.....",
-              onTap: () async {
-                await context.push(AppRoutes.popularDoctors);
-                if (mounted) _refreshData();
-              },
-            ),
-          ),
-        ],
-      ),
+    return HomeHeader(
+      fullName: _profileNotifier.fullName,
+      avatarUrl: _profileNotifier.avatarUrl,
+      searchController: _searchController,
+      onSearchTap: () async {
+        await context.push(AppRoutes.popularDoctors);
+        if (mounted) _refreshData();
+      },
     );
   }
 
   Widget _buildBanner() {
-    if (_banners.isEmpty) return const SizedBox.shrink();
-
-    // For simplicity, showing the first banner. Could be converted to a carousel.
-    final banner = _banners.first;
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Container(
-        width: double.infinity,
-        height: 160,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF008FA0), Color(0xFF00C689)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20), // Premium Radius
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF008FA0).withValues(alpha: 0.3),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              left: 20,
-              top: 30,
-              child: SizedBox(
-                width: 180,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      banner['title'] ?? "Medical Center",
-                      style: AppTextStyles.h3.copyWith(color: Colors.white),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      banner['subtitle'] ?? "Find the best doctors in your area.",
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (banner['image_url'] != null)
-              Positioned(
-                right: 10,
-                bottom: 0,
-                child: Image.network(
-                  banner['image_url'],
-                  height: 140,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
+    return HomeBanner(banners: _banners);
   }
 
   Widget _buildContentSections() {
@@ -303,62 +189,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        if (_specialties.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
-            child: Text("No specialties found"),
-          )
-        else
-          SizedBox(
-            height: 100,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              scrollDirection: Axis.horizontal,
-              itemCount: _specialties.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 24),
-              itemBuilder: (context, index) {
-                final item = _specialties[index];
-                return GestureDetector(
-                  onTap:
-                      () =>
-                          _navigateToSpecialty(item['id'], item['name'] ?? ''),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child:
-                            item['icon_url'] != null
-                                ? Image.network(item['icon_url'])
-                                : _getFallbackIcon(item['name'] ?? ''),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        item['name'] ?? '',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        _buildSectionHeader(
-          "Popular Doctor",
+        HomeSpecialtiesRow(
+          specialties: _specialties,
+          onSpecialtyTap: _navigateToSpecialty,
+        ),
+        HomeSectionHeader(
+          title: "Popular Doctor",
           onTap: () async {
             await context.push(AppRoutes.popularDoctors);
             if (mounted) _refreshData();
@@ -389,8 +225,8 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ),
-        _buildSectionHeader(
-          "Feature Doctor",
+        HomeSectionHeader(
+          title: "Feature Doctor",
           onTap: () async {
             await context.push(AppRoutes.featuredDoctors);
             if (mounted) _refreshData();
@@ -424,37 +260,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         const SizedBox(height: 40),
       ],
-    );
-  }
-
-  // --- REUSABLE UI HELPERS ---
-  Widget _getFallbackIcon(String name) {
-    IconData iconData = Icons.medical_services_rounded;
-    if (name.toLowerCase().contains('dentist')) {
-      iconData = Icons.masks_rounded;
-    }
-    if (name.toLowerCase().contains('cardio')) {
-      iconData = Icons.favorite_rounded;
-    }
-    if (name.toLowerCase().contains('eye')) {
-      iconData = Icons.remove_red_eye_rounded;
-    }
-    return Icon(iconData, color: const Color(0xFF008FA0), size: 28);
-  }
-
-  Widget _buildSectionHeader(String title, {VoidCallback? onTap}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 25, 24, 15),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: AppTextStyles.h3),
-          InkWell(
-            onTap: onTap,
-            child: Text("See all >", style: AppTextStyles.bodySmall),
-          ),
-        ],
-      ),
     );
   }
 }

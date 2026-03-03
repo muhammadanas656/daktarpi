@@ -10,7 +10,7 @@ class DoctorRepository {
   DoctorRepository({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
 
-  // ─── Caching ─────────────────────────────────────────────────
+  // â”€â”€â”€ Caching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   List<Map<String, dynamic>> _cachedSpecialties = [];
   DateTime? _lastSpecialtiesFetch;
@@ -30,7 +30,7 @@ class DoctorRepository {
     return DateTime.now().difference(lastFetch) < _cacheDuration;
   }
 
-  // ─── Single Doctor ───────────────────────────────────────────
+  // â”€â”€â”€ Single Doctor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<Doctor> fetchDoctorDetails(String doctorId) async {
     try {
@@ -51,7 +51,27 @@ class DoctorRepository {
     }
   }
 
-  // ─── Doctor Lists ────────────────────────────────────────────
+  // --- Analytics ---
+
+  /// Atomically increments the view count with a 24-hour cooldown via Supabase RPC.
+  Future<void> incrementDoctorViewCount(String doctorId) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+
+    try {
+      final idParam = int.tryParse(doctorId);
+      if (idParam == null) return;
+
+      await _client.rpc(
+        'increment_doctor_views_smart',
+        params: {'doc_id': idParam, 'v_user_id': userId},
+      );
+    } catch (error) {
+      debugPrint('Failed to increment doctor view count: $error');
+    }
+  }
+
+  // â”€â”€â”€ Doctor Lists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /// Fetches all doctors with optional search and sort.
   Future<List<Map<String, dynamic>>> fetchAllDoctors({
@@ -301,7 +321,7 @@ class DoctorRepository {
     }
   }
 
-  // ─── Specialties ─────────────────────────────────────────────
+  // â”€â”€â”€ Specialties â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /// Fetches doctors by clinic ID.
   Future<List<Map<String, dynamic>>> fetchDoctorsByClinic(
@@ -359,7 +379,7 @@ class DoctorRepository {
     }
   }
 
-  // ─── Clinics & Schedules ─────────────────────────────────────
+  // â”€â”€â”€ Clinics & Schedules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<List<Map<String, dynamic>>> fetchClinics(String doctorId) async {
     try {
@@ -383,8 +403,10 @@ class DoctorRepository {
         };
       }).toList();
     } catch (error) {
-      debugPrint("Error fetching clinics: $error");
-      return [];
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load clinic locations right now.',
+      );
     }
   }
 
@@ -405,7 +427,7 @@ class DoctorRepository {
     }
   }
 
-  // ─── Hospitals & Clinics ─────────────────────────────────────
+  // â”€â”€â”€ Hospitals & Clinics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /// Fetches facilities from the `clinics` table filtered by [type].
   /// Default types: 'hospital', 'clinic'.
@@ -459,7 +481,7 @@ class DoctorRepository {
     }
   }
 
-  // ─── Favorites ───────────────────────────────────────────────
+  // â”€â”€â”€ Favorites â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<bool> isFavorite(String doctorId, String userId) async {
     try {
@@ -572,7 +594,7 @@ class DoctorRepository {
     }
   }
 
-  // ─── Auth Helper ─────────────────────────────────────────────
+  // â”€â”€â”€ Auth Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /// Returns the current user's ID, or null if not logged in.
   String? get currentUserId => _client.auth.currentUser?.id;

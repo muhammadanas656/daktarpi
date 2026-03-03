@@ -193,6 +193,7 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
                               name: doctor['full_name'] ?? 'Unknown',
                               specialty: " $specialtyName",
                               rating: doctor['rating']?.toString() ?? '0.0',
+                              views: doctor['views_count']?.toString() ?? '0',
                               price: doctor['hourly_rate']?.toString() ?? '20',
                               imageUrl: doctor['profile_picture_url'],
                               isFavorite: isFavorite,

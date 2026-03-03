@@ -79,3 +79,23 @@ class AppointmentsRouteArgs {
 
   const AppointmentsRouteArgs({this.refresh = false});
 }
+
+class DummyPaymentRouteArgs {
+  final Map<String, dynamic> appointmentData;
+  final DateTime appointmentDateTime;
+  final int reminderMinutes;
+  final String doctorName;
+  final int? appointmentId;
+  final String displayDate;
+  final String displayTime;
+
+  const DummyPaymentRouteArgs({
+    required this.appointmentData,
+    required this.appointmentDateTime,
+    required this.reminderMinutes,
+    required this.doctorName,
+    required this.displayDate,
+    required this.displayTime,
+    this.appointmentId,
+  });
+}

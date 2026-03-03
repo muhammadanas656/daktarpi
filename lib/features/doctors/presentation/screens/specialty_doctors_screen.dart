@@ -197,39 +197,41 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                         ),
                       )
                       : RefreshIndicator(
-                        onRefresh: () => _fetchData(query: _searchController.text),
+                        onRefresh:
+                            () => _fetchData(query: _searchController.text),
                         color: AppColors.primaryGreen,
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                        itemCount: _doctors.length,
-                        separatorBuilder:
-                            (context, index) => const SizedBox(height: 16),
-                        itemBuilder: (context, index) {
-                          final doctor = _doctors[index];
-                          final docId = doctor['id'] as int;
-                          final specialtyName =
-                              doctor['specialties'] != null
-                                  ? doctor['specialties']['name']
-                                  : 'Specialist';
-                          final reviews =
-                              doctor['reviews_count']?.toString() ?? '0';
+                          itemCount: _doctors.length,
+                          separatorBuilder:
+                              (context, index) => const SizedBox(height: 16),
+                          itemBuilder: (context, index) {
+                            final doctor = _doctors[index];
+                            final docId = doctor['id'] as int;
+                            final specialtyName =
+                                doctor['specialties'] != null
+                                    ? doctor['specialties']['name']
+                                    : 'Specialist';
+                            final views =
+                                doctor['views_count']?.toString() ?? '0';
 
-                          final isFavorite = _favNotifier.isFavorite(docId);
+                            final isFavorite = _favNotifier.isFavorite(docId);
 
-                          return DoctorListCard(
-                            id: docId,
-                            name: doctor['full_name'] ?? 'Unknown',
-                            specialty: " $specialtyName",
-                            rating: doctor['rating']?.toString() ?? '0.0',
-                            views: reviews,
-                            imageUrl: doctor['profile_picture_url'],
-                            isFavorite: isFavorite,
-                            onFavoriteTap: () => _toggleFavorite(docId),
-                            onCardTap: () => _navigateToDoctorDetails(docId),
-                          );
-                        },
+                            return DoctorListCard(
+                              id: docId,
+                              name: doctor['full_name'] ?? 'Unknown',
+                              specialty: " $specialtyName",
+                              rating: doctor['rating']?.toString() ?? '0.0',
+                              views: views,
+                              imageUrl: doctor['profile_picture_url'],
+                              isFavorite: isFavorite,
+                              heroTagPrefix: 'specialty-',
+                              onFavoriteTap: () => _toggleFavorite(docId),
+                              onCardTap: () => _navigateToDoctorDetails(docId),
+                            );
+                          },
+                        ),
                       ),
-                    ),
             ),
           ],
         ),

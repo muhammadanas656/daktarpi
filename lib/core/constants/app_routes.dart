@@ -31,6 +31,7 @@ class AppRoutes {
   // Appointments flow
   static const appointmentBooking = '/appointment_booking';
   static const paymentMethod = '/payment_method';
+  static const dummyPayment = '/dummy_payment'; // <-- NEW
 
   // Other
   static const privacyPolicy = '/privacy_policy';

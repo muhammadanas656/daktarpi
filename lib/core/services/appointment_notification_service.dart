@@ -43,6 +43,53 @@ class AppointmentNotificationService {
     _initialized = true;
   }
 
+  /// Triggers an immediate notification to confirm the booking was successful.
+  Future<void> showBookingConfirmation({
+    required int appointmentId,
+    required String doctorName,
+    required String appointmentTime, 
+  }) async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
+
+    try {
+      await initialize();
+
+      const title = 'Booking Confirmed! ✅';
+      final body = 'Your appointment with $doctorName is set for $appointmentTime.';
+
+      const notificationDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'booking_confirmations', // Use a separate channel for immediate alerts
+          'Booking Confirmations',
+          channelDescription: 'Immediate alerts when an appointment is successfully booked',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      );
+
+      // We add 100000 to the ID so this immediate notification doesn't 
+      // accidentally overwrite the future scheduled reminder!
+      final immediateId = appointmentId.abs() + 100000;
+
+      await _plugin.show(
+        immediateId,
+        title,
+        body,
+        notificationDetails,
+      );
+    } catch (e) {
+      debugPrint("Failed to show immediate confirmation notification: $e");
+    }
+  }
+
   Future<void> scheduleReminder({
     required int appointmentId,
     required DateTime appointmentLocalDateTime,

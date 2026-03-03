@@ -46,6 +46,7 @@ Future<void> main() async {
       telemetryService.logFlutterError(details, source: 'error_widget'),
     );
     return AppErrorFallback(
+      errorDetails: details, // <--- NEW: Handing the error to the UI!
       onGoHome: () {
         try {
           appRouter.go(AppRoutes.home);

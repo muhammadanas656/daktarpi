@@ -87,27 +87,32 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
     }
 
     if (state == AppLifecycleState.resumed) {
-      _loadBiometricAvailability().then((_) {
-        if (_isAbsoluteTimeoutExceeded()) {
-          unawaited(_signOutFromLockScreen());
-          return;
-        }
+      // --- FIX: Wait for Flutter to finish waking up the UI before evaluating locks ---
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadBiometricAvailability().then((_) {
+          if (!mounted) return;
 
-        final pausedAt = _pausedAt;
-        _pausedAt = null;
-
-        final savedTimeoutMs = SettingsNotifier.instance.inactivityTimeoutMs;
-        if (pausedAt != null && _biometricAvailable && savedTimeoutMs > 0) {
-          final elapsed = DateTime.now().difference(pausedAt);
-          if (elapsed >= Duration(milliseconds: savedTimeoutMs)) {
-            _lockAndScheduleUnlock();
+          if (_isAbsoluteTimeoutExceeded()) {
+            unawaited(_signOutFromLockScreen());
             return;
           }
-        }
 
-        if (!_isLocked) {
-          _resetTimer();
-        }
+          final pausedAt = _pausedAt;
+          _pausedAt = null;
+
+          final savedTimeoutMs = SettingsNotifier.instance.inactivityTimeoutMs;
+          if (pausedAt != null && _biometricAvailable && savedTimeoutMs > 0) {
+            final elapsed = DateTime.now().difference(pausedAt);
+            if (elapsed >= Duration(milliseconds: savedTimeoutMs)) {
+              _lockAndScheduleUnlock();
+              return;
+            }
+          }
+
+          if (!_isLocked) {
+            _resetTimer();
+          }
+        });
       });
     }
   }
@@ -228,6 +233,8 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
   }
 
   Future<void> _signOutFromLockScreen() async {
+    _inactivityTimer?.cancel(); // Cancel timer first to stop memory leaks
+    
     try {
       await _authRepository.signOut();
     } catch (_) {}
@@ -241,8 +248,13 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
       _isUnlocking = false;
       _sessionStartedAt = null;
     });
-    context.go(AppRoutes.login);
-    _inactivityTimer?.cancel();
+    
+    // --- FIX: Defer navigation until after the layout phase is completely finished ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.go(AppRoutes.login);
+      }
+    });
   }
 
   void _ensureSessionClock() {

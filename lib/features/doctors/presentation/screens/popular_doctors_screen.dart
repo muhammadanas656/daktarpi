@@ -182,8 +182,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                                 doctor['specialties'] != null
                                     ? doctor['specialties']['name']
                                     : 'Specialist';
-                            final reviews =
-                                doctor['reviews_count']?.toString() ?? '0';
+                            final views =
+                                doctor['views_count']?.toString() ?? '0';
 
                             final isFavorite = _favNotifier.isFavorite(docId);
 
@@ -192,9 +192,10 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                               name: doctor['full_name'] ?? 'Unknown',
                               specialty: " $specialtyName",
                               rating: doctor['rating']?.toString() ?? '0.0',
-                              views: reviews,
+                              views: views,
                               imageUrl: doctor['profile_picture_url'],
                               isFavorite: isFavorite,
+                              heroTagPrefix: 'popular-',
                               onFavoriteTap: () => _favNotifier.toggle(docId),
                               onCardTap: () => _navigateToDoctorDetails(docId),
                             );

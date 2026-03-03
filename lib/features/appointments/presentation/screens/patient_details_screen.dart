@@ -217,16 +217,23 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     final userId = _profileRepo.currentUserId;
     if (userId != null) {
       try {
+        // 1. Fetch patients FIRST (this will be instant thanks to cache)
+        final patients = await _profileRepo.getSavedPatients(userId);
+
+        if (mounted) {
+          setState(() {
+            _savedPatients = patients;
+          });
+        }
+
+        // 2. Fetch profile in the background
         final profile = await _profileRepo.getProfile(userId);
         final userEmail = _profileRepo.currentUserEmail;
-        final patients = await _profileRepo.getSavedPatients(userId);
 
         if (mounted && profile != null) {
           _userProfileUrl = profile.profilePictureUrl;
 
           setState(() {
-            _savedPatients = patients;
-
             if (_selectedCategoryName == "My Self") {
               _nameController.text = profile.fullName;
               _phoneController.text =
@@ -237,7 +244,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
               if (profile.dateOfBirth != null) {
                 _selectedDay = profile.dateOfBirth!.day.toString();
-                _selectedMonth = DateFormat('MMMM').format(profile.dateOfBirth!);
+                _selectedMonth = DateFormat(
+                  'MMMM',
+                ).format(profile.dateOfBirth!);
                 _selectedYear = profile.dateOfBirth!.year.toString();
               }
             }
@@ -432,7 +441,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     }
   }
 
-  Future<void> _handleContinue() async {
+  void _handleContinue() {
     if (_nameController.text.isEmpty ||
         _phoneController.text.isEmpty ||
         _selectedDay == null ||
@@ -442,16 +451,29 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       return;
     }
 
-
-
     final monthInt = _monthStringToInt(_selectedMonth!);
-    final dob = DateTime(int.parse(_selectedYear!), monthInt, int.parse(_selectedDay!));
-    String? imagePath = _selectedCategoryName == "My Self" ? _userProfileUrl : _newPatientImage?.path;
+    final dob = DateTime(
+      int.parse(_selectedYear!),
+      monthInt,
+      int.parse(_selectedDay!),
+    );
 
-    // Preserve relational patient caching logic natively
+    String? imagePath =
+        _selectedCategoryName == "My Self"
+            ? _userProfileUrl
+            : _newPatientImage?.path;
+
+    // --- SAVE TO NEW DATABASE TABLE ---
     final catToSave = _newPendingCategory ?? _selectedCategoryName;
     if (catToSave != "My Self") {
-      final dobString = dob.toIso8601String().split('T')[0];
+      final monthInt = _monthStringToInt(_selectedMonth!);
+      final dobString =
+          DateTime(
+            int.parse(_selectedYear!),
+            monthInt,
+            int.parse(_selectedDay!),
+          ).toIso8601String().split('T')[0];
+
       _profileRepo.savePatientDetails({
         'relation': catToSave,
         'full_name': _nameController.text,
@@ -460,33 +482,29 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         'image_path': _newPatientImage?.path,
       });
     }
-
-    // Bundle the data for Step 2
-    final patientDetails = {
-      'name': _nameController.text,
-      'phone': _phoneController.text,
-      'email': _emailController.text,
-      'gender': _selectedGender,
-      'dob': dob.toIso8601String().split('T')[0],
-      'image_url': imagePath,
-    };
+    // ----------------------------------
 
     unawaited(_clearDraft());
-
-    // Navigate to the Confirmation Screen!
-    if (mounted) {
-      context.push(
-        AppRoutes.paymentMethod, // This routes to your AppointmentConfirmationScreen
-        extra: PaymentMethodArgs(
-          doctor: widget.doctor,
-          clinic: widget.clinic,
-          patientDetails: patientDetails,
-          appointmentDate: widget.initialDate,
-          timeSlot: widget.timeSlot,
-          idempotencyKey: widget.idempotencyKey,
-        ),
-      );
-    }
+    context.push(
+      AppRoutes.paymentMethod,
+      extra: PaymentMethodArgs(
+        doctor: widget.doctor,
+        clinic: widget.clinic,
+        appointmentDate: widget.initialDate,
+        timeSlot: widget.timeSlot,
+        idempotencyKey: widget.idempotencyKey,
+        patientDetails: {
+          'name': _nameController.text,
+          'phone': _phoneController.text,
+          'email': _emailController.text,
+          'gender': _selectedGender,
+          'dob': dob.toIso8601String(),
+          'imagePath': imagePath,
+          'patientType': _selectedCategoryName,
+          'newCategoryToSave': _newPendingCategory,
+        },
+      ),
+    );
   }
 
   int _monthStringToInt(String month) {
@@ -608,8 +626,12 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                             // --- SAVED CATEGORIES (From new DB table) ---
                             ..._savedPatients.map((patientMap) {
                               final category = patientMap['relation'] as String;
-                              final savedImagePath = patientMap['image_path'] as String?;
-                              final hasValidImage = savedImagePath != null && savedImagePath.isNotEmpty && File(savedImagePath).existsSync();
+                              final savedImagePath =
+                                  patientMap['image_path'] as String?;
+                              final hasValidImage =
+                                  savedImagePath != null &&
+                                  savedImagePath.isNotEmpty &&
+                                  File(savedImagePath).existsSync();
 
                               return Padding(
                                 padding: const EdgeInsets.only(right: 16),
@@ -620,49 +642,85 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     child: Opacity(
                                       opacity: 0.8,
                                       child: _buildOptionItem(
-                                        isSelected: _selectedCategoryName == category,
+                                        isSelected:
+                                            _selectedCategoryName == category,
                                         label: category,
-                                        content: hasValidImage
-                                            ? Image.file(File(savedImagePath as String), fit: BoxFit.cover)
-                                            : Icon(Icons.person_outline, color: Colors.grey[400], size: 30),
-                                        onTap: () {}, 
+                                        content:
+                                            hasValidImage
+                                                ? Image.file(
+                                                  File(savedImagePath),
+                                                  fit: BoxFit.cover,
+                                                )
+                                                : Icon(
+                                                  Icons.person_outline,
+                                                  color: Colors.grey[400],
+                                                  size: 30,
+                                                ),
+                                        onTap: () {},
                                       ),
                                     ),
                                   ),
                                   childWhenDragging: Opacity(
                                     opacity: 0.3,
                                     child: _buildOptionItem(
-                                      isSelected: _selectedCategoryName == category,
+                                      isSelected:
+                                          _selectedCategoryName == category,
                                       label: category,
-                                      content: hasValidImage
-                                          ? Image.file(File(savedImagePath as String), fit: BoxFit.cover)
-                                          : Icon(Icons.person_outline, color: Colors.grey[400], size: 30),
+                                      content:
+                                          hasValidImage
+                                              ? Image.file(
+                                                File(savedImagePath),
+                                                fit: BoxFit.cover,
+                                              )
+                                              : Icon(
+                                                Icons.person_outline,
+                                                color: Colors.grey[400],
+                                                size: 30,
+                                              ),
                                       onTap: () {},
                                     ),
                                   ),
                                   child: _buildOptionItem(
-                                    isSelected: _selectedCategoryName == category,
+                                    isSelected:
+                                        _selectedCategoryName == category,
                                     label: category,
-                                    content: hasValidImage
-                                        ? Image.file(File(savedImagePath as String), fit: BoxFit.cover)
-                                        : Icon(Icons.person_outline, color: Colors.grey[400], size: 30),
+                                    content:
+                                        hasValidImage
+                                            ? Image.file(
+                                              File(savedImagePath),
+                                              fit: BoxFit.cover,
+                                            )
+                                            : Icon(
+                                              Icons.person_outline,
+                                              color: Colors.grey[400],
+                                              size: 30,
+                                            ),
                                     onTap: () {
                                       setState(() {
                                         _selectedCategoryName = category;
-                                        
+
                                         // Auto-Fill the fields from DB
-                                        _nameController.text = patientMap['full_name'] ?? '';
-                                        _selectedGender = patientMap['gender'] ?? 'Male';
-                                        
-                                        if (patientMap['date_of_birth'] != null) {
-                                          final dob = DateTime.parse(patientMap['date_of_birth']);
+                                        _nameController.text =
+                                            patientMap['full_name'] ?? '';
+                                        _selectedGender =
+                                            patientMap['gender'] ?? 'Male';
+
+                                        if (patientMap['date_of_birth'] !=
+                                            null) {
+                                          final dob = DateTime.parse(
+                                            patientMap['date_of_birth'],
+                                          );
                                           _selectedDay = dob.day.toString();
-                                          _selectedMonth = DateFormat('MMMM').format(dob);
+                                          _selectedMonth = DateFormat(
+                                            'MMMM',
+                                          ).format(dob);
                                           _selectedYear = dob.year.toString();
                                         }
 
                                         if (hasValidImage) {
-                                          _newPatientImage = File(savedImagePath as String);
+                                          _newPatientImage = File(
+                                            savedImagePath,
+                                          );
                                         } else {
                                           _newPatientImage = null;
                                         }

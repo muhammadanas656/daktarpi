@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/menu/presentation/widgets/custom_drawer.dart';
 import '../../features/doctors/presentation/screens/doctors_screen.dart';
+import '../../features/appointments/presentation/appointment_notifier.dart';
+import '../../features/profile/presentation/profile_notifier.dart';
 import '../../features/settings/presentation/settings_notifier.dart';
 import '../theme/app_motion.dart';
 
@@ -16,7 +20,7 @@ class MainWrapper extends StatefulWidget {
 }
 
 class _MainWrapperState extends State<MainWrapper>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const Curve _openCurve = Curves.easeOutQuint;
   static const Curve _closeCurve = Curves.easeOutCirc;
 
@@ -31,10 +35,14 @@ class _MainWrapperState extends State<MainWrapper>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _drawerController = AnimationController(
       vsync: this,
       duration: AppMotion.defaultDuration,
     );
+    AppointmentNotifier.instance.initializeRealtime();
+    unawaited(AppointmentNotifier.instance.fetchAppointments());
+    unawaited(ProfileNotifier.instance.loadProfile());
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runIntroTutorial();
@@ -42,7 +50,16 @@ class _MainWrapperState extends State<MainWrapper>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(AppointmentNotifier.instance.fetchAppointments());
+      unawaited(ProfileNotifier.instance.loadProfile());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _drawerController.dispose();
     super.dispose();
   }

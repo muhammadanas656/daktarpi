@@ -53,7 +53,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
 
   void _navigateToDoctorDetails(int doctorId) {
     context
-        .push('${AppRoutes.doctorDetails}/$doctorId')
+        .push(AppRoutes.doctorDetailsById('$doctorId'))
         .then((_) => _refreshData()); // Refresh on return in case of changes
   }
 
