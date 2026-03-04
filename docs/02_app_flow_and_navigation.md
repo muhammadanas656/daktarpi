@@ -101,20 +101,21 @@ Calendar entry points:
 - listens to `AppointmentNotifier` state
 - does not own realtime channel lifecycle anymore
 - supports pull-to-refresh in all list states
-- shows pending review carousel (`Action Required`) when data is present
+- shows Action Required carousel for both pending reviews AND pending complaints when data is present
 
 `AppointmentNotifier` behavior:
 - owns Supabase realtime channel setup/teardown
 - listens to auth-state changes to resubscribe/clear safely
-- fetches appointments and pending reviews together
+- fetches appointments, pending reviews, and pending complaints together, exposing a combined `actionRequiredItems` list
 
 ## 8. Account Activity Flow
 
 1. Settings -> `Account Activity`
 2. `AccountActivityScreen` fetches history via `fetchActivityLog(userId)`
-3. Activity rows include a review CTA only when:
-   - action is `COMPLETED`
-   - `has_review` is not true
+3. Activity rows dynamically adapt to the appointment status:
+   - `COMPLETED` actions (without `has_review`) show a "Leave a Review" CTA.
+   - `MISSED` actions show a "File Complaint" CTA.
+   - `WAITING` actions show an amber informational banner notifying the user of the 15-minute grace period delay.
 4. Review submission triggers list refresh
 
 ## 9. App-Level Guards

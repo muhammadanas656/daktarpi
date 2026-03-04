@@ -97,7 +97,9 @@ Global wrappers and shell:
 | Doctors, specialties, clinics, schedules | `doctors`, `specialties`, `clinics`, `doctor_clinics`, `doctor_schedules` |
 | Doctor view analytics | RPC `increment_doctor_views_smart` |
 | Appointments and history | `appointments`, `appointment_history` |
-| Reviews | `reviews` via submit + pending-review/activity correlation |
+| Automated Status Management | Supabase `pg_cron` (auto-marks confirmed as waiting based on clinic max_wait_time, and missed after a 15-min grace period) |
+| Clinic Configuration | `doctor_clinics` stores `min_wait_time` and `max_wait_time` as calculable integers. |
+| Reviews & Complaints | `reviews`, `complaints` (with support/doctor routing) |
 | Appointment realtime | Supabase channel on `public.appointments` (managed by notifier) |
 | Route geometry | OSRM direct call with Supabase edge-function fallback (`route-proxy`) |
 | Profiles and saved patients | `profiles`, `saved_patients` |

@@ -52,6 +52,8 @@ File: `lib/features/appointments/presentation/appointment_notifier.dart`
 State includes:
 - `_appointments`
 - `_pendingReviews`
+- `_pendingComplaints`
+- `actionRequiredItems` (Combined and sorted getter for UI)
 - `_isLoading`
 - `_error`
 
@@ -119,6 +121,15 @@ Manual refresh paths use cache bypass:
 1. pending card/dialog triggers `submitReview(...)`
 2. notifier/screen removes or refreshes reviewed item
 3. activity log uses `has_review` to suppress duplicate review CTA
+
+### Timeout & Complaint flow
+1. `pg_cron` auto-marks confirmed appointments as `waiting` once `start_time` + `max_wait_time` passes.
+2. `pg_cron` auto-marks `waiting` appointments as `missed` after a 15-minute grace period.
+3. If notifications are enabled, a locally scheduled timeout alert fires perfectly in sync with the database's missed status.
+4. Realtime subscription triggers `fetchAppointments()`, pulling in the new missed appointment.
+5. Pending card (Appointments Screen) or Activity row (Account Activity) triggers `ComplaintDialog`.
+6. User selects recipient (support or doctor) and submits.
+7. Notifier/screen removes the complaint from the pending queue instantly.
 
 ### Activity log flow
 1. Settings -> Account Activity

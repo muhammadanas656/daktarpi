@@ -7,8 +7,6 @@ import '../data/appointment_repository.dart';
 import '../data/appointment_secure_cache_repository.dart';
 import '../../../core/services/appointment_notification_service.dart';
 
-/// Singleton ChangeNotifier that manages the state of user appointments.
-/// Centralizes fetching and updates (cancellation) to ensure UI consistency.
 class AppointmentNotifier extends ChangeNotifier {
   AppointmentNotifier._();
   static final AppointmentNotifier instance = AppointmentNotifier._();
@@ -22,10 +20,19 @@ class AppointmentNotifier extends ChangeNotifier {
   bool _isRealtimeInitialized = false;
 
   List<Appointment> _appointments = [];
-  // --- NEW STATE PROPERTIES ---
+
+  // --- UPDATED: Track both reviews and complaints ---
   List<Map<String, dynamic>> _pendingReviews = [];
-  List<Map<String, dynamic>> get pendingReviews => _pendingReviews;
-  // ----------------------------
+  List<Map<String, dynamic>> _pendingComplaints = [];
+
+  // Combine them for the UI carousel, sorted by newest first
+  List<Map<String, dynamic>> get actionRequiredItems {
+    final combined = [..._pendingReviews, ..._pendingComplaints];
+    combined.sort((a, b) => b['schedule_date'].compareTo(a['schedule_date']));
+    return combined;
+  }
+  // --------------------------------------------------
+
   bool _isLoading = false;
   String? _error;
 
@@ -33,8 +40,6 @@ class AppointmentNotifier extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  /// Initializes global realtime sync for appointments.
-  /// Safe to call multiple times.
   void initializeRealtime() {
     if (_isRealtimeInitialized) {
       unawaited(_ensureRealtimeSubscription());
@@ -95,7 +100,6 @@ class AppointmentNotifier extends ChangeNotifier {
     }
   }
 
-  /// Fetch appointments from the repository.
   Future<void> fetchAppointments() async {
     initializeRealtime();
     await _ensureRealtimeSubscription();
@@ -103,7 +107,8 @@ class AppointmentNotifier extends ChangeNotifier {
     final userId = _appointmentRepo.currentUserId;
     if (userId == null) {
       _appointments = [];
-      _pendingReviews = []; // NEW
+      _pendingReviews = [];
+      _pendingComplaints = [];
       _error = null;
       _isLoading = false;
       notifyListeners();
@@ -129,15 +134,17 @@ class AppointmentNotifier extends ChangeNotifier {
     try {
       final previousIds = _appointments.map((a) => a.id).toSet();
 
-      // --- CHANGED: Fetch both active appointments AND pending reviews concurrently ---
+      // --- CHANGED: Fetch active appointments, reviews, AND complaints ---
       final results = await Future.wait([
         _appointmentRepo.fetchAppointments(userId),
         _appointmentRepo.fetchPendingReviews(userId),
+        _appointmentRepo.fetchPendingComplaints(userId),
       ]);
 
       final freshAppointments = results[0] as List<Appointment>;
       _pendingReviews = results[1] as List<Map<String, dynamic>>;
-      // -----------------------------------------------------------------------------
+      _pendingComplaints = results[2] as List<Map<String, dynamic>>;
+      // -------------------------------------------------------------------
 
       final nextIds = freshAppointments.map((a) => a.id).toSet();
 
@@ -156,38 +163,35 @@ class AppointmentNotifier extends ChangeNotifier {
     }
   }
 
-  // --- NEW METHOD: Instantly remove a review from the carousel once submitted ---
   void removePendingReview(int appointmentId) {
     _pendingReviews.removeWhere((appt) => appt['id'] == appointmentId);
     notifyListeners();
   }
 
-  /// Cancel an appointment and update local state immediately.
-  Future<void> cancelAppointment(int appointmentId) async {
-    // Optimistic update could be implemented, but for now we'll wait for API
-    // to ensure data integrity, then remove locally.
+  void removePendingComplaint(int appointmentId) {
+    _pendingComplaints.removeWhere((appt) => appt['id'] == appointmentId);
+    notifyListeners();
+  }
 
+  Future<void> cancelAppointment(int appointmentId) async {
     try {
       await _appointmentRepo.cancelAppointment(appointmentId);
       await _notificationService.cancelReminder(appointmentId);
 
-      // Remove locally to update UI instantly without full refetch
       _appointments.removeWhere((app) => app.id == appointmentId);
       await _cacheRepo.saveAppointments(_appointments);
       notifyListeners();
     } catch (e) {
       debugPrint("AppointmentNotifier Cancel Error: $e");
-      rethrow; // Let UI handle error display
+      rethrow;
     }
   }
 
-  /// Mark an appointment as completed and update local state.
   Future<void> completeAppointment(int appointmentId) async {
     try {
       await _appointmentRepo.completeAppointment(appointmentId);
       await _notificationService.cancelReminder(appointmentId);
 
-      // Remove locally to update UI instantly
       _appointments.removeWhere((app) => app.id == appointmentId);
       await _cacheRepo.saveAppointments(_appointments);
       notifyListeners();
@@ -197,10 +201,8 @@ class AppointmentNotifier extends ChangeNotifier {
     }
   }
 
-  /// Add a newly created appointment to the list (optional, if we want immediate feedback)
   void addAppointment(Appointment appointment) {
     _appointments.add(appointment);
-    // Sort by date if needed, or just notify
     _appointments.sort((a, b) => a.scheduleDate.compareTo(b.scheduleDate));
     unawaited(_cacheRepo.saveAppointments(_appointments));
     notifyListeners();
@@ -210,6 +212,7 @@ class AppointmentNotifier extends ChangeNotifier {
     await _removeRealtimeSubscription();
     _appointments = [];
     _pendingReviews = [];
+    _pendingComplaints = [];
     _error = null;
     _isLoading = false;
     await _cacheRepo.clear();

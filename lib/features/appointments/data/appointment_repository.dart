@@ -250,6 +250,7 @@ class AppointmentRepository {
   }
 
   /// Fetches the exhaustive audit log of all appointment actions and checks review status.
+  /// Fetches the exhaustive audit log of all appointment actions and checks review/complaint status.
   Future<List<Map<String, dynamic>>> fetchActivityLog(String userId) async {
     try {
       // 1. Fetch the history log
@@ -265,19 +266,26 @@ class AppointmentRepository {
 
       final historyList = List<Map<String, dynamic>>.from(response);
 
-      // 2. Fetch all reviews made by this user to see which appointments are already reviewed
+      // 2. Fetch all reviews and complaints for fast lookup
       final reviewsResponse = await _client
           .from('reviews')
           .select('appointment_id')
           .eq('user_id', userId);
 
-      // Create a fast lookup set of reviewed appointment IDs
+      final complaintsResponse = await _client
+          .from('complaints')
+          .select('appointment_id')
+          .eq('user_id', userId);
+
       final reviewedIds =
           reviewsResponse.map((r) => r['appointment_id']).toSet();
+      final complainedIds =
+          complaintsResponse.map((c) => c['appointment_id']).toSet();
 
-      // 3. Inject a 'has_review' flag into each history item
+      // 3. Inject flags into each history item
       for (var item in historyList) {
         item['has_review'] = reviewedIds.contains(item['id']);
+        item['has_complaint'] = complainedIds.contains(item['id']);
       }
 
       return historyList;
@@ -356,6 +364,66 @@ class AppointmentRepository {
     } catch (error) {
       debugPrint("Fetch pending reviews error: $error");
       return []; // Return empty so the UI gracefully hides the carousel on error
+    }
+  }
+
+  /// Submits a complaint for a missed appointment.
+  /// [recipient] must be either 'support' or 'doctor'.
+  Future<void> submitComplaint({
+    required int appointmentId,
+    required int doctorId,
+    required String description,
+    required String recipient,
+  }) async {
+    try {
+      final userId = currentUserId;
+      if (userId == null) throw Exception("User not logged in.");
+
+      await _client.from('complaints').insert({
+        'user_id': userId,
+        'appointment_id': appointmentId,
+        'doctor_id': doctorId,
+        'description': description,
+        'recipient': recipient,
+      });
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage:
+            'Unable to submit your complaint right now. Please try again.',
+      );
+    }
+  }
+
+  /// Fetches missed appointments that have NOT had a complaint filed yet.
+  Future<List<Map<String, dynamic>>> fetchPendingComplaints(
+    String userId,
+  ) async {
+    try {
+      final response = await _client
+          .from('appointments')
+          .select('''
+            *,
+            doctors ( id, full_name, profile_picture_url, specialties ( name ) ),
+            clinics ( id, name ),
+            complaints ( id ) 
+          ''')
+          .eq('user_id', userId)
+          .eq('status', 'missed')
+          .isFilter('deleted_at', null)
+          .order('schedule_date', ascending: false);
+
+      final List<dynamic> data = response as List<dynamic>;
+
+      // Filter out any appointments where the 'complaints' array is not empty
+      return data.map((e) => e as Map<String, dynamic>).where((appt) {
+        final complaints = appt['complaints'];
+        if (complaints is List) return complaints.isEmpty;
+        return complaints == null;
+      }).toList();
+    } catch (error) {
+      debugPrint("Fetch pending complaints error: $error");
+      return [];
     }
   }
 }

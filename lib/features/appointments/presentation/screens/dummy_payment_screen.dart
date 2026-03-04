@@ -62,9 +62,23 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
       try {
         if (SettingsNotifier.instance.notificationsEnabled &&
             widget.args.reminderMinutes > 0) {
+              
+          // --- NEW: Calculate precise timeout based on DB max_wait_time ---
+          final maxWaitTime = widget.args.clinic['max_wait_time'] ?? 30;
+          final maxWaitInt = maxWaitTime is int 
+              ? maxWaitTime 
+              : int.tryParse(maxWaitTime.toString()) ?? 30;
+              
+          // Timeout = Appointment Time + Doctor's Max Wait + 15 Min Grace Period
+          final timeoutDateTime = widget.args.appointmentDateTime.add(
+            Duration(minutes: maxWaitInt + 15),
+          );
+          // -----------------------------------------------------------------
+
           await _notificationService.scheduleReminder(
             appointmentId: persistedAppointmentId,
             appointmentLocalDateTime: widget.args.appointmentDateTime,
+            appointmentEndDateTime: timeoutDateTime, // <--- Passes dynamic timeout!
             reminderMinutes: widget.args.reminderMinutes,
             doctorName: widget.args.doctorName,
           );
@@ -163,6 +177,12 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () {
+                        // Calculate end time using max wait time
+                        final maxWaitTime = widget.args.clinic['max_wait_time'] ?? 30;
+                        final maxWaitInt = maxWaitTime is int 
+                            ? maxWaitTime 
+                            : int.tryParse(maxWaitTime.toString()) ?? 30;
+
                         final Event event = Event(
                           title: 'Appointment with ${widget.args.doctorName}',
                           description:
@@ -170,7 +190,7 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                           location: 'Clinic',
                           startDate: widget.args.appointmentDateTime,
                           endDate: widget.args.appointmentDateTime.add(
-                            const Duration(minutes: 30),
+                            Duration(minutes: maxWaitInt),
                           ),
                         );
                         Add2Calendar.addEvent2Cal(event);

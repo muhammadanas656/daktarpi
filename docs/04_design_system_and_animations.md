@@ -19,6 +19,7 @@ Primary UI patterns:
 - white card surfaces with subtle border/shadow
 - rounded controls with compact iconography
 - clear text hierarchy using `textDark`, `textLight`, and `textGrey`
+- Amber warning containers (`Colors.amber.withValues(alpha: 0.1)`) are used for temporary grace-period delays (e.g., the `WAITING` status banner in Account Activity).
 
 ## 3. Doctors UI and Map Experience
 

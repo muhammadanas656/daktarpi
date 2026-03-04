@@ -387,7 +387,7 @@ class DoctorRepository {
       final response = await _client
           .from('doctor_clinics')
           .select(
-            'id, clinic_id, visit_price, avg_wait_time, clinics(id, name, address, latitude, longitude)',
+            'id, clinic_id, visit_price, min_wait_time, max_wait_time, clinics(id, name, address, latitude, longitude)',
           )
           .eq('doctor_id', idParam)
           .order('visit_price', ascending: true);
@@ -395,11 +395,17 @@ class DoctorRepository {
       final List<dynamic> data = response as List<dynamic>;
       return data.map((e) {
         final clinicData = e['clinics'] as Map<String, dynamic>;
+        
+        final min = e['min_wait_time'] ?? 20;
+        final max = e['max_wait_time'] ?? 30;
+        
         return {
           ...clinicData,
           'junction_id': e['id'],
           'visit_price': e['visit_price'],
-          'avg_wait_time': e['avg_wait_time'] ?? '20-30 mins',
+          'min_wait_time': min,
+          'max_wait_time': max,
+          'avg_wait_time': "$min-$max mins",
         };
       }).toList();
     } catch (error) {

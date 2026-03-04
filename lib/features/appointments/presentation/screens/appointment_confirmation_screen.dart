@@ -224,6 +224,7 @@ class _AppointmentConfirmationScreenState
         doctorName: widget.doctor['full_name']?.toString() ?? 'Doctor',
         displayDate: dateStr,
         displayTime: timeStr,
+        clinic: widget.clinic,
         appointmentId: widget.appointmentId,
       ),
     );

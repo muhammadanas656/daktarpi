@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../presentation/widgets/complaint_dialog.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../appointments/data/appointment_repository.dart';
 import '../widgets/review_dialog.dart';
@@ -40,7 +41,6 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
     }
   }
 
-  // --- UPDATED: Added 'missed' case ---
   Color _getActionColor(String action) {
     switch (action.toLowerCase()) {
       case 'booked':
@@ -52,13 +52,14 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       case 'canceled':
         return Colors.red;
       case 'missed':
-        return Colors.deepOrange; // Distinct color for missed
+        return Colors.deepOrange;
+      case 'waiting':
+        return Colors.amber;
       default:
         return AppColors.textLight;
     }
   }
 
-  // --- UPDATED: Added 'missed' icon ---
   IconData _getActionIcon(String action) {
     switch (action.toLowerCase()) {
       case 'booked':
@@ -70,7 +71,9 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       case 'canceled':
         return Icons.cancel_outlined;
       case 'missed':
-        return Icons.alarm_off_rounded; // Distinct icon for missed
+        return Icons.report_problem_outlined;
+      case 'waiting':
+        return Icons.hourglass_bottom_rounded;
       default:
         return Icons.history;
     }
@@ -91,14 +94,18 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
     );
   }
 
-  // --- NEW: Complaint Dialog Trigger ---
   void _showComplaintDialog(
     BuildContext context,
     Map<String, dynamic> appointment,
   ) {
-    // We will build a ComplaintDialog similar to ReviewDialog in the next step!
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Complaint Dialog UI Coming Soon!")),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (ctx) => ComplaintDialog(
+            appointment: appointment,
+            onComplaintSubmitted: _fetchActivity,
+          ),
     );
   }
 
@@ -213,6 +220,42 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   ),
                                 ),
 
+                              if (action == 'WAITING') ...[
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.amber.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline_rounded,
+                                        color: Colors.amber,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "The clinic is running slightly behind schedule. Please wait.",
+                                          style: TextStyle(
+                                            color: Colors.amber,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+
                               if (action == 'COMPLETED' &&
                                   item['has_review'] != true) ...[
                                 const SizedBox(height: 16),
@@ -246,39 +289,78 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                 ),
                               ],
 
-                              // --- NEW: Render the Complaint Button for Missed appointments ---
+                              // --- UPDATED: Button only shows if has_complaint is false ---
+                              // --- UPDATED: Show Complaint Button OR Status Badge ---
                               if (action == 'MISSED') ...[
                                 const SizedBox(height: 16),
-                                OutlinedButton.icon(
-                                  onPressed:
-                                      () => _showComplaintDialog(context, item),
-                                  icon: const Icon(
-                                    Icons.report_problem_outlined,
-                                    size: 18,
-                                  ),
-                                  label: const Text(
-                                    "File Complaint",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                if (item['has_complaint'] == true)
+                                  // Show a non-interactive status badge if already submitted
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                      horizontal: 12,
                                     ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.deepOrange,
-                                    side: const BorderSide(
-                                      color: Colors.deepOrange,
-                                      width: 1.5,
-                                    ),
-                                    minimumSize: const Size(
-                                      double.infinity,
-                                      40,
-                                    ),
-                                    shape: RoundedRectangleBorder(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: Colors.grey.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle_outline,
+                                          color: Colors.grey,
+                                          size: 16,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          "Complaint Submitted",
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  // Show the active button if no complaint exists
+                                  OutlinedButton.icon(
+                                    onPressed:
+                                        () =>
+                                            _showComplaintDialog(context, item),
+                                    icon: const Icon(
+                                      Icons.report_problem_outlined,
+                                      size: 18,
+                                    ),
+                                    label: const Text(
+                                      "File Complaint",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.deepOrange,
+                                      side: const BorderSide(
+                                        color: Colors.deepOrange,
+                                        width: 1.5,
+                                      ),
+                                      minimumSize: const Size(
+                                        double.infinity,
+                                        40,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
                                   ),
-                                ),
                               ],
-                              // ----------------------------------------------------
                             ],
                           ),
                         ),

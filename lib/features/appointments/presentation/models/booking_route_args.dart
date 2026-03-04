@@ -88,6 +88,7 @@ class DummyPaymentRouteArgs {
   final int? appointmentId;
   final String displayDate;
   final String displayTime;
+  final Map<String, dynamic> clinic;
 
   const DummyPaymentRouteArgs({
     required this.appointmentData,
@@ -96,6 +97,7 @@ class DummyPaymentRouteArgs {
     required this.doctorName,
     required this.displayDate,
     required this.displayTime,
+    required this.clinic,
     this.appointmentId,
   });
 }

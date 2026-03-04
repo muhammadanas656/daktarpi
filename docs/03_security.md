@@ -76,6 +76,7 @@ Repository error normalization:
 - Appointment realtime is managed in `AppointmentNotifier` (single global ownership).
 - Auth-state changes trigger subscription refresh/cleanup to avoid orphaned channels.
 - `fetchActivityLog()` cross-checks `reviews` to inject `has_review`, preventing duplicate review prompts.
+- **Complaints Integrity**: The `complaints` table is secured via explicit RLS policies. Authenticated users can only INSERT and SELECT complaints where `auth.uid() = user_id`, ensuring absolute privacy for patient disputes.
 
 ## 9. Platform Declarations and Privacy
 

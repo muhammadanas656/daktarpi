@@ -13,6 +13,7 @@ import '../appointment_notifier.dart';
 import '../../../../presentation/widgets/appointment_card.dart';
 import 'package:uuid/uuid.dart';
 import '../models/booking_route_args.dart';
+import '../../../../presentation/widgets/complaint_dialog.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
   const MyAppointmentsScreen({super.key});
@@ -126,6 +127,23 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   void _showActionSheet(Map<String, dynamic> appointment) {
     final String doctorName = appointment['doctors']?['full_name'] ?? "Doctor";
 
+    // --- NEW: Calculate the 4-hour cancellation window ---
+    bool canCancel = true;
+    try {
+      final dateStr = appointment['schedule_date'].toString().split('T')[0];
+      final startTimeStr = appointment['start_time'].toString();
+      final startDateTime = DateTime.parse('$dateStr $startTimeStr');
+
+      // Check if the appointment is less than 4 hours away
+      final timeDifference = startDateTime.difference(DateTime.now());
+      if (timeDifference.inHours < 4) {
+        canCancel = false;
+      }
+    } catch (e) {
+      debugPrint("Error parsing time for cancellation check: $e");
+    }
+    // ----------------------------------------------------
+
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -168,6 +186,8 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    // --- CALENDAR BUTTON ---
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
@@ -241,6 +261,8 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       padding: EdgeInsets.symmetric(vertical: 8.0),
                       child: Divider(color: AppColors.borderColor),
                     ),
+
+                    // --- RESCHEDULE BUTTON ---
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
@@ -282,6 +304,8 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       padding: EdgeInsets.symmetric(vertical: 8.0),
                       child: Divider(color: AppColors.borderColor),
                     ),
+
+                    // --- COMPLETE BUTTON ---
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
@@ -323,10 +347,20 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       padding: EdgeInsets.symmetric(vertical: 8.0),
                       child: Divider(color: AppColors.borderColor),
                     ),
+
+                    // --- UPDATED: CANCEL BUTTON (WITH 4-HOUR LOGIC) ---
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-                        _confirmCancellation(appointment);
+                        if (canCancel) {
+                          _confirmCancellation(appointment);
+                        } else {
+                          // Show the rule if they tap the greyed-out button!
+                          CustomSnackbar.showError(
+                            context,
+                            "Appointments cannot be canceled within 4 hours of the scheduled time. Please contact support or the clinic directly.",
+                          );
+                        }
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
@@ -336,24 +370,37 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: AppColors.dangerRed.withValues(
-                                  alpha: 0.1,
-                                ),
+                                color:
+                                    canCancel
+                                        ? AppColors.dangerRed.withValues(
+                                          alpha: 0.1,
+                                        )
+                                        : Colors.grey.withValues(
+                                          alpha: 0.1,
+                                        ), // Turns grey if too close!
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.close,
-                                color: AppColors.dangerRed,
+                                color:
+                                    canCancel
+                                        ? AppColors.dangerRed
+                                        : Colors
+                                            .grey, // Turns grey if too close!
                                 size: 20,
                               ),
                             ),
                             const SizedBox(width: 16),
-                            const Text(
+                            Text(
                               "Cancel Appointment",
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 16,
-                                color: AppColors.dangerRed,
+                                color:
+                                    canCancel
+                                        ? AppColors.dangerRed
+                                        : Colors
+                                            .grey, // Turns grey if too close!
                               ),
                             ),
                           ],
@@ -663,10 +710,10 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   }
 
   // --- NEW: Pending Reviews Carousel ---
-  Widget _buildPendingReviewsCarousel() {
-    final pending = _appointmentNotifier.pendingReviews;
-    // The magic logic: If it's empty, this takes up ZERO space!
-    if (pending.isEmpty) return const SizedBox.shrink();
+  // --- UPDATED: Action Required Carousel (Handles Reviews & Complaints) ---
+  Widget _buildActionRequiredCarousel() {
+    final pendingItems = _appointmentNotifier.actionRequiredItems;
+    if (pendingItems.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -678,7 +725,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.orange,
+              color: AppColors.textDark,
               letterSpacing: 0.5,
             ),
           ),
@@ -689,11 +736,23 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             scrollDirection: Axis.horizontal,
-            itemCount: pending.length,
+            itemCount: pendingItems.length,
             separatorBuilder: (_, __) => const SizedBox(width: 16),
             itemBuilder: (context, index) {
-              final appt = pending[index];
+              final appt = pendingItems[index];
               final doctor = appt['doctors'] ?? {};
+
+              final isMissed = appt['status'] == 'missed';
+
+              // Define themes based on the action type
+              final themeColor = isMissed ? Colors.deepOrange : Colors.orange;
+              final actionText =
+                  isMissed ? "Appointment Missed" : "Rate your visit";
+              final buttonText = isMissed ? "File Complaint" : "Leave a Review";
+              final buttonIcon =
+                  isMissed
+                      ? Icons.report_problem_outlined
+                      : Icons.star_rate_rounded;
 
               return Container(
                 width: 280,
@@ -702,12 +761,12 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: Colors.orange.withValues(alpha: 0.3),
+                    color: themeColor.withValues(alpha: 0.3),
                     width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.orange.withValues(alpha: 0.05),
+                      color: themeColor.withValues(alpha: 0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -737,11 +796,11 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                "Rate your visit",
+                              Text(
+                                actionText,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.orange,
+                                  color: themeColor,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -763,18 +822,32 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       width: double.infinity,
                       height: 40,
                       child: OutlinedButton.icon(
-                        onPressed: () => _showReviewDialog(context, appt),
-                        icon: const Icon(Icons.star_rate_rounded, size: 18),
-                        label: const Text(
-                          "Leave a Review",
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        onPressed: () {
+                          if (isMissed) {
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder:
+                                  (ctx) => ComplaintDialog(
+                                    appointment: appt,
+                                    onComplaintSubmitted: () {
+                                      _appointmentNotifier
+                                          .removePendingComplaint(appt['id']);
+                                    },
+                                  ),
+                            );
+                          } else {
+                            _showReviewDialog(context, appt);
+                          }
+                        },
+                        icon: Icon(buttonIcon, size: 18),
+                        label: Text(
+                          buttonText,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.orange,
-                          side: const BorderSide(
-                            color: Colors.orange,
-                            width: 1.5,
-                          ),
+                          foregroundColor: themeColor,
+                          side: BorderSide(color: themeColor, width: 1.5),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -803,13 +876,11 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
             children: [
               _buildAppBar(),
 
-              // --- NEW: Only shows if there are pending reviews! ---
               if (!_appointmentNotifier.isLoading)
-                _buildPendingReviewsCarousel(),
+                _buildActionRequiredCarousel(),
 
-              // -----------------------------------------------------
-              _buildUpcomingBanner(),
-              const SizedBox(height: 24),
+              // REMOVED the rigid banner and spacing from here!
+              
               Expanded(
                 child:
                     _appointmentNotifier.isLoading
@@ -861,27 +932,24 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   }
 
   Widget _buildUpcomingBanner() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          color: AppColors.primaryGreen.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: AppColors.primaryGreen.withValues(alpha: 0.2),
-          ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      decoration: BoxDecoration(
+        color: AppColors.primaryGreen.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.primaryGreen.withValues(alpha: 0.2),
         ),
-        child: const Center(
-          child: Text(
-            "Upcoming Schedule",
-            style: TextStyle(
-              color: AppColors.primaryGreen,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
+      ),
+      child: const Center(
+        child: Text(
+          "Upcoming Schedule",
+          style: TextStyle(
+            color: AppColors.primaryGreen,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
           ),
         ),
       ),
@@ -891,7 +959,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   Widget _buildListView() {
     final appointments = _appointmentNotifier.appointments;
 
-    // We now wrap the ENTIRE logic in the RefreshIndicator so it always works
     return RefreshIndicator(
       onRefresh: _appointmentNotifier.fetchAppointments,
       color: AppColors.primaryGreen,
@@ -900,10 +967,13 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           appointments.isEmpty
               ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 24), // Added padding here
                 children: [
                   const SizedBox(height: 16),
-                  _buildRefreshHint(), // The visual hint!
-                  SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                  _buildRefreshHint(), 
+                  const SizedBox(height: 24),
+                  _buildUpcomingBanner(), // Scrolls naturally in the empty state!
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.2),
                   Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -935,20 +1005,25 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               : ListView.separated(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                // We add 1 to the item count so the hint is the very first item
-                itemCount: appointments.length + 1,
+                // +2 because index 0 is the hint, and index 1 is the Banner
+                itemCount: appointments.length + 2, 
                 separatorBuilder: (context, index) {
-                  if (index == 0) return const SizedBox(height: 16);
                   return const SizedBox(height: 16);
                 },
                 itemBuilder: (context, index) {
-                  // Render the hint at the top of the list
-                  if (index == 0) {
-                    return _buildRefreshHint();
+                  // 1. Render the pull-to-refresh hint at the very top
+                  if (index == 0) return _buildRefreshHint();
+                  
+                  // 2. Render the Banner smoothly underneath the hint
+                  if (index == 1) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: _buildUpcomingBanner(),
+                    );
                   }
 
-                  // Shift index by 1 to get the actual appointment data
-                  final apt = appointments[index - 1].toJson();
+                  // 3. Shift index by 2 to get the actual appointment data
+                  final apt = appointments[index - 2].toJson();
                   final doctor = apt['doctors'] as Map<String, dynamic>? ?? {};
                   final specialty =
                       doctor['specialties'] != null

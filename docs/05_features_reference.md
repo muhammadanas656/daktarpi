@@ -65,6 +65,7 @@ Current behavior highlights:
 - doctor detail screen supports pull-to-refresh
 - map/navigation logic is modularized inside `ClinicLocationMapSection`
 - route fetching uses OSRM direct call with `route-proxy` edge-function fallback
+- Clinic wait times are stored as integer `min_wait_time` and `max_wait_time` in the database, but synthesized into a display string (e.g., "20-30 mins") inside repository to decouple UI from backend calculations.
 
 ## 5. Appointments
 
@@ -81,9 +82,12 @@ Current repository capabilities:
 - submit review (`submitReview`)
 - fetch pending review candidates (`fetchPendingReviews`)
 - fetch activity log with review-state flag (`fetchActivityLog` adds `has_review`)
+- submit complaint (`submitComplaint`)
+- fetch pending complaint candidates (`fetchPendingComplaints`)
 
-Cancellation behavior:
+Cancellation and transition behavior:
 - cancellation failures are mapped to `AppFailure` with user-safe fallback messages
+- Database utilizes highly precise `pg_cron` jobs (running every 5 mins) to automatically transition expired confirmed appointments to `waiting` (based on clinic max wait time) and then to `missed` (after a 15-minute grace period).
 
 ### Presentation and state
 
@@ -97,7 +101,8 @@ Cancellation behavior:
 State behavior:
 - `AppointmentNotifier` is singleton owner of appointment realtime subscription
 - notifier listens to auth-state changes and refreshes/resubscribes accordingly
-- notifier exposes appointments + pending reviews to UI
+- notifier combines pending reviews and complaints into a single `actionRequiredItems` getter for the UI carousel
+- Appointment booking dynamically schedules local time-out notifications precisely synced with the clinic's `max_wait_time` + 15m grace period. This scheduling is strictly gated by `SettingsNotifier.instance.notificationsEnabled`.
 
 UX behavior:
 - step 3 success dialog supports add-to-calendar
@@ -145,6 +150,8 @@ Current behavior:
 - Account Activity is accessible from settings section tile
 - Account Activity supports review submission via reusable dialog
 - review CTA only renders for completed activities without `has_review`
+- Account Activity natively handles the automated `WAITING` status, displaying a contextual "running behind schedule" banner to prevent user confusion during the 15-minute grace period.
+- Account Activity supports complaint submission via `ComplaintDialog` with dynamic routing to either Platform Support or the specific Doctor
 
 ## 9. Support and Legal
 
