@@ -18,18 +18,27 @@ class SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // PRO FIX: Detect theme to apply Deep Medical Slate adjustments
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       height: AppDimens.buttonHeight,
       decoration: BoxDecoration(
-        color: Colors.white,
+        // PRO FIX: Dynamic surface color instead of hardcoded Colors.white
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: AppShapes.lg,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        // PRO FIX: Subtle border in dark mode, soft shadow in light mode
+        border: isDark ? Border.all(color: const Color(0xFF2A3441)) : null,
+        boxShadow:
+            isDark
+                ? []
+                : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -43,8 +52,9 @@ class SocialButton extends StatelessWidget {
               const SizedBox(width: AppDimens.spaceMd),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Color(0xFF666666),
+                style: TextStyle(
+                  // PRO FIX: Dynamic text color to ensure readability
+                  color: isDark ? Colors.white : const Color(0xFF666666),
                   fontWeight: FontWeight.w500,
                   fontSize: 14,
                 ),

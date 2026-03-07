@@ -3,6 +3,7 @@ import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
+import 'app_text_field.dart';
 
 class CustomSearchBar extends StatelessWidget {
   final TextEditingController? controller;
@@ -11,6 +12,7 @@ class CustomSearchBar extends StatelessWidget {
   final String hintText;
   final VoidCallback? onClear;
   final bool showClearIcon;
+  final ValueChanged<String>? onSubmitted;
 
   const CustomSearchBar({
     super.key,
@@ -20,57 +22,46 @@ class CustomSearchBar extends StatelessWidget {
     this.hintText = "Search",
     this.onClear,
     this.showClearIcon = false,
+    this.onSubmitted,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface, // PRO FIX
         borderRadius: AppShapes.lg,
-        border: Border.all(color: AppColors.borderColor),
-        boxShadow: AppStyles.cardShadow,
+        border: Border.all(color: context.colorBorder),
+        boxShadow: AppStyles.cardShadow(context), // PRO FIX
       ),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         readOnly: readOnly,
         onTap: onTap,
-        style: const TextStyle(
-          color: AppColors.textDark,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
+        onSubmitted: onSubmitted,
+        hintText: hintText,
+        prefix: Icon(
+          Icons.search_rounded,
+          color: context.colorTextLight,
+          size: AppDimens.iconLg,
         ),
-        textAlignVertical: TextAlignVertical.center,
-        decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: const TextStyle(color: AppColors.textLight, fontSize: 14),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            color: AppColors.textLight,
-            size: AppDimens.iconLg,
-          ),
-          suffixIcon:
-              showClearIcon && onClear != null
-                  ? IconButton(
-                    icon: const Icon(
+        suffixIcon:
+            showClearIcon && onClear != null
+                ? IconButton(
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: context.colorTextLight,
+                    size: AppDimens.iconLg,
+                  ),
+                  onPressed: onClear,
+                )
+                : (readOnly
+                    ? Icon(
                       Icons.close_rounded,
-                      color: AppColors.textLight,
+                      color: context.colorTextLight,
                       size: AppDimens.iconLg,
-                    ),
-                    onPressed: onClear,
-                  )
-                  : (readOnly
-                      ? const Icon(
-                        Icons.close_rounded,
-                        color: AppColors.textLight,
-                        size: AppDimens.iconLg,
-                      )
-                      : null), // Keep legacy icon for Home if needed, or remove
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: AppDimens.spaceLg,
-          ),
-        ),
+                    )
+                    : null), // Keep legacy icon for Home if needed, or remove
       ),
     );
   }

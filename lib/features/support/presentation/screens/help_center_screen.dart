@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../data/faq_data.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class HelpCenterScreen extends StatefulWidget {
@@ -58,7 +60,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
         // Fallback or error handling
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Could not launch email app.")),
+            SnackBar(content: Text("Could not launch email app.")),
           );
         }
       }
@@ -74,14 +76,14 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Standard background
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text("Help Center", style: AppTextStyles.h2),
+        title: Text("Help Center", style: AppTextStyles.h2(context)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark),
+          icon: Icon(Icons.arrow_back_ios_new, color: context.colorTextDark),
           onPressed: () => context.pop(),
         ),
       ),
@@ -89,29 +91,11 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
         children: [
           // --- SEARCH BAR ---
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
+            padding: EdgeInsets.all(16.0),
+            child: AppTextField(
               controller: _searchController,
-              decoration: InputDecoration(
-                hintText: "Search for help...",
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                enabledBorder: OutlineInputBorder(
-                  // Explicit border for visibility
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primaryGreen),
-                ),
-              ),
+              hintText: "Search for help...",
+              prefix: Icon(Icons.search, color: Colors.grey),
             ),
           ),
 
@@ -128,7 +112,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                             size: 64,
                             color: Colors.grey[300],
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           Text(
                             "No results found",
                             style: TextStyle(color: Colors.grey[500]),
@@ -137,7 +121,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                       ),
                     )
                     : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
+                      padding: EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 8,
                       ),
@@ -145,17 +129,10 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                       itemBuilder: (context, index) {
                         final item = _filteredList[index];
                         return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
+                          margin: EdgeInsets.only(bottom: 12),
+                          decoration: AppStyles.surfaceCard(
+                            context,
                             borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.03),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
                           ),
                           child: Theme(
                             data: Theme.of(
@@ -164,13 +141,13 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                             child: ExpansionTile(
                               title: Text(
                                 item.question,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 15,
-                                  color: AppColors.textDark,
+                                  color: context.colorTextDark,
                                 ),
                               ),
-                              childrenPadding: const EdgeInsets.fromLTRB(
+                              childrenPadding: EdgeInsets.fromLTRB(
                                 16,
                                 0,
                                 16,
@@ -199,33 +176,36 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
 
           // --- CONTACT US BUTTON ---
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -4),
-                ),
-              ],
+              color: Theme.of(context).colorScheme.surface,
+              boxShadow:
+                  Theme.of(context).brightness == Brightness.dark
+                      ? []
+                      : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: Offset(0, -4),
+                        ),
+                      ],
             ),
             child: SafeArea(
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: _contactSupport,
-                  icon: const Icon(Icons.email_outlined),
-                  label: const Text("Contact Support"),
+                  icon: Icon(Icons.email_outlined),
+                  label: Text("Contact Support"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryGreen,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 0,
-                    textStyle: const TextStyle(
+                    textStyle: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),

@@ -1,15 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/gestures.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
-import '../../../../presentation/widgets/auth_text_field.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/social_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../data/auth_repository.dart';
+import '../../data/auth_entry_route_service.dart';
+import '../../../../core/theme/app_styles.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -26,14 +32,95 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _agreedToTerms = false;
+
   final AuthRepository _authRepository = AuthRepository();
 
+  // PRO FIX: Added Google Sign-in dependencies
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  late final AuthEntryRouteService _authEntryRouteService =
+      AuthEntryRouteService(authRepository: _authRepository);
+  bool _isGoogleInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_initializeGoogleSignIn());
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // --- GOOGLE SIGN-IN LOGIC ---
+  Future<void> _initializeGoogleSignIn() async {
+    if (_isGoogleInitialized) return;
+    try {
+      final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID']?.trim();
+      await _googleSignIn.initialize(
+        serverClientId:
+            webClientId != null && webClientId.isNotEmpty ? webClientId : null,
+      );
+      _isGoogleInitialized = true;
+    } catch (_) {
+      _isGoogleInitialized = false;
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      await _initializeGoogleSignIn();
+      if (!_googleSignIn.supportsAuthenticate()) {
+        throw UnsupportedError(
+          'Google Sign-In is not supported on this platform.',
+        );
+      }
+
+      final googleUser = await _googleSignIn.authenticate();
+      final idToken = googleUser.authentication.idToken;
+
+      if (idToken == null) throw 'No ID Token found.';
+
+      await _authRepository.signInWithGoogleIdToken(idToken: idToken);
+
+      if (mounted) {
+        final route = await _authEntryRouteService.resolvePostAuthRoute(
+          intendedRoute: null,
+        );
+        if (mounted) context.go(route);
+      }
+    } on AuthException catch (e) {
+      if (mounted) CustomSnackbar.showError(context, e.message);
+    } on PlatformException catch (e) {
+      if (e.code != 'sign_in_canceled' && e.code != 'canceled' && mounted) {
+        CustomSnackbar.showError(
+          context,
+          'Google Sign-In failed. Please try again.',
+        );
+      }
+    } catch (e) {
+      if (mounted && !e.toString().toLowerCase().contains('canceled')) {
+        CustomSnackbar.showError(
+          context,
+          'Google Sign-In failed. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- EMAIL SIGN-UP LOGIC ---
   Future<void> _signUp() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // --- 1. VALIDATION ---
+    // 1. VALIDATION
     if (name.isEmpty) {
       CustomSnackbar.showError(context, "Please enter your name");
       return;
@@ -68,7 +155,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // --- 2. SIGN UP LOGIC ---
+      // 2. SIGN UP LOGIC
       final AuthResponse res = await _authRepository.signUp(
         email: email,
         password: password,
@@ -77,7 +164,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (mounted) {
         if (res.session != null) {
-          // SUCCESS: New users ALWAYS go to /profile/edit to complete setup (Phone, DOB, Location)
+          // SUCCESS: New users ALWAYS go to /profile/edit to complete setup
           context.go(AppRoutes.profileEdit);
         } else {
           // Email confirmation required flow
@@ -90,29 +177,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
         }
       }
     } on AuthException catch (e) {
-      if (mounted) {
-        CustomSnackbar.showError(context, e.message);
-      }
+      if (mounted) CustomSnackbar.showError(context, e.message);
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         CustomSnackbar.showError(
           context,
           'Something went wrong. Please try again.',
         );
-      }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
   }
 
   @override
@@ -122,14 +196,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       body: Container(
         height: double.infinity,
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            stops: [0.0, 0.5, 1.0],
-            colors: [Color(0xFFE0F4FF), Color(0xFFFFFFFF), Color(0xFFE0F8F1)],
-          ),
-        ),
+        // PRO FIX: Contextual dynamic gradient
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -149,13 +217,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         Text(
                           'Join us to start searching',
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.h1,
+                          style: AppTextStyles.h1(context),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           'Connect with top doctors and manage your health journey',
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.body.copyWith(height: 1.5),
+                          style: AppTextStyles.body(
+                            context,
+                          ).copyWith(height: 1.5),
                         ),
 
                         const SizedBox(height: 35),
@@ -165,20 +235,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           label: "Continue with Google",
                           icon: Icons.g_mobiledata,
                           iconColor: Colors.red,
-                          onTap: () {},
+                          // PRO FIX: Google Auth Logic successfully wired
+                          onTap: _signInWithGoogle,
                         ),
 
                         const SizedBox(height: 35),
 
                         // --- NAME ---
-                        AuthTextField(
+                        AppTextField(
                           controller: _nameController,
                           hintText: "Name",
                         ),
                         const SizedBox(height: 16),
 
                         // --- EMAIL ---
-                        AuthTextField(
+                        AppTextField(
                           controller: _emailController,
                           hintText: "Email",
                           isEmail: true,
@@ -186,7 +257,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         const SizedBox(height: 16),
 
                         // --- PASSWORD ---
-                        AuthTextField(
+                        AppTextField(
                           controller: _passwordController,
                           hintText: "Password",
                           isPassword: true,
@@ -210,8 +281,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 value: _agreedToTerms,
                                 activeColor: AppColors.primaryGreen,
                                 shape: const CircleBorder(),
-                                side: const BorderSide(
-                                  color: AppColors.borderColor,
+                                side: BorderSide(
+                                  color: context.colorBorder,
                                   width: 1.5,
                                 ),
                                 onChanged: (value) {
@@ -225,7 +296,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             Expanded(
                               child: RichText(
                                 text: TextSpan(
-                                  style: AppTextStyles.bodySmall,
+                                  style: AppTextStyles.bodySmall(context),
                                   children: [
                                     const TextSpan(text: 'I agree with the '),
                                     TextSpan(
@@ -283,7 +354,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             children: [
                               Text(
                                 "Have an account? ",
-                                style: AppTextStyles.body.copyWith(
+                                style: AppTextStyles.body(context).copyWith(
                                   color: AppColors.primaryGreen,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -292,7 +363,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 onTap: () => context.go(AppRoutes.login),
                                 child: Text(
                                   'Log in',
-                                  style: AppTextStyles.body.copyWith(
+                                  style: AppTextStyles.body(context).copyWith(
                                     color: AppColors.primaryGreen,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -313,5 +384,3 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 }
-
-// Removed _FloatingInput, _GreenButton, and _SocialCard as they are now replaced by reusability widgets

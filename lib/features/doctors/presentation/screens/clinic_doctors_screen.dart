@@ -53,7 +53,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
 
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
+    _debounce = Timer(Duration(milliseconds: 500), () {
       _fetchDoctors();
     });
   }
@@ -74,16 +74,16 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: context.colorScaffoldBackground,
       appBar: AppBar(
-        title: Text("Doctors", style: AppTextStyles.h2),
+        title: Text("Doctors", style: AppTextStyles.h2(context)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios,
-            color: AppColors.textDark,
+            color: context.colorTextDark,
             size: 20,
           ),
           onPressed: () => context.pop(),
@@ -94,7 +94,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
         children: [
           // 1. Search Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             child: CustomSearchBar(
               controller: _searchController,
               hintText: "Search doctors...",
@@ -110,12 +110,12 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
 
           // 2. Clinic Name Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             child: Text(
               widget.clinicName,
-              style: AppTextStyles.h2.copyWith(
-                fontSize: 20,
-              ), // Slightly larger/bold
+              style: AppTextStyles.h2(
+                context,
+              ).copyWith(fontSize: 20), // Slightly larger/bold
             ),
           ),
 
@@ -125,7 +125,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
               future: _doctorsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
+                  return Center(
                     child: CircularProgressIndicator(
                       color: AppColors.primaryGreen,
                     ),
@@ -134,18 +134,18 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
                   return Center(
                     child: Text(
                       'Error: ${snapshot.error}',
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.dangerRed,
-                      ),
+                      style: AppTextStyles.body(
+                        context,
+                      ).copyWith(color: AppColors.dangerRed),
                     ),
                   );
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Center(
                     child: Text(
                       'No doctors found.',
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.textGrey,
-                      ),
+                      style: AppTextStyles.body(
+                        context,
+                      ).copyWith(color: context.colorTextGrey),
                     ),
                   );
                 }
@@ -153,12 +153,9 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
                 final doctors = snapshot.data!;
 
                 return ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 10,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   itemCount: doctors.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 16),
+                  separatorBuilder: (_, __) => SizedBox(height: 16),
                   itemBuilder: (context, index) {
                     final doctor = doctors[index];
                     final docId = doctor['id'] as int;

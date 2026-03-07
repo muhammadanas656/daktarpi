@@ -1,152 +1,115 @@
-﻿# DaktarPai - State Management and Data Flow
+# DaktarPai - State Management and Data Flow
 
 ## 1. State Management Pattern
 
 DaktarPai uses:
-- singleton `ChangeNotifier` instances for shared app state
-- `StatefulWidget` + local `setState()` for screen-local interaction state
+- singleton `ChangeNotifier` instances for shared app state,
+- `StatefulWidget`/`setState` for local screen and dialog state.
 
 No external state framework is used.
 
-```mermaid
-graph LR
-    S[SettingsNotifier] --> A[App shell and guards]
-    P[ProfileNotifier] --> H[Home/Profile/Drawer]
-    F[FavoritesNotifier] --> D[Doctors UI]
-    AP[AppointmentNotifier] --> M[Appointments and Activity UI]
-    MW[MainWrapper] --> AP
-    MW --> P
-```
-
 ## 2. Global Notifiers
 
-### SettingsNotifier
-
+### `SettingsNotifier`
 File: `lib/features/settings/presentation/settings_notifier.dart`
 
-Tracks and persists:
-- theme mode
-- inactivity timeout
-- drawer hint visibility
-- notifications enabled
-- medical records lock
-- biometric flags
-- 2FA flag
+Tracks persisted app settings such as:
+- theme mode,
+- inactivity timeout,
+- notification preference,
+- security toggles (biometric/2FA related),
+- UI onboarding hints.
 
-### ProfileNotifier
-
+### `ProfileNotifier`
 File: `lib/features/profile/presentation/profile_notifier.dart`
 
-Tracks profile-facing values such as name, avatar, country/location signal, and currency symbol.
+Owns profile-facing shared data consumed by shell/profile-related surfaces.
 
-### FavoritesNotifier
-
+### `FavoritesNotifier`
 File: `lib/features/doctors/presentation/favorites_notifier.dart`
 
-Tracks favorite doctor IDs and exposes toggle/read helpers.
+Tracks favorite doctor ids and toggle/read helpers.
 
-### AppointmentNotifier
-
+### `AppointmentNotifier`
 File: `lib/features/appointments/presentation/appointment_notifier.dart`
 
-State includes:
-- `_appointments`
-- `_pendingReviews`
-- `_pendingComplaints`
-- `actionRequiredItems` (Combined and sorted getter for UI)
-- `_isLoading`
-- `_error`
+Owns:
+- appointment list state,
+- pending review items,
+- pending complaint items,
+- combined `actionRequiredItems` projection,
+- loading/error state,
+- Supabase realtime channel lifecycle for appointments.
 
-Core behavior:
-- `initializeRealtime()` configures global appointment realtime ownership
-- listens to Supabase auth-state stream to subscribe/unsubscribe safely
-- `fetchAppointments()` loads cache first, then fetches appointments + pending reviews concurrently
-- `removePendingReview(...)` updates review carousel state immediately after submission
+## 3. Lifecycle-Oriented Data Refresh
 
-## 3. Shell Lifecycle Data Flow
-
-`MainWrapper` is a lifecycle coordinator:
-- initializes appointment realtime once
-- performs initial silent `fetchAppointments()` and `loadProfile()`
-- on `AppLifecycleState.resumed`, triggers silent refresh for appointments/profile
-
-This avoids stale state after long background sessions.
+`MainWrapper` acts as lifecycle coordinator:
+- initializes appointment realtime once,
+- performs initial silent `fetchAppointments()` and `loadProfile()`,
+- refreshes both again on `AppLifecycleState.resumed`.
 
 ## 4. Repository Data Flow Pattern
 
 ```text
-Screen/Notifier -> Repository -> Supabase/API -> Repository -> UI state update
+Screen/Notifier -> Repository -> Supabase/API -> Repository result -> UI state update
 ```
 
-Repository snapshot:
+Key repositories in active flows:
+- `AuthRepository`
+- `HomeRepository`
+- `DoctorRepository`
+- `RouteRepository`
+- `AppointmentRepository`
+- `MedicalRecordRepository`
+- `ProfileRepository`
+- `SettingsRepository`
+- `TrustedDeviceRepository`
+- `BookingDraftRepository`
+- `AppointmentSecureCacheRepository`
 
-| Repository | Main data source |
-|---|---|
-| `AuthRepository` | `supabase.auth.*` |
-| `HomeRepository` | Home feed orchestration |
-| `DoctorRepository` | doctors/clinics/schedules/favorites/analytics RPC |
-| `RouteRepository` | OSRM + Supabase edge function (`route-proxy`) |
-| `AppointmentRepository` | `appointments`, `appointment_history`, `reviews`, realtime |
-| `MedicalRecordRepository` | `medical_records` + storage |
-| `ProfileRepository` | `profiles`, `saved_patients`, storage |
-| `SettingsRepository` | MFA/settings server operations |
-| `TrustedDeviceRepository` | `trusted_devices` + secure storage |
-| `BookingDraftRepository` | local booking draft persistence |
-| `AppointmentSecureCacheRepository` | local encrypted appointment cache |
-
-## 5. Caching and Manual Refresh Behavior
-
-Doctor list/specialty repository methods use short-lived in-memory caches with `forceRefresh` support.
-
-Manual refresh paths use cache bypass:
-- Home screen refresh -> `forceRefresh: true`
-- Popular doctors refresh -> `forceRefresh: true`
-- Featured doctors refresh -> `forceRefresh: true`
-
-## 6. Appointment Data Flows
+## 5. Appointment Data Flows
 
 ### Booking flow
-1. Step 1 (`PatientDetailsScreen`) prepares payload
-2. Step 2 (`AppointmentConfirmationScreen`) confirms booking data
-3. Step 3 (`DummyPaymentScreen`) finalizes and schedules notification behavior
-4. Optional calendar export from confirmation/success actions
+1. `PatientDetailsScreen` gathers patient details.
+2. `AppointmentConfirmationScreen` validates and prepares booking payload.
+3. `DummyPaymentScreen` finalizes booking and follow-up actions.
 
 ### My Appointments flow
-- screen subscribes to `AppointmentNotifier`
-- screen no longer owns realtime channel setup
-- notifier drives appointments list and pending reviews
-- pull-to-refresh remains available in all states
+- screen listens to `AppointmentNotifier`,
+- notifier owns realtime and refresh behavior,
+- UI supports action sheet operations and pull-to-refresh.
 
-### Review flow
-1. pending card/dialog triggers `submitReview(...)`
-2. notifier/screen removes or refreshes reviewed item
-3. activity log uses `has_review` to suppress duplicate review CTA
+### Review and complaint flow
+1. Pending item triggers review or complaint dialog.
+2. Repository submit method executes.
+3. Notifier removes handled pending item from in-memory queue.
+4. Timeline/list refresh remains available through notifier fetch paths.
 
-### Timeout & Complaint flow
-1. `pg_cron` auto-marks confirmed appointments as `waiting` once `start_time` + `max_wait_time` passes.
-2. `pg_cron` auto-marks `waiting` appointments as `missed` after a 15-minute grace period.
-3. If notifications are enabled, a locally scheduled timeout alert fires perfectly in sync with the database's missed status.
-4. Realtime subscription triggers `fetchAppointments()`, pulling in the new missed appointment.
-5. Pending card (Appointments Screen) or Activity row (Account Activity) triggers `ComplaintDialog`.
-6. User selects recipient (support or doctor) and submits.
-7. Notifier/screen removes the complaint from the pending queue instantly.
+## 6. Caching and Refresh Semantics
 
-### Activity log flow
-1. Settings -> Account Activity
-2. `fetchActivityLog(userId)` reads `appointment_history`
-3. same method cross-checks user `reviews` and injects `has_review`
-4. UI renders timeline cards with conditional review action
+- Appointment cache is stored via `AppointmentSecureCacheRepository`.
+- Notifier loads cache first for perceived responsiveness, then overlays fresh network data.
+- Manual refresh controls still force live fetch behavior in relevant feature screens.
 
-## 7. Local Screen State Patterns
+## 7. Local UI State Patterns
 
-Common local state patterns:
-- `_isLoading`, `_isProcessing`, `isSubmitting`
-- `mounted` checks before UI updates
-- dialog-local mutable state via `StatefulBuilder`
-- try/catch with snackbar feedback
-- timer-based analytics in doctor details screen (`_viewTimer`)
+Common local state idioms:
+- `isLoading`/`isSubmitting` flags,
+- `mounted` checks before UI updates,
+- `StatefulBuilder` for dialog-local mutable state,
+- try/catch + snackbar feedback,
+- timer-based interaction state in specific screens.
 
-## 8. Non-Notifier Services
+## 8. Input State and Form Composition
+
+Current input architecture:
+- text entry is standardized on `AppTextField`,
+- legacy wrappers (`AuthTextField`, `CustomTextField`) delegate to `AppTextField`,
+- keyboard-sensitive dialog/sheet content uses scroll/inset-safe patterns.
+
+This reduces layout inconsistency and keeps form behavior predictable across features.
+
+## 9. Non-Notifier Services in Flows
 
 - `AppointmentNotificationService`
 - `ErrorTelemetryService`
@@ -154,23 +117,4 @@ Common local state patterns:
 - `BiometricAuthService`
 - `SensitiveActionStepUpService`
 
-## 9. External Dependencies (Highlights)
-
-- `supabase_flutter`
-- `go_router`
-- `flutter_local_notifications`
-- `local_auth`
-- `flutter_secure_storage`
-- `connectivity_plus`
-- `flutter_map` + `latlong2`
-- `geolocator`
-- `map_launcher`
-- `add_2_calendar`
-- `intl`
-- `freezed` + `json_serializable`
-- `crypto`
-- `uuid`
-
-## 10. Error Handling Note
-
-`AppointmentRepository.cancelAppointment()` now uses typed `AppFailure` mapping for backend/network/general failures so cancellation feedback is consistent and user-safe.
+These services complement notifier/repository flows without owning broad UI state.

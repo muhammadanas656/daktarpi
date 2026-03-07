@@ -70,7 +70,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-    _debounce = Timer(const Duration(milliseconds: 500), () {
+    _debounce = Timer(Duration(milliseconds: 500), () {
       setState(() => _isLoading = true);
       _fetchData(query: _searchController.text);
     });
@@ -123,7 +123,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: context.colorScaffoldBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -138,29 +138,29 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderColor),
-                boxShadow: AppStyles.cardShadow,
+                border: Border.all(color: context.colorBorder),
+                boxShadow: AppStyles.cardShadow(context),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_back_ios_new,
                 size: 18,
-                color: AppColors.textDark,
+                color: context.colorTextDark,
               ),
             ),
           ),
         ),
         title: Text(
           "${widget.specialtyName}s", // e.g. "Dentists"
-          style: AppTextStyles.h3.copyWith(fontSize: 20),
+          style: AppTextStyles.h3(context).copyWith(fontSize: 20),
         ),
       ),
       body: Container(
-        decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: Column(
           children: [
             // --- SEARCH BAR ---
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
               child: CustomSearchBar(
                 controller: _searchController,
                 hintText: "Search ${widget.specialtyName}...",
@@ -173,7 +173,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
             Expanded(
               child:
                   _isLoading
-                      ? const Center(
+                      ? Center(
                         child: CircularProgressIndicator(
                           color: AppColors.primaryGreen,
                         ),
@@ -188,7 +188,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                               size: 64,
                               color: Colors.grey[300],
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(height: 16),
                             Text(
                               "No doctors found",
                               style: TextStyle(color: Colors.grey[500]),
@@ -201,10 +201,10 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                             () => _fetchData(query: _searchController.text),
                         color: AppColors.primaryGreen,
                         child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                          padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
                           itemCount: _doctors.length,
                           separatorBuilder:
-                              (context, index) => const SizedBox(height: 16),
+                              (context, index) => SizedBox(height: 16),
                           itemBuilder: (context, index) {
                             final doctor = _doctors[index];
                             final docId = doctor['id'] as int;

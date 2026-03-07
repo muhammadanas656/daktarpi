@@ -6,7 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
-import '../../../../presentation/widgets/auth_text_field.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/social_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,6 +14,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
 import '../../data/auth_entry_route_service.dart';
 import '../../data/auth_repository.dart';
 
@@ -73,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _resendCountdown = 60;
     });
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (_resendCountdown == 0) {
         timer.cancel();
       } else {
@@ -92,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID']?.trim();
       await _googleSignIn.initialize(
-        // Must be the Web OAuth client ID, not Android/iOS client IDs.
         serverClientId:
             webClientId != null && webClientId.isNotEmpty ? webClientId : null,
       );
@@ -182,7 +182,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      // No null check needed here because authenticate() never returns null
       final googleUser = await _googleSignIn.authenticate();
 
       final googleAuth = googleUser.authentication;
@@ -274,13 +273,9 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         height: double.infinity,
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            stops: [0.0, 0.5, 1.0],
-            colors: [Color(0xFFE0F4FF), Color(0xFFFFFFFF), Color(0xFFE0F8F1)],
-          ),
+        decoration: BoxDecoration(
+          // PRO FIX: Uses the dynamic global page gradient
+          gradient: AppStyles.pageGradient(context),
         ),
         child: SafeArea(
           child: LayoutBuilder(
@@ -300,13 +295,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         Text(
                           'Welcome back',
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.h1,
+                          style: AppTextStyles.h1(context),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           'Manage your appointments and medical records securely',
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.body.copyWith(height: 1.5),
+                          style: AppTextStyles.body(
+                            context,
+                          ).copyWith(height: 1.5),
                         ),
                         const SizedBox(height: 35),
                         SocialButton(
@@ -316,7 +313,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           onTap: _signInWithGoogle,
                         ),
                         const SizedBox(height: 35),
-                        AuthTextField(
+                        AppTextField(
                           controller: _emailController,
                           hintText: "Email",
                           isEmail: true,
@@ -334,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                         ),
                         const SizedBox(height: 16),
-                        AuthTextField(
+                        AppTextField(
                           controller: _passwordController,
                           hintText: "Password",
                           isPassword: true,
@@ -363,7 +360,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 Text(
                                   'Forgot password',
-                                  style: AppTextStyles.body.copyWith(
+                                  style: AppTextStyles.body(context).copyWith(
                                     color:
                                         _resendCountdown > 0
                                             ? Colors.grey
@@ -375,7 +372,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const SizedBox(width: 8),
                                   Text(
                                     "Wait 00:${_resendCountdown.toString().padLeft(2, '0')}",
-                                    style: AppTextStyles.bodySmall.copyWith(
+                                    style: AppTextStyles.bodySmall(
+                                      context,
+                                    ).copyWith(
                                       color: AppColors.dangerRed,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -393,7 +392,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               Text(
                                 "Don't have an account? ",
-                                style: AppTextStyles.body.copyWith(
+                                style: AppTextStyles.body(context).copyWith(
                                   color: AppColors.primaryGreen,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -402,7 +401,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onTap: () => context.go(AppRoutes.signup),
                                 child: Text(
                                   'Join us',
-                                  style: AppTextStyles.body.copyWith(
+                                  style: AppTextStyles.body(context).copyWith(
                                     color: AppColors.primaryGreen,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -619,9 +618,9 @@ class _ForgotPasswordSheetContentState
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
+            content: const Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
                 SizedBox(width: 12),
                 Flexible(
@@ -660,9 +659,10 @@ class _ForgotPasswordSheetContentState
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      decoration: BoxDecoration(
+        // PRO FIX: Dynamic surface color for the bottom sheet
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
       ),
       padding: EdgeInsets.only(
         left: 24,
@@ -697,22 +697,28 @@ class _ForgotPasswordSheetContentState
   Widget _buildEmailStep() {
     return Column(
       children: [
-        const Text(
+        Text(
           'Forgot password',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A1A),
+            // PRO FIX: Dynamic text color
+            color: context.colorTextDark,
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Enter your email to receive an 8-digit code.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, color: Color(0xFF858585), height: 1.5),
+          style: TextStyle(
+            fontSize: 14,
+            // PRO FIX: Dynamic secondary text color
+            color: context.colorTextLight,
+            height: 1.5,
+          ),
         ),
         const SizedBox(height: 30),
-        AuthTextField(
+        AppTextField(
           controller: _emailController,
           hintText: "Email",
           isEmail: true,
@@ -730,19 +736,24 @@ class _ForgotPasswordSheetContentState
   Widget _buildOtpStep() {
     return Column(
       children: [
-        const Text(
+        Text(
           'Enter 8-Digit Code',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A1A),
+            // PRO FIX: Dynamic text color
+            color: context.colorTextDark,
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Enter the 8-digit code sent to your email.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, color: Color(0xFF858585), height: 1.5),
+          style: TextStyle(
+            fontSize: 14,
+            color: context.colorTextLight,
+            height: 1.5,
+          ),
         ),
         const SizedBox(height: 30),
 
@@ -751,6 +762,9 @@ class _ForgotPasswordSheetContentState
             double availableWidth = constraints.maxWidth;
             double boxWidth = (availableWidth - (7 * 8)) / 8;
             boxWidth = boxWidth.clamp(25.0, 45.0);
+
+            // PRO FIX: OTP background matches Dark Mode surface
+            final isDark = Theme.of(context).brightness == Brightness.dark;
 
             final defaultPinTheme = PinTheme(
               width: boxWidth,
@@ -761,9 +775,12 @@ class _ForgotPasswordSheetContentState
                 fontWeight: FontWeight.bold,
               ),
               decoration: BoxDecoration(
-                color: Colors.white,
+                // PRO FIX: Darker squares in dark mode
+                color: isDark ? AppColors.darkScaffold : Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : Colors.grey.shade300,
+                ),
               ),
             );
 
@@ -795,28 +812,33 @@ class _ForgotPasswordSheetContentState
   Widget _buildResetPasswordStep() {
     return Column(
       children: [
-        const Text(
+        Text(
           'Reset Password',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A1A),
+            // PRO FIX: Dynamic text color
+            color: context.colorTextDark,
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Set your new password.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, color: Color(0xFF858585), height: 1.5),
+          style: TextStyle(
+            fontSize: 14,
+            color: context.colorTextLight,
+            height: 1.5,
+          ),
         ),
         const SizedBox(height: 30),
-        AuthTextField(
+        AppTextField(
           controller: _newPassController,
           hintText: "New Password",
           isPassword: true,
         ),
         const SizedBox(height: 16),
-        AuthTextField(
+        AppTextField(
           controller: _confirmPassController,
           hintText: "Re-enter Password",
           isPassword: true,

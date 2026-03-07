@@ -45,21 +45,23 @@ class _CustomDrawerState extends State<CustomDrawer> {
   }
 
   Future<void> _showLogoutDialog(BuildContext parentContext) async {
+    final isDark = Theme.of(parentContext).brightness == Brightness.dark;
+
     return showDialog<void>(
       context: parentContext,
       barrierDismissible: true,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(parentContext).colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
+          title: Text(
             'Log Out',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 20,
-              color: Colors.black,
+              color: isDark ? Colors.white : Colors.black,
             ),
           ),
           content: const Text(
@@ -71,7 +73,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
               },
-              child: Text(
+              child: const Text(
                 'Cancel',
                 style: TextStyle(
                   color: AppColors.primaryGreen,
@@ -90,7 +92,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   parentContext.go('/login');
                 }
               },
-              child: Text(
+              child: const Text(
                 'Ok',
                 style: TextStyle(
                   color: AppColors.primaryGreen,
@@ -120,108 +122,167 @@ class _CustomDrawerState extends State<CustomDrawer> {
 
     return Container(
       color: drawerContentColor,
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        80,
-        0,
-        20,
-      ), // Increased top padding for better alignment
+      // PRO FIX: Adjusted padding so the design breathes properly
+      padding: const EdgeInsets.fromLTRB(20, 70, 0, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Profile Section
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: CircleAvatar(
-                  radius: 35,
-                  backgroundColor: Colors.white,
-                  backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                  child:
-                      avatar == null
-                          ? const Icon(
-                            Icons.person,
-                            color: AppColors.textLight,
-                            size: 35,
-                          )
-                          : null,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                userName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.phone, color: Colors.white70, size: 14),
-                  const SizedBox(width: 6),
-                  Text(
-                    phone,
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+          // --- PRO PROFILE SECTION ---
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.8),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 15,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
+                  child: CircleAvatar(
+                    radius: 38,
+                    backgroundColor: Colors.white,
+                    backgroundImage:
+                        avatar != null ? NetworkImage(avatar) : null,
+                    child:
+                        avatar == null
+                            ? const Icon(
+                              Icons.person,
+                              color: Colors.grey,
+                              size: 38,
+                            )
+                            : null,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  userName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.phone, color: Colors.white70, size: 12),
+                      const SizedBox(width: 6),
+                      Text(
+                        phone,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
 
-          const SizedBox(height: 40),
+          const SizedBox(height: 48),
 
+          // --- PRO NAVIGATION LIST ---
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
+              physics: const BouncingScrollPhysics(),
               children: [
-                _buildDrawerItem(Icons.person, "My Doctors", () {
-                  widget.onClose();
-                  context.push(AppRoutes.myDoctors);
-                }),
-                _buildDrawerItem(Icons.assignment, "Medical Records", () {
-                  widget.onClose();
-                  context.push(AppRoutes.medicalRecords);
-                }),
-                _buildDrawerItem(Icons.calendar_today, "My Appointments", () {
-                  widget.onClose();
-                  widget.onNavigateToTab(2);
-                }),
-                _buildDrawerItem(Icons.settings, "Settings", () {
+                _buildDrawerItem(
+                  Icons.person_outline_rounded,
+                  "My Doctors",
+                  () {
+                    widget.onClose();
+                    context.push(AppRoutes.myDoctors);
+                  },
+                ),
+                _buildDrawerItem(
+                  Icons.assignment_outlined,
+                  "Medical Records",
+                  () {
+                    widget.onClose();
+                    context.push(AppRoutes.medicalRecords);
+                  },
+                ),
+                _buildDrawerItem(
+                  Icons.calendar_today_rounded,
+                  "My Appointments",
+                  () {
+                    widget.onClose();
+                    widget.onNavigateToTab(2);
+                  },
+                ),
+                _buildDrawerItem(Icons.settings_outlined, "Settings", () {
                   widget.onClose();
                   context.push(AppRoutes.settings);
                 }),
               ],
             ),
           ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.logout, color: Colors.white, size: 24),
-            title: const Text(
-              "Logout",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+
+          // --- PRO LOGOUT BUTTON ---
+          Container(
+            margin: const EdgeInsets.only(right: 32, top: 20),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withValues(
+                alpha: 0.15,
+              ), // Destructive Glassmorphism
+              borderRadius: const BorderRadius.horizontal(
+                right: Radius.circular(30),
+                left: Radius.circular(12),
               ),
             ),
-            onTap: () {
-              _showLogoutDialog(context);
-            },
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: Colors.redAccent,
+                size: 24,
+              ),
+              title: const Text(
+                "Logout",
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              onTap: () {
+                _showLogoutDialog(context);
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
+  // --- PRO DRAWER ITEM ---
   Widget _buildDrawerItem(
     IconData icon,
     String title,
@@ -229,31 +290,57 @@ class _CustomDrawerState extends State<CustomDrawer> {
     bool isSelected = false,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 5),
+      margin: const EdgeInsets.only(
+        bottom: 8,
+        right: 32,
+      ), // Leave space on the right for pill effect
       decoration:
           isSelected
               ? BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: const BorderRadius.horizontal(
+                  right: Radius.circular(30),
+                  left: Radius.circular(12),
+                ),
+                border: const Border(
+                  left: BorderSide(color: AppColors.primaryGreen, width: 4),
+                ),
               )
-              : null,
+              : const BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: Colors.transparent, width: 4),
+                ),
+              ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-        leading: Icon(icon, color: Colors.white, size: 24),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+        leading: Icon(
+          icon,
+          color: Colors.white.withValues(alpha: 0.9),
+          size: 24,
+        ),
         title: Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.9),
             fontSize: 16,
-            fontWeight: FontWeight.w500,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
           ),
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          color: Colors.white30,
-          size: 14,
-        ),
+        trailing:
+            isSelected
+                ? null
+                : const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Colors.white24,
+                  size: 14,
+                ),
         onTap: onTap,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.horizontal(
+            right: Radius.circular(30),
+            left: Radius.circular(12),
+          ),
+        ),
       ),
     );
   }

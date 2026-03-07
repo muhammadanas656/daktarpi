@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
 class HomeSectionHeader extends StatelessWidget {
@@ -10,14 +11,21 @@ class HomeSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 25, 24, 15),
+      padding: EdgeInsets.fromLTRB(24, 25, 24, 15),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: AppTextStyles.h3),
+          Text(title, style: AppTextStyles.h3(context)),
           InkWell(
             onTap: onTap,
-            child: Text("See all >", style: AppTextStyles.bodySmall),
+            child: Text(
+              "See all >",
+              style: AppTextStyles.bodySmall(context).copyWith(
+                // PRO FIX: Use primary green so it looks like an actionable button in both themes
+                color: AppColors.primaryGreen,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),

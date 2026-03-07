@@ -34,15 +34,17 @@ class PrimaryButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor,
           foregroundColor: Colors.white,
-          shadowColor: backgroundColor.withValues(alpha: 0.4),
-          elevation: AppDimens.elevationHigh,
+          shadowColor: Theme.of(context).brightness == Brightness.dark 
+              ? Colors.transparent 
+              : backgroundColor.withValues(alpha: 0.4),
+          elevation: Theme.of(context).brightness == Brightness.dark ? 0 : AppDimens.elevationHigh,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(borderRadius),
           ),
         ),
         child:
             isLoading
-                ? const SizedBox(
+                ? SizedBox(
                   width: 24,
                   height: 24,
                   child: CircularProgressIndicator(
@@ -54,7 +56,11 @@ class PrimaryButton extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   child: Text(
                     label,
-                    style: AppTextStyles.button.copyWith(fontSize: fontSize),
+                    style: AppTextStyles.button(context).copyWith(
+                      fontSize: fontSize,
+                      // PRO FIX: Ensures contrast is always maintained
+                      color: Colors.white, 
+                    ),
                   ),
                 ),
       ),

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_dimens.dart';
-import '../../core/theme/app_shapes.dart';
+import 'app_text_field.dart';
 
-class AuthTextField extends StatefulWidget {
+class AuthTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
   final bool isPassword;
@@ -23,71 +22,15 @@ class AuthTextField extends StatefulWidget {
   });
 
   @override
-  State<AuthTextField> createState() => _AuthTextFieldState();
-}
-
-class _AuthTextFieldState extends State<AuthTextField> {
-  bool _internalIsVisible = false;
-
-  @override
   Widget build(BuildContext context) {
-    final isVisible = widget.isPasswordVisible ?? _internalIsVisible;
-    return Container(
-      height: AppDimens.inputHeight,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppShapes.lg,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      alignment: Alignment.center,
-      child: Center(
-        child: TextField(
-          controller: widget.controller,
-          obscureText: widget.isPassword && !isVisible,
-          keyboardType:
-              widget.isEmail ? TextInputType.emailAddress : TextInputType.text,
-          textAlignVertical: TextAlignVertical.center,
-          style: const TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontWeight: FontWeight.w500,
-            fontSize: 15,
-          ),
-          decoration: InputDecoration(
-            border: InputBorder.none,
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppDimens.spaceXl,
-            ),
-            hintText: widget.hintText,
-            hintStyle: const TextStyle(color: Color(0xFFC4C4C4), fontSize: 14),
-            suffixIcon:
-                widget.isPassword
-                    ? IconButton(
-                      icon: Icon(
-                        isVisible ? Icons.visibility : Icons.visibility_off,
-                        color: const Color(0xFFC4C4C4),
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        if (widget.onVisibilityToggle != null) {
-                          widget.onVisibilityToggle!();
-                        } else {
-                          setState(
-                            () => _internalIsVisible = !_internalIsVisible,
-                          );
-                        }
-                      },
-                    )
-                    : widget.suffixIcon,
-          ),
-        ),
-      ),
+    return AppTextField(
+      controller: controller,
+      hintText: hintText,
+      isPassword: isPassword,
+      isEmail: isEmail,
+      suffixIcon: suffixIcon,
+      isPasswordVisible: isPasswordVisible,
+      onVisibilityToggle: onVisibilityToggle,
     );
   }
 }

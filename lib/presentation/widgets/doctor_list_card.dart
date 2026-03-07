@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
 import 'app_network_image.dart';
 
 class DoctorListCard extends StatelessWidget {
@@ -36,19 +37,11 @@ class DoctorListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppShapes.xl,
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1C222E).withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+      // PRO FIX: Instantly adapts to Dark Mode (removes shadow, shifts to Deep Slate)
+      decoration: AppStyles.surfaceCard(context, borderRadius: AppShapes.xl),
       child: Material(
         color: Colors.transparent,
         borderRadius: AppShapes.xl,
@@ -88,14 +81,17 @@ class DoctorListCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               name,
-                              style: AppTextStyles.h3.copyWith(fontSize: 16),
+                              style: AppTextStyles.h3(context).copyWith(fontSize: 16),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           trailingWidget ??
                               Material(
-                                color: const Color(0xFFF2F4F7),
+                                // PRO FIX: Context-aware favorite button background
+                                color: isDark 
+                                    ? AppColors.darkBorder 
+                                    : const Color(0xFFF2F4F7),
                                 borderRadius: AppShapes.md,
                                 child: InkWell(
                                   onTap: onFavoriteTap,
@@ -108,10 +104,9 @@ class DoctorListCard extends StatelessWidget {
                                       isFavorite
                                           ? Icons.favorite
                                           : Icons.favorite_border,
-                                      color:
-                                          isFavorite
-                                              ? AppColors.dangerRed
-                                              : const Color(0xFF9CA3AF),
+                                      color: isFavorite
+                                          ? AppColors.dangerRed
+                                          : (isDark ? AppColors.darkTextSecondary : const Color(0xFF9CA3AF)),
                                       size: 20,
                                     ),
                                   ),
@@ -122,8 +117,8 @@ class DoctorListCard extends StatelessWidget {
                       const SizedBox(height: AppDimens.space2xs),
                       Text(
                         specialty,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textLight,
+                        style: AppTextStyles.bodySmall(context).copyWith(
+                          color: context.colorTextLight, // Already context-aware!
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -135,22 +130,23 @@ class DoctorListCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             rating,
-                            style: AppTextStyles.bodyBold.copyWith(
+                            style: AppTextStyles.bodyBold(context).copyWith(
                               fontSize: 12,
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Icon(
+                          Icon(
                             Icons.visibility_outlined,
-                            color: Color(0xFF9FA8DA),
+                            // PRO FIX: Shifted to a color that works on both light and dark
+                            color: isDark ? AppColors.darkTextSecondary : const Color(0xFF9FA8DA),
                             size: 14,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             views,
-                            style: AppTextStyles.bodySmall.copyWith(
+                            style: AppTextStyles.bodySmall(context).copyWith(
                               fontSize: 12,
-                              color: AppColors.textLight,
+                              color: context.colorTextLight,
                             ),
                           ),
                         ],

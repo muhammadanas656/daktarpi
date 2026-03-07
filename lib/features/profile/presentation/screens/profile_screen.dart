@@ -41,6 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // NEW: Added to hold the ISO code for database filtering
   String? _selectedCountryIso;
+  String? _calculatedUtcOffset;
 
   File? _imageFile;
   String? _avatarUrl;
@@ -96,6 +97,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+
+      final offset = DateTime.now().timeZoneOffset;
+      final hours = offset.inHours.abs().toString().padLeft(2, '0');
+      final minutes = (offset.inMinutes.remainder(
+        60,
+      )).abs().toString().padLeft(2, '0');
+      final sign = offset.isNegative ? '-' : '+';
+      _calculatedUtcOffset = "$sign$hours:$minutes";
 
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
@@ -208,7 +217,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (context, child) {
           return Theme(
             data: Theme.of(context).copyWith(
-              colorScheme: const ColorScheme.light(
+              colorScheme: ColorScheme.light(
                 primary: AppColors.primaryGreen,
                 onPrimary: Colors.white,
                 onSurface: Colors.black,
@@ -285,6 +294,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profilePictureUrl: finalAvatarUrl,
           updatedAt: DateTime.now(),
         ),
+        utcOffset: _calculatedUtcOffset,
       );
 
       if (mounted) {
@@ -294,7 +304,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isEditing ? "Changes saved!" : "Profile created!",
         );
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(Duration(milliseconds: 500));
         await ProfileNotifier.instance.loadProfile();
 
         if (mounted) {
@@ -351,9 +361,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
+
     if (_isInitialLoad) {
-      return const Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
+      return Scaffold(
+        backgroundColor: context.colorScaffoldBackground,
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primaryGreen),
         ),
@@ -367,23 +379,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _onBackPress();
       },
       child: Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
+        backgroundColor: context.colorScaffoldBackground,
         body: Container(
-          decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+          decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
           child: SingleChildScrollView(
             child: Column(
               children: [
                 // --- HEADER ---
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.only(
+                  padding: EdgeInsets.only(
                     bottom: 40,
                     left: 20,
                     right: 20,
                     top: 60,
                   ),
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryGreen,
+                  decoration: BoxDecoration(
+                    // PRO FIX: Deep Slate Medical Gradient for Dark Mode
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark 
+                          ? const [Color(0xFF009668), Color(0xFF006B78)] 
+                          : const [Color(0xFF00C689), Color(0xFF008FA0)], 
+                    ),
                     borderRadius: BorderRadius.only(
                       bottomLeft: Radius.circular(30),
                       bottomRight: Radius.circular(30),
@@ -398,38 +417,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onTap: _onBackPress,
                             borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                // PRO FIX: Adaptive back button on the green header
+                                color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkSurface : Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.arrow_back_ios_new,
                                 size: 18,
-                                color: AppColors.primaryGreen,
+                                // PRO FIX: Ensure icon contrasts with its dynamic background
+                                color: isDark ? Colors.white : AppColors.primaryGreen,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 40),
+                          SizedBox(width: 40),
                         ],
                       ),
-                      const SizedBox(height: 30),
+                      SizedBox(height: 30),
                       Text(
                         _isEditing ? "Edit Profile" : "Set up your profile",
-                        style: AppTextStyles.h1.copyWith(color: Colors.white),
+                        style: AppTextStyles.h1(
+                          context,
+                        ).copyWith(color: Colors.white),
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: 10),
                       Text(
                         _isEditing
                             ? "Make changes to your information below."
                             : "Update your profile to connect with your doctor.",
                         textAlign: TextAlign.center,
-                        style: AppTextStyles.body.copyWith(
+                        style: AppTextStyles.body(context).copyWith(
                           color: Colors.white.withValues(alpha: 0.8),
                           height: 1.4,
                         ),
                       ),
-                      const SizedBox(height: 35),
+                      SizedBox(height: 35),
                       // --- AVATAR ---
                       Stack(
                         children: [
@@ -438,8 +461,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             height: 120,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 4),
-                              color: Colors.grey[200],
+                              // PRO FIX: Softer, glassmorphic border with a floating shadow
+                              border: Border.all(
+                                color: isDark 
+                                    ? Colors.white.withValues(alpha: 0.15) 
+                                    : Colors.white, 
+                                width: 3,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                              color: isDark ? AppColors.darkSurface : Colors.grey[200],
                             ),
                             child: ClipOval(
                               child:
@@ -459,13 +495,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             height: 120,
                                             errorBuilder:
                                                 (context, error, stackTrace) =>
-                                                    const Icon(
+                                                    Icon(
                                                       Icons.person,
                                                       size: 60,
                                                       color: Colors.grey,
                                                     ),
                                           )
-                                          : const Icon(
+                                          : Icon(
                                             Icons.person,
                                             size: 60,
                                             color: Colors.grey,
@@ -478,12 +514,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: InkWell(
                               onTap: _pickImage,
                               child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: const BoxDecoration(
+                                padding: EdgeInsets.all(8),
+                                decoration: BoxDecoration(
                                   color: Color(0xFF6C757D),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.camera_alt,
                                   color: Colors.white,
                                   size: 20,
@@ -496,27 +532,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
 
                 // --- FORM ---
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: EdgeInsets.symmetric(horizontal: 24),
                   child: Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(20),
                     decoration: AppStyles.surfaceCard(
+                      context,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Personal information", style: AppTextStyles.h3),
-                        const SizedBox(height: 20),
+                        Text(
+                          "Personal information",
+                          style: AppTextStyles.h3(context),
+                        ),
+                        SizedBox(height: 20),
                         AppTextField(
                           controller: _nameController,
                           hintText: "Enter full name",
                           label: "Full Name *",
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         AppTextField(
                           controller: _phoneController,
                           hintText: "Enter phone number",
@@ -537,10 +577,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             showOnlyCountryWhenClosed: false,
                             alignLeft: false,
                             padding: EdgeInsets.zero,
-                            textStyle: AppTextStyles.bodyBold,
+                            textStyle: AppTextStyles.bodyBold(context),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         AppTextField(
                           controller: _dobController,
                           hintText: "DD MM YYYY",
@@ -548,7 +588,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           readOnly: true,
                           onTap: _selectDate,
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         AppTextField(
                           controller: _locationController,
                           hintText: "Use GPS to set location",
@@ -558,24 +598,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onTap: _isLoading ? null : _getCurrentLocation,
                             borderRadius: BorderRadius.circular(20),
                             child: Padding(
-                              padding: const EdgeInsets.all(12.0),
+                              padding: EdgeInsets.all(12.0),
                               child:
                                   _isLoading
-                                      ? const SizedBox(
+                                      ? SizedBox(
                                         width: 18,
                                         height: 18,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
                                         ),
                                       )
-                                      : const Icon(
+                                      : Icon(
                                         Icons.my_location,
                                         color: AppColors.primaryGreen,
                                       ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        SizedBox(height: 28),
                         PrimaryButton(
                           label: _isEditing ? "Save Changes" : "Continue",
                           onTap: _saveProfile,
@@ -587,7 +627,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 40),
+                SizedBox(height: 40),
               ],
             ),
           ),

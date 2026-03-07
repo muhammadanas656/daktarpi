@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
-import '../../../../presentation/widgets/auth_text_field.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../core/utils/security_formatters.dart';
 import '../../../../core/security/sensitive_action_step_up_service.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -91,18 +92,25 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final isDark =
+                Theme.of(ctx).brightness ==
+                Brightness.dark; // PRO FIX: Define isDark here
+
             final defaultPinTheme = PinTheme(
               width: 36,
               height: 46,
-              textStyle: const TextStyle(
+              textStyle: TextStyle(
                 fontSize: 18,
-                color: AppColors.textDark,
+                color: context.colorTextDark,
                 fontWeight: FontWeight.bold,
               ),
               decoration: BoxDecoration(
-                color: Colors.grey[50],
+                // PRO FIX: Dynamic background and border for the PIN squares
+                color: isDark ? AppColors.darkScaffold : Colors.grey[50],
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.borderColor),
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : context.colorBorder,
+                ),
               ),
             );
 
@@ -141,7 +149,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
             }
 
             return AlertDialog(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -152,7 +160,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                     color:
                         isRecoveryMode ? Colors.orange : AppColors.primaryGreen,
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Text(isRecoveryMode ? "Account Recovery" : "Security Check"),
                 ],
               ),
@@ -164,13 +172,13 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                       isRecoveryMode
                           ? "Enter an 8-character backup code to bypass and disable 2FA."
                           : "To make security changes to your account, please verify your identity with your 6-digit authenticator code.",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textLight,
+                        color: context.colorTextLight,
                         height: 1.4,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: 24),
                     AnimatedCrossFade(
                       firstChild: Pinput(
                         length: 6,
@@ -179,8 +187,9 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                         defaultPinTheme: defaultPinTheme,
                         onCompleted: submitCode,
                       ),
-                      secondChild: TextField(
+                      secondChild: AppTextField(
                         controller: recoveryController,
+                        hintText: "XXXX-XXXX",
                         keyboardType: TextInputType.text,
                         textCapitalization: TextCapitalization.characters,
                         inputFormatters: [BackupCodeFormatter()],
@@ -194,10 +203,10 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                           isRecoveryMode
                               ? CrossFadeState.showSecond
                               : CrossFadeState.showFirst,
-                      duration: const Duration(milliseconds: 300),
+                      duration: Duration(milliseconds: 300),
                     ),
                     if (isDialogLoading)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(top: 16),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
@@ -210,10 +219,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
               actions: [
                 TextButton(
                   onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
                 ),
                 TextButton(
                   onPressed:
@@ -283,43 +289,42 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             return AlertDialog(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              title: const Row(
+              title: Row(
                 children: [
                   Icon(Icons.email, color: AppColors.primaryGreen),
                   SizedBox(width: 10),
                   Text("Link Email Account"),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    "To link your email address, please set a secure password for this account.",
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textLight,
-                      height: 1.4,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "To link your email address, please set a secure password for this account.",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: context.colorTextLight,
+                        height: 1.4,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  AuthTextField(
-                    controller: passwordController,
-                    hintText: "Set a Password",
-                    isPassword: true,
-                  ),
-                ],
+                    SizedBox(height: 20),
+                    AppTextField(
+                      controller: passwordController,
+                      hintText: "Set a Password",
+                      isPassword: true,
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
                   onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
                 ),
                 TextButton(
                   onPressed:
@@ -383,12 +388,12 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                           },
                   child:
                       isDialogLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                          : const Text(
+                          : Text(
                             "Link Account",
                             style: TextStyle(
                               color: AppColors.primaryGreen,
@@ -418,32 +423,29 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(ctx).colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
             title: Row(
               children: [
-                const Icon(Icons.link_off, color: Colors.red),
-                const SizedBox(width: 10),
+                Icon(Icons.link_off, color: Colors.red),
+                SizedBox(width: 10),
                 Text("Unlink $providerName?"),
               ],
             ),
             content: Text(
               "Are you sure you want to unlink your $providerName account? You won't be able to sign in with this method anymore.",
-              style: const TextStyle(height: 1.4, color: AppColors.textDark),
+              style: TextStyle(height: 1.4, color: context.colorTextDark),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(
-                  "Cancel",
-                  style: TextStyle(color: Colors.grey),
-                ),
+                child: Text("Cancel", style: TextStyle(color: Colors.grey)),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(
+                child: Text(
                   "Unlink",
                   style: TextStyle(
                     color: Colors.red,
@@ -500,32 +502,29 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(ctx).colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            title: const Row(
+            title: Row(
               children: [
                 Icon(Icons.link_off, color: Colors.red),
                 SizedBox(width: 10),
                 Text("Unlink Email?"),
               ],
             ),
-            content: const Text(
+            content: Text(
               "Are you sure you want to unlink your Email/Password account? You won't be able to sign in with this method anymore.",
-              style: TextStyle(height: 1.4, color: AppColors.textDark),
+              style: TextStyle(height: 1.4, color: context.colorTextDark),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(
-                  "Cancel",
-                  style: TextStyle(color: Colors.grey),
-                ),
+                child: Text("Cancel", style: TextStyle(color: Colors.grey)),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(
+                child: Text(
                   "Unlink",
                   style: TextStyle(
                     color: Colors.red,
@@ -626,29 +625,29 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
               : null,
       child: AnimatedContainer(
         duration: AppMotion.fast,
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
+        margin: EdgeInsets.only(bottom: 16),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: AppStyles.surfaceCard(
+          context,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+        ).copyWith(
           border:
               isExpanded
                   ? Border.all(color: color.withValues(alpha: 0.3), width: 1)
-                  : Border.all(color: Colors.transparent, width: 1),
+                  : Border.all(
+                    color:
+                        Theme.of(context).brightness == Brightness.dark
+                            ? AppColors.darkBorder
+                            : Colors.transparent,
+                    width: 1,
+                  ),
         ),
         child: Column(
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
@@ -659,7 +658,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                     size: 24,
                   ),
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,17 +671,17 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                                 ? provider[0].toUpperCase() +
                                     provider.substring(1)
                                 : '',
-                            style: AppTextStyles.bodyBold,
+                            style: AppTextStyles.bodyBold(context),
                           ),
                           if (canExpand) ...[
-                            const SizedBox(width: 6),
+                            SizedBox(width: 6),
                             AnimatedRotation(
                               turns: isExpanded ? 0.5 : 0.0,
                               duration: AppMotion.fast,
-                              child: const Icon(
+                              child: Icon(
                                 Icons.keyboard_arrow_down_rounded,
                                 size: 18,
-                                color: AppColors.textLight,
+                                color: context.colorTextLight,
                               ),
                             ),
                           ],
@@ -694,9 +693,9 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                               ? (_settingsRepository.currentUserEmail ??
                                   'Linked')
                               : 'Linked',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.textLight,
-                          ),
+                          style: AppTextStyles.bodySmall(
+                            context,
+                          ).copyWith(color: context.colorTextLight),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -706,7 +705,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                 if (isLinked)
                   if (isPrimary || isOnlyIdentity)
                     // --- THE FIX: Primary accounts get NO BUTTON ---
-                    const SizedBox.shrink()
+                    SizedBox.shrink()
                   else
                     // Secondary accounts get the Unlink button
                     TextButton(
@@ -717,7 +716,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                           _unlinkImplicitEmail();
                         }
                       },
-                      child: const Text(
+                      child: Text(
                         "Unlink",
                         style: TextStyle(
                           color: Colors.red,
@@ -728,7 +727,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                 else
                   TextButton(
                     onPressed: provider == 'google' ? _linkGoogle : _linkEmail,
-                    child: const Text(
+                    child: Text(
                       "Link",
                       style: TextStyle(
                         color: AppColors.primaryGreen,
@@ -747,21 +746,21 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                   isExpanded
                       ? Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.only(top: 12, left: 56),
+                        padding: EdgeInsets.only(top: 12, left: 56),
                         child: Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.subdirectory_arrow_right_rounded,
                               size: 16,
                               color: Colors.grey,
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 "$identityEmail",
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
-                                  color: AppColors.textLight,
+                                  color: context.colorTextLight,
                                   fontWeight: FontWeight.w500,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -770,7 +769,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                           ],
                         ),
                       )
-                      : const SizedBox.shrink(),
+                      : SizedBox.shrink(),
             ),
           ],
         ),
@@ -781,33 +780,36 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: context.colorScaffoldBackground,
       appBar: AppBar(
-        title: Text("Linked Accounts", style: AppTextStyles.h2),
+        title: Text("Linked Accounts", style: AppTextStyles.h2(context)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: AppColors.textDark,
+            color: context.colorTextDark,
           ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body:
           _isLoading
-              ? const Center(
+              ? Center(
                 child: CircularProgressIndicator(color: AppColors.primaryGreen),
               )
               : ListView(
-                padding: const EdgeInsets.all(24.0),
+                padding: EdgeInsets.all(24.0),
                 children: [
-                  const Text(
+                  Text(
                     "Manage your signed-in accounts. Linking accounts allows you to sign in with any of them.",
-                    style: TextStyle(color: AppColors.textLight, height: 1.5),
+                    style: TextStyle(
+                      color: context.colorTextLight,
+                      height: 1.5,
+                    ),
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                   _buildProviderTile(
                     'email',
                     'assets/icons/email.svg',

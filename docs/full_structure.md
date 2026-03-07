@@ -43,7 +43,7 @@ lib/
 │   │   │   # Listens to `SettingsNotifier` to respect global notification opt-outs.
 │   │   └── error_telemetry_service.dart # Captures errors from FlutterError, PlatformDispatcher, and Zones.
 │   ├── theme/
-│   │   ├── app_colors.dart # Hex constants (primaryGreen: #00C689, dangerRed: #E53935, etc.).
+│   │   ├── app_colors.dart # Hex constants and BuildContext extensions for dynamic Light/Dark mode colors.
 │   │   ├── app_dimens.dart # Stores page padding and elevation levels.
 │   │   ├── app_motion.dart # Timings (200-400ms) and Curves for UI transitions.
 │   │   ├── app_styles.dart # Predefined Decorations (surfaceCard, pageGradient).

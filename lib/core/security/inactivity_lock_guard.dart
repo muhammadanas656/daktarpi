@@ -234,7 +234,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
 
   Future<void> _signOutFromLockScreen() async {
     _inactivityTimer?.cancel(); // Cancel timer first to stop memory leaks
-    
+
     try {
       await _authRepository.signOut();
     } catch (_) {}
@@ -248,7 +248,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
       _isUnlocking = false;
       _sessionStartedAt = null;
     });
-    
+
     // --- FIX: Defer navigation until after the layout phase is completely finished ---
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -277,13 +277,13 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
 
   Widget _buildLockOverlay() {
     return Material(
-      color: const Color(0xFF0F151E),
+      color: Color(0xFF0F151E),
       child: SafeArea(
         child: Center(
           child: Container(
             width: 340,
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.all(24),
+            margin: EdgeInsets.all(24),
+            padding: EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -298,27 +298,27 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
                     color: AppColors.primaryGreen.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.lock_outline_rounded,
                     color: AppColors.primaryGreen,
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Text(
+                SizedBox(height: 16),
+                Text(
                   'App Locked',
                   style: TextStyle(
-                    color: AppColors.textDark,
+                    color: context.colorTextDark,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: 8),
+                Text(
                   'For your privacy, re-authenticate to continue.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textLight, fontSize: 14),
+                  style: TextStyle(color: context.colorTextLight, fontSize: 14),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -326,7 +326,7 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryGreen,
                       foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(48),
+                      minimumSize: Size.fromHeight(48),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -340,12 +340,12 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 TextButton(
                   onPressed: _signOutFromLockScreen,
-                  child: const Text(
+                  child: Text(
                     'Sign out instead',
-                    style: TextStyle(color: AppColors.textLight),
+                    style: TextStyle(color: context.colorTextLight),
                   ),
                 ),
               ],

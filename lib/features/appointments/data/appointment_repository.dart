@@ -35,7 +35,8 @@ class AppointmentRepository {
               id,
               full_name,
               profile_picture_url,
-              specialties ( name )
+              specialties ( name ),
+              doctor_clinics ( clinic_id, max_wait_time )
             ),
             clinics (
               id,
@@ -45,7 +46,7 @@ class AppointmentRepository {
           ''')
           .eq('user_id', userId)
           .isFilter('deleted_at', null)
-          .eq('status', 'confirmed')
+          .inFilter('status', ['confirmed', 'waiting'])
           .order('schedule_date', ascending: true);
 
       final List<dynamic> data = response as List<dynamic>;

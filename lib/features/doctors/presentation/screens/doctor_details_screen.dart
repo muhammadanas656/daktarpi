@@ -35,12 +35,11 @@ class DoctorDetailsScreen extends StatefulWidget {
 }
 
 class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
-  final Uuid _uuid = const Uuid();
+  final Uuid _uuid = Uuid();
   // --- DESIGN COLORS (aliased from AppColors) ---
+  Color get primaryGreen => AppColors.primaryGreen;
 
-  static const Color primaryGreen = AppColors.primaryGreen;
-
-  static const Color bgColor = AppColors.bgColor;
+  Color get bgColor => context.colorBg;
 
   // --- DATA STATE ---
 
@@ -124,7 +123,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   void _startViewTimer() {
     _viewTimer?.cancel();
-    _viewTimer = Timer(const Duration(seconds: 3), () {
+    _viewTimer = Timer(Duration(seconds: 3), () {
       unawaited(_recordView());
     });
   }
@@ -253,22 +252,22 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
 
           child: Dialog(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).colorScheme.surface,
 
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
 
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.all(16.0),
 
               child: Column(
                 mainAxisSize: MainAxisSize.min,
 
                 children: [
-                  Text("Select Date", style: AppTextStyles.h3),
+                  Text("Select Date", style: AppTextStyles.h3(context)),
 
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
 
                   SizedBox(
                     height: 350,
@@ -280,7 +279,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
                       firstDate: now,
 
-                      lastDate: now.add(const Duration(days: 365)),
+                      lastDate: now.add(Duration(days: 365)),
 
                       onDateChanged: (date) {
                         Navigator.of(context).pop(date);
@@ -405,7 +404,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: bgColor,
 
         body: Center(child: CircularProgressIndicator(color: primaryGreen)),
@@ -414,30 +413,30 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
     if (_doctor == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text("Error")),
+        appBar: AppBar(title: Text("Error")),
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(16.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.grey),
-                const SizedBox(height: 16),
+                Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
                 Text(
                   "Doctor Not Found",
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.h2,
+                  style: AppTextStyles.h2(context),
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: 8),
+                Text(
                   "We couldn't find the doctor you're looking for.",
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey),
                 ),
                 if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
@@ -445,19 +444,19 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                     child: Text(
                       _errorMessage!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                      style: TextStyle(color: Colors.red, fontSize: 12),
                     ),
                   ),
                 ],
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () => context.pop(),
-                  child: const Text("Go Back"),
+                  child: Text("Go Back"),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(
                   "ID: ${widget.doctorId}",
-                  style: const TextStyle(color: Colors.grey, fontSize: 10),
+                  style: TextStyle(color: Colors.grey, fontSize: 10),
                 ),
               ],
             ),
@@ -472,7 +471,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       appBar: _buildAppBar(),
 
       body: Container(
-        decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: Column(
           children: [
             Expanded(
@@ -481,22 +480,19 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 color: AppColors.primaryGreen,
                 child: SingleChildScrollView(
                   controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
+                  physics: AlwaysScrollableScrollPhysics(),
 
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 10,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
 
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
 
                     children: [
-                    DoctorDetailsHeader(
-                      doctor: _doctor!,
-                      onFavoriteTap: _toggleFavorite,
-                      isFavorite: _favNotifier.isFavorite(
-                        int.tryParse(widget.doctorId) ?? 0,
+                      DoctorDetailsHeader(
+                        doctor: _doctor!,
+                        onFavoriteTap: _toggleFavorite,
+                        isFavorite: _favNotifier.isFavorite(
+                          int.tryParse(widget.doctorId) ?? 0,
                         ),
                         visitPrice:
                             (_clinics.isNotEmpty && _selectedClinic != null)
@@ -505,7 +501,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         onBookNowTap: _handleBooking,
                       ),
 
-                      const SizedBox(height: 14),
+                      SizedBox(height: 14),
 
                       DoctorStatsRow(
                         patients:
@@ -516,17 +512,17 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                       ),
 
                       if (_errorMessage != null) ...[
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(10),
+                          padding: EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: Colors.orange.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             _errorMessage!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.deepOrange,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -535,14 +531,14 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         ),
                       ],
 
-                      const SizedBox(height: 14),
+                      SizedBox(height: 14),
 
                       Builder(
                         builder: (context) {
                           final now = DateTime.now();
                           final today = now;
-                          final tomorrow = now.add(const Duration(days: 1));
-                          DateTime thirdDate = now.add(const Duration(days: 2));
+                          final tomorrow = now.add(Duration(days: 1));
+                          DateTime thirdDate = now.add(Duration(days: 2));
                           bool isCustomDate =
                               !_isSameDay(_selectedDate, today) &&
                               !_isSameDay(_selectedDate, tomorrow);
@@ -589,22 +585,22 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         },
                       ),
 
-                      const SizedBox(height: 18),
+                      SizedBox(height: 18),
 
-                      Text("Timing", style: AppTextStyles.h3),
+                      Text("Timing", style: AppTextStyles.h3(context)),
 
-                      const SizedBox(height: 10),
+                      SizedBox(height: 10),
 
                       DoctorTimingList(schedules: _schedules),
 
-                      const SizedBox(height: 18),
+                      SizedBox(height: 18),
 
                       Text(
                         "Location",
 
                         key: _locationSectionKey,
 
-                        style: AppTextStyles.h3,
+                        style: AppTextStyles.h3(context),
                       ),
 
                       ClinicLocationMapSection(
@@ -620,7 +616,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         scrollToTop: _scrollToLocationSection,
                       ),
 
-                      const SizedBox(height: 24),
+                      SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -629,16 +625,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
             // --- BOTTOM BUTTON ---
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
               decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
+                color: Theme.of(context).colorScheme.surface,
+                boxShadow: AppStyles.cardShadow(context),
               ),
               child: SafeArea(
                 child: SizedBox(
@@ -674,23 +664,18 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       titleSpacing: 0,
 
       leading: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 0, 6),
+        padding: EdgeInsets.fromLTRB(20, 6, 0, 6),
         child: InkWell(
           onTap: () => context.pop(),
           borderRadius: BorderRadius.circular(12),
           child: Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderColor),
-              boxShadow: AppStyles.cardShadow,
-            ),
-            child: const Icon(
+            decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(12)),
+            child: Icon(
               Icons.arrow_back_ios_new_rounded,
               size: 18,
-              color: AppColors.textDark,
+              color: context.colorTextDark,
             ),
           ),
         ),
@@ -698,11 +683,11 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
       title: Text(
         "Doctor Details",
-        style: AppTextStyles.h3.copyWith(fontSize: 20),
+        style: AppTextStyles.h3(context).copyWith(fontSize: 20),
       ),
-      actions: [const SizedBox(width: 64)],
+      actions: [SizedBox(width: 64)],
       bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(8),
+        preferredSize: Size.fromHeight(8),
         child: Container(),
       ),
     );

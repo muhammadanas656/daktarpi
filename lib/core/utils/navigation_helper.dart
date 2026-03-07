@@ -18,7 +18,7 @@ class NavigationHelper {
 
       if (availableMaps.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('No navigation applications found on this device.'),
             backgroundColor: Colors.redAccent,
           ),
@@ -29,42 +29,42 @@ class NavigationHelper {
       await showModalBottomSheet(
         context: context,
         backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (BuildContext ctx) {
           return SafeArea(
             child: SingleChildScrollView(
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 24),
+                padding: EdgeInsets.symmetric(vertical: 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       width: 40,
                       height: 4,
-                      margin: const EdgeInsets.only(bottom: 24),
+                      margin: EdgeInsets.only(bottom: 24),
                       decoration: BoxDecoration(
                         color: Colors.grey[300],
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Text(
                         'Navigate to $title',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textDark,
+                          color: context.colorTextDark,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     ...availableMaps.map((map) {
                       return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
+                        contentPadding: EdgeInsets.symmetric(
                           horizontal: 24,
                           vertical: 4,
                         ),
@@ -76,7 +76,7 @@ class NavigationHelper {
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: Colors.grey[200]!),
                           ),
-                          padding: const EdgeInsets.all(8),
+                          padding: EdgeInsets.all(8),
                           child: SvgPicture.string(
                             map.icon,
                             width: 32,
@@ -85,16 +85,13 @@ class NavigationHelper {
                         ),
                         title: Text(
                           map.mapName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textDark,
+                            color: context.colorTextDark,
                           ),
                         ),
-                        trailing: const Icon(
-                          Icons.chevron_right,
-                          color: Colors.grey,
-                        ),
+                        trailing: Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           Navigator.pop(ctx);
                           map.showDirections(

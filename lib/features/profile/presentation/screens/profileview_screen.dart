@@ -42,9 +42,11 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
+
     if (!_profileNotifier.isLoaded) {
-      return const Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
+      return Scaffold(
+        backgroundColor: context.colorScaffoldBackground,
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primaryGreen),
         ),
@@ -54,9 +56,10 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
     // Use Notifier Data
     final profile = _profileNotifier.profile;
     final name = profile?.fullName ?? 'No Name';
-    final String phone = (profile?.countryCode != null && profile?.phoneNumber != null)
-        ? '${profile!.countryCode} ${profile.phoneNumber}'
-        : (profile?.phoneNumber ?? 'No Phone');
+    final String phone =
+        (profile?.countryCode != null && profile?.phoneNumber != null)
+            ? '${profile!.countryCode} ${profile.phoneNumber}'
+            : (profile?.phoneNumber ?? 'No Phone');
     final location = profile?.location ?? 'No Location';
     final avatarUrl = profile?.profilePictureUrl;
 
@@ -66,22 +69,29 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: context.colorScaffoldBackground,
       body: Container(
-        decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: SingleChildScrollView(
           child: Column(
             children: [
               // --- HEADER ---
               Container(
-                padding: const EdgeInsets.only(
+                padding: EdgeInsets.only(
                   top: 60,
                   left: 20,
                   right: 20,
                   bottom: 40,
                 ),
-                decoration: const BoxDecoration(
-                  color: AppColors.primaryGreen,
+                decoration: BoxDecoration(
+                  // PRO FIX: Deep Slate Medical Gradient for Dark Mode
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark 
+                        ? const [Color(0xFF009668), Color(0xFF006B78)] 
+                        : const [Color(0xFF00C689), Color(0xFF008FA0)], 
+                  ),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(30),
                     bottomRight: Radius.circular(30),
@@ -93,7 +103,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           "Profile",
                           style: TextStyle(
                             fontSize: 22,
@@ -104,12 +114,12 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
 
                         // --- LOGOUT BUTTON REMOVED ---
                         // User requested removal.
-                        const SizedBox.shrink(), // Placeholder to keep layout valid if needed, or just remove
+                        SizedBox.shrink(), // Placeholder to keep layout valid if needed, or just remove
                         // ----------------------------------
                         // ----------------------------------
                       ],
                     ),
-                    const SizedBox(height: 30),
+                    SizedBox(height: 30),
 
                     // Avatar
                     Container(
@@ -117,8 +127,21 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                       height: 110,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4),
-                        color: Colors.white,
+                        // PRO FIX: Softer, glassmorphic border with a floating shadow
+                        border: Border.all(
+                          color: isDark 
+                              ? Colors.white.withValues(alpha: 0.15) 
+                              : Colors.white, 
+                          width: 3,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                        color: isDark ? AppColors.darkSurface : Colors.white,
                       ),
                       child: ClipOval(
                         child:
@@ -130,32 +153,32 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                                   height: 110,
                                   key: ValueKey(avatarUrl),
                                   errorBuilder:
-                                      (_, __, ___) => const Icon(
+                                      (_, __, ___) => Icon(
                                         Icons.person,
                                         size: 60,
                                         color: Colors.grey,
                                       ),
                                 )
-                                : const Icon(
+                                : Icon(
                                   Icons.person,
                                   size: 60,
                                   color: Colors.grey,
                                 ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Text(
                       name,
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       phone,
                       maxLines: 1,
@@ -169,30 +192,33 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
 
               // --- INFO TILES ---
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Personal information", style: AppTextStyles.h3),
-                    const SizedBox(height: 20),
+                    Text(
+                      "Personal information",
+                      style: AppTextStyles.h3(context),
+                    ),
+                    SizedBox(height: 20),
 
                     _InfoCard(
                       icon: Icons.cake,
                       label: "Date of Birth",
                       value: dob,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     _InfoCard(
                       icon: Icons.location_on,
                       label: "Location",
                       value: location,
                     ),
 
-                    const SizedBox(height: 40),
+                    SizedBox(height: 40),
 
                     // EDIT BUTTON
                     PrimaryButton(
@@ -203,7 +229,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                       },
                       height: 56,
                     ),
-                    const SizedBox(height: 40),
+                    SizedBox(height: 40),
                   ],
                 ),
               ),
@@ -229,46 +255,33 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: AppColors.primaryGreen.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: AppColors.primaryGreen, size: 22),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 4),
+                Text(label, style: TextStyle(fontSize: 12, color: Colors.grey)),
+                SizedBox(height: 4),
                 Text(
                   value,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
+                    color: context.colorTextDark,
                   ),
                 ),
               ],

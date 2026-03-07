@@ -39,17 +39,16 @@ class AppointmentConfirmationScreen extends StatefulWidget {
 
 class _AppointmentConfirmationScreenState
     extends State<AppointmentConfirmationScreen> {
-  // --- DESIGN SYSTEM ---
-  static const Color primaryGreen = AppColors.primaryGreen;
-  static const Color textDark = AppColors.textDark;
-  static const Color textGrey = AppColors.textGrey;
-  static const Color borderColor = AppColors.borderColor;
+  Color get primaryGreen => AppColors.primaryGreen;
+  Color get textDark => context.colorTextDark;
+  Color get textGrey => context.colorTextGrey;
+  Color get borderColor => context.colorBorder;
 
   final _doctorRepo = DoctorRepository();
   final _appointmentRepo = AppointmentRepository();
   // Initialized Profile Repo
 
-  final TextStyle _sectionHeaderStyle = AppTextStyles.h3;
+  TextStyle get _sectionHeaderStyle => AppTextStyles.h3(context);
 
   late DateTime _focusedDate;
   late DateTime _selectedDate;
@@ -237,24 +236,21 @@ class _AppointmentConfirmationScreenState
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: SafeArea(
           child: Column(
             children: [
               _buildAppBar(isReschedule),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 10,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (!isReschedule) ...[
                         Row(
                           children: [
-                            const Text(
+                            Text(
                               "Step 2/2",
                               style: TextStyle(
                                 fontSize: 16,
@@ -262,7 +258,7 @@ class _AppointmentConfirmationScreenState
                                 color: textDark,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: 12),
                             Expanded(
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
@@ -271,24 +267,23 @@ class _AppointmentConfirmationScreenState
                                   backgroundColor: primaryGreen.withValues(
                                     alpha: 0.1,
                                   ),
-                                  valueColor:
-                                      const AlwaysStoppedAnimation<Color>(
-                                        primaryGreen,
-                                      ),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    primaryGreen,
+                                  ),
                                   minHeight: 6,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24),
                       ],
                       _buildCalendar(),
-                      const SizedBox(height: 24),
+                      SizedBox(height: 24),
                       Text("Available Time", style: _sectionHeaderStyle),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       if (slots.isEmpty && !_isLoading)
-                        const Center(
+                        Center(
                           child: Text(
                             "No slots available.",
                             style: TextStyle(color: textGrey),
@@ -301,16 +296,16 @@ class _AppointmentConfirmationScreenState
                           (i) => setState(() => _selectedTimeSlotIndex = i),
                           true,
                         ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: 24),
                       Text("Reminder Me Before", style: _sectionHeaderStyle),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       _buildOptionChips(
                         _reminderOptions.map((e) => "$e").toList(),
                         _selectedReminderIndex,
                         (i) => setState(() => _selectedReminderIndex = i),
                         false,
                       ),
-                      const SizedBox(height: 40),
+                      SizedBox(height: 40),
                     ],
                   ),
                 ),
@@ -325,7 +320,7 @@ class _AppointmentConfirmationScreenState
 
   Widget _buildAppBar(bool isReschedule) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -335,24 +330,16 @@ class _AppointmentConfirmationScreenState
             child: Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderColor),
-                boxShadow: AppStyles.cardShadow,
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
-                size: 18,
-                color: textDark,
-              ),
+              // PRO FIX: Dynamic surface card
+              decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.arrow_back_ios_new, size: 18, color: textDark),
             ),
           ),
           Text(
             isReschedule ? "Reschedule" : "Appointment",
-            style: AppTextStyles.h3.copyWith(fontSize: 20),
+            style: AppTextStyles.h3(context).copyWith(fontSize: 20),
           ),
-          const SizedBox(width: 44),
+          SizedBox(width: 44),
         ],
       ),
     );
@@ -360,23 +347,13 @@ class _AppointmentConfirmationScreenState
 
   Widget _buildCalendar() {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+      // PRO FIX: Replaced Colors.white and rigid shadow
+      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
               color: primaryGreen,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
@@ -385,7 +362,7 @@ class _AppointmentConfirmationScreenState
               children: [
                 Text(
                   DateFormat('MMMM yyyy').format(_focusedDate),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -402,12 +379,9 @@ class _AppointmentConfirmationScreenState
                                   _focusedDate.month - 1,
                                 ),
                           ),
-                      child: const Icon(
-                        Icons.chevron_left,
-                        color: Colors.white,
-                      ),
+                      child: Icon(Icons.chevron_left, color: Colors.white),
                     ),
-                    const SizedBox(width: 16),
+                    SizedBox(width: 16),
                     InkWell(
                       onTap:
                           () => setState(
@@ -417,10 +391,7 @@ class _AppointmentConfirmationScreenState
                                   _focusedDate.month + 1,
                                 ),
                           ),
-                      child: const Icon(
-                        Icons.chevron_right,
-                        color: Colors.white,
-                      ),
+                      child: Icon(Icons.chevron_right, color: Colors.white),
                     ),
                   ],
                 ),
@@ -428,11 +399,11 @@ class _AppointmentConfirmationScreenState
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(16),
             child: GridView.builder(
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              physics: NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 7,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
@@ -448,7 +419,7 @@ class _AppointmentConfirmationScreenState
                 if (index <
                     DateTime(_focusedDate.year, _focusedDate.month, 1).weekday -
                         1) {
-                  return const SizedBox();
+                  return SizedBox();
                 }
 
                 final day =
@@ -524,14 +495,15 @@ class _AppointmentConfirmationScreenState
         children: List.generate(items.length, (index) {
           final isSelected = selectedIndex == index;
           return Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: EdgeInsets.only(right: 12),
             child: GestureDetector(
               onTap: () => onTap(index),
               child: Container(
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: isSelected ? primaryGreen : Colors.white,
+                  // PRO FIX: Adaptive unselected chip color
+                  color: isSelected ? primaryGreen : Theme.of(context).colorScheme.surface,
                   shape: BoxShape.circle,
                   border: isSelected ? null : Border.all(color: borderColor),
                   boxShadow: [
@@ -541,7 +513,7 @@ class _AppointmentConfirmationScreenState
                               ? primaryGreen.withValues(alpha: 0.4)
                               : Colors.black.withValues(alpha: 0.03),
                       blurRadius: isSelected ? 8 : 5,
-                      offset: const Offset(0, 4),
+                      offset: Offset(0, 4),
                     ),
                   ],
                 ),
@@ -568,10 +540,11 @@ class _AppointmentConfirmationScreenState
 
   Widget _buildBottomButton() {
     return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFF0F0F0))),
+      padding: EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        // PRO FIX: Dynamic bottom surface
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkBorder : const Color(0xFFF0F0F0))),
       ),
       child: SafeArea(
         top: false,

@@ -106,9 +106,16 @@ class ProfileRepository {
     }
   }
 
-  Future<void> updateProfile(UserProfile profile) async {
+  Future<void> updateProfile(UserProfile profile, {String? utcOffset}) async {
     try {
-      await _client.from('profiles').upsert(profile.toJson());
+      final Map<String, dynamic> data = profile.toJson();
+
+      // Inject the offset into the payload if provided
+      if (utcOffset != null) {
+        data['utc_offset'] = utcOffset;
+      }
+
+      await _client.from('profiles').upsert(data);
 
       // Update Auth Metadata as well (optional but good practice)
       await _client.auth.updateUser(
@@ -130,11 +137,12 @@ class ProfileRepository {
   // --- SAVED PATIENTS (RELATIONAL) LOGIC ---
 
   // 1. Caching Variables
-  List<Map<String, dynamic>> _cachedSavedPatients = [];
-  DateTime? _lastSavedPatientsFetch;
+  // PRO FIX: Made these variables static so the cache persists globally across all screen instances!
+  static List<Map<String, dynamic>> _cachedSavedPatients = [];
+  static DateTime? _lastSavedPatientsFetch;
   static const _cacheDuration = Duration(minutes: 5);
 
-  bool _isCacheValid(DateTime? lastFetch) {
+  static bool _isCacheValid(DateTime? lastFetch) {
     if (lastFetch == null) return false;
     return DateTime.now().difference(lastFetch) < _cacheDuration;
   }

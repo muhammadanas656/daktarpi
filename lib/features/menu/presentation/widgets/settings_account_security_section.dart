@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../presentation/widgets/pessimistic_switch.dart';
 import '../screens/account_activity_screen.dart';
 import 'settings_section_header.dart';
@@ -38,7 +39,7 @@ class SettingsAccountSecuritySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SettingsSectionHeader(title: "Account & Security"),
+        SettingsSectionHeader(title: "Account & Security"),
         SettingsTile(
           icon: Icons.manage_search,
           title: "Account Activity",
@@ -47,7 +48,7 @@ class SettingsAccountSecuritySection extends StatelessWidget {
               () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const AccountActivityScreen(),
+                  builder: (context) => AccountActivityScreen(),
                 ),
               ),
         ),
@@ -66,81 +67,49 @@ class SettingsAccountSecuritySection extends StatelessWidget {
         if (hasBiometricHardware && is2FAEnabled)
           Container(
             margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
+            decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 4,
-              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: AppColors.primaryGreen.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.fingerprint_rounded,
-                  color: AppColors.primaryGreen,
-                  size: 20,
-                ),
+                child: const Icon(Icons.fingerprint_rounded, color: AppColors.primaryGreen, size: 20),
               ),
-              title: const Text(
+              title: Text(
                 "Enable Biometric Login",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textDark,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colorTextDark),
               ),
-              subtitle:
-                  isBiometricToggleBusy
-                      ? Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Row(
-                          children: [
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primaryGreen,
-                              ),
+              subtitle: isBiometricToggleBusy
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "Updating...",
+                              style: TextStyle(fontSize: 12, color: context.colorTextLight),
                             ),
-                            const SizedBox(width: 8),
-                            const Expanded(
-                              child: Text(
-                                "Updating...",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textLight,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                      : Text(
-                        isBiometricEnabled
-                            ? "Linked to this device"
-                            : "Not configured",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color:
-                              isBiometricEnabled
-                                  ? AppColors.primaryGreen
-                                  : AppColors.textLight,
-                        ),
+                          ),
+                        ],
                       ),
+                    )
+                  : Text(
+                      isBiometricEnabled ? "Linked to this device" : "Not configured",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isBiometricEnabled ? AppColors.primaryGreen : context.colorTextLight,
+                      ),
+                    ),
               trailing: PessimisticSwitch(
                 value: isBiometricEnabled,
                 enabled: !isBiometricToggleBusy,
@@ -151,80 +120,50 @@ class SettingsAccountSecuritySection extends StatelessWidget {
           ),
         Container(
           margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 4,
-            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             leading: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppColors.primaryGreen.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
-                Icons.security,
-                color: AppColors.primaryGreen,
-                size: 20,
-              ),
+              child: const Icon(Icons.security, color: AppColors.primaryGreen, size: 20),
             ),
-            title: const Text(
+            title: Text(
               "Two-Factor Authentication",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textDark,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colorTextDark),
             ),
-            subtitle:
-                is2FAToggleBusy
-                    ? Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.primaryGreen,
-                            ),
+            subtitle: is2FAToggleBusy
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Updating security setting...",
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: context.colorTextLight),
                           ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              "Updating security setting...",
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textLight,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                    : Text(
-                      is2FAEnabled ? "Enabled via Authenticator" : "Disabled",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color:
-                            is2FAEnabled
-                                ? AppColors.primaryGreen
-                                : AppColors.textLight,
-                      ),
+                        ),
+                      ],
                     ),
+                  )
+                : Text(
+                    is2FAEnabled ? "Enabled via Authenticator" : "Disabled",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: is2FAEnabled ? AppColors.primaryGreen : context.colorTextLight,
+                    ),
+                  ),
             trailing: PessimisticSwitch(
               value: is2FAEnabled,
               enabled: !is2FAToggleBusy,

@@ -140,21 +140,21 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            title: const Text("Secure Your Records"),
-            content: const Text(
+            title: Text("Secure Your Records"),
+            content: Text(
               "Protect your medical records for extra security by enabling 2FA or Biometrics in Settings.",
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text("Later"),
+                child: Text("Later"),
               ),
               TextButton(
                 onPressed: () {
                   Navigator.pop(ctx);
                   context.push(AppRoutes.settings);
                 },
-                child: const Text("Go to Settings"),
+                child: Text("Go to Settings"),
               ),
             ],
           ),
@@ -170,21 +170,18 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text("Delete Record?"),
-            content: const Text(
+            title: Text("Delete Record?"),
+            content: Text(
               "Are you sure you want to delete this record? This action cannot be undone.",
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text("Cancel"),
+                child: Text("Cancel"),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text(
-                  "Delete",
-                  style: TextStyle(color: Colors.red),
-                ),
+                child: Text("Delete", style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -248,14 +245,12 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                           loadingBuilder: (_, child, progress) {
                             return progress == null
                                 ? child
-                                : const Center(
-                                  child: CircularProgressIndicator(),
-                                );
+                                : Center(child: CircularProgressIndicator());
                           },
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
+                        icon: Icon(Icons.close, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
@@ -299,18 +294,18 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     } else {
       showModalBottomSheet(
         context: context,
-        shape: const RoundedRectangleBorder(
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         builder:
             (context) => Container(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Attached Files", style: AppTextStyles.h3),
-                  const SizedBox(height: 16),
+                  Text("Attached Files", style: AppTextStyles.h3(context)),
+                  SizedBox(height: 16),
                   ...record.fileUrls.asMap().entries.map((entry) {
                     final path = entry.value;
                     final isImage = [
@@ -325,7 +320,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                         color: AppColors.primaryGreen,
                       ),
                       title: Text(_getCleanFileName(path)),
-                      trailing: const Icon(Icons.open_in_new, size: 18),
+                      trailing: Icon(Icons.open_in_new, size: 18),
                       onTap: () {
                         Navigator.pop(context);
                         openPath(path);
@@ -348,16 +343,16 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         final isLocked = SettingsNotifier.instance.medicalRecordsLocked;
 
         return Scaffold(
-          backgroundColor: Colors.grey[50],
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
-            title: Text("Medical Records", style: AppTextStyles.h2),
+            title: Text("Medical Records", style: AppTextStyles.h2(context)),
             centerTitle: true,
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              icon: Icon(Icons.arrow_back_ios_new_rounded),
               onPressed: () => context.pop(),
-              color: AppColors.textDark,
+              color: context.colorTextDark,
             ),
             actions: [
               if (_hasSecurityConfigured)
@@ -378,15 +373,16 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   Widget _buildBottomBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
+        color: Theme.of(context).colorScheme.surface,
+        boxShadow: isDark ? [] : [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
-            offset: const Offset(0, -5),
+            offset: Offset(0, -5),
           ),
         ],
       ),
@@ -406,7 +402,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
   Widget _buildBody(bool isLocked) {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(color: AppColors.primaryGreen),
       );
     }
@@ -424,12 +420,12 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       itemCount: _records.length,
       itemBuilder: (context, index) {
         final record = _records[index];
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: EdgeInsets.only(bottom: 16),
           child: RecordCard(
             record: record,
             onTap: () {},
@@ -452,12 +448,12 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             size: 80,
             color: AppColors.primaryGreen.withValues(alpha: 0.2),
           ),
-          const SizedBox(height: 16),
-          Text("Records Protected", style: AppTextStyles.h3),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 16),
+          Text("Records Protected", style: AppTextStyles.h3(context)),
+          SizedBox(height: 8),
+          Text(
             "Verify your identity to view records.",
-            style: TextStyle(color: AppColors.textLight),
+            style: TextStyle(color: context.colorTextLight),
           ),
         ],
       ),
@@ -476,18 +472,18 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               color: AppColors.primaryGreen.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.folder_open_rounded,
               size: 60,
               color: AppColors.primaryGreen,
             ),
           ),
-          const SizedBox(height: 24),
-          Text("No Records Found", style: AppTextStyles.h3),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 24),
+          Text("No Records Found", style: AppTextStyles.h3(context)),
+          SizedBox(height: 8),
+          Text(
             "Add a medical record to track your health.",
-            style: TextStyle(color: AppColors.textLight),
+            style: TextStyle(color: context.colorTextLight),
           ),
         ],
       ),

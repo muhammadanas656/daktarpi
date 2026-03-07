@@ -28,8 +28,8 @@ class RecordCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
+        margin: EdgeInsets.only(bottom: 16),
+        padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -37,7 +37,7 @@ class RecordCard extends StatelessWidget {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
-              offset: const Offset(0, 4),
+              offset: Offset(0, 4),
             ),
           ],
         ),
@@ -56,7 +56,7 @@ class RecordCard extends StatelessWidget {
                 children: [
                   Text(
                     day,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -64,7 +64,7 @@ class RecordCard extends StatelessWidget {
                   ),
                   Text(
                     month,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       color: Colors.white,
@@ -73,7 +73,7 @@ class RecordCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
 
             // Content
             Expanded(
@@ -83,12 +83,12 @@ class RecordCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "Records added by you",
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
+                          color: context.colorTextDark,
                         ),
                       ),
                       // Edit/Delete Menu
@@ -97,10 +97,10 @@ class RecordCard extends StatelessWidget {
                         width: 24,
                         child: PopupMenuButton<String>(
                           padding: EdgeInsets.zero,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.more_vert,
                             size: 20,
-                            color: AppColors.textLight,
+                            color: context.colorTextLight,
                           ),
                           onSelected: (value) {
                             if (value == 'edit') {
@@ -111,21 +111,21 @@ class RecordCard extends StatelessWidget {
                           },
                           itemBuilder:
                               (context) => [
-                                const PopupMenuItem(
+                                PopupMenuItem(
                                   value: 'edit',
                                   child: Row(
                                     children: [
                                       Icon(
                                         Icons.edit,
                                         size: 18,
-                                        color: AppColors.textDark,
+                                        color: context.colorTextDark,
                                       ),
                                       SizedBox(width: 8),
                                       Text("Edit"),
                                     ],
                                   ),
                                 ),
-                                const PopupMenuItem(
+                                PopupMenuItem(
                                   value: 'delete',
                                   child: Row(
                                     children: [
@@ -147,18 +147,18 @@ class RecordCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   RichText(
                     text: TextSpan(
                       text: "Record for ",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textLight,
+                        color: context.colorTextLight,
                       ),
                       children: [
                         TextSpan(
                           text: record.recordFor,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppColors.primaryGreen,
                             fontWeight: FontWeight.w500,
                           ),
@@ -166,11 +166,11 @@ class RecordCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 4,
                         ),
@@ -180,25 +180,25 @@ class RecordCard extends StatelessWidget {
                         ),
                         child: Text(
                           record.recordType,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: AppColors.primaryGreen,
                           ),
                         ),
                       ),
-                      const Spacer(),
+                      Spacer(),
                       // File View Icon
                       if (record.fileUrls.isNotEmpty)
                         GestureDetector(
                           onTap: onFileTap,
                           child: Container(
-                            padding: const EdgeInsets.all(6),
+                            padding: EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.grey[100],
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.description_outlined,
                               size: 16,
                               color: AppColors.primaryGreen,

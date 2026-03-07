@@ -35,9 +35,10 @@ class UserService {
         _cachedProfile = {
           'full_name': profile.fullName,
           'profile_picture_url': profile.profilePictureUrl,
-          'phone_number': (profile.countryCode != null && profile.phoneNumber != null)
-              ? '${profile.countryCode} ${profile.phoneNumber}'
-              : profile.phoneNumber,
+          'phone_number':
+              (profile.countryCode != null && profile.phoneNumber != null)
+                  ? '${profile.countryCode} ${profile.phoneNumber}'
+                  : profile.phoneNumber,
         };
       }
     } catch (e) {

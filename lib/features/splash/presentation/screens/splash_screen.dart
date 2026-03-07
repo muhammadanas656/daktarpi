@@ -21,7 +21,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _redirect() async {
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(Duration(seconds: 2));
 
     if (!mounted) return;
 
@@ -44,7 +44,7 @@ class _SplashScreenState extends State<SplashScreen> {
             end: Alignment.bottomRight,
             stops: [0.0, 0.5, 1.0],
             colors: [
-              AppColors.scaffoldBackground,
+              context.colorScaffoldBackground,
               Colors.white,
               AppColors.primaryGreen.withValues(alpha: 0.1),
             ],
@@ -60,7 +60,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 width: 120,
                 height: 120,
                 errorBuilder: (context, error, stackTrace) {
-                  return const Icon(
+                  return Icon(
                     Icons.medical_services_rounded,
                     size: 100,
                     color: AppColors.primaryGreen,
@@ -68,15 +68,14 @@ class _SplashScreenState extends State<SplashScreen> {
                 },
               ),
 
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
 
               // --- BRAND NAME WITH NUNITO FONT ---
               Text(
                 'DaktarPai',
-                style: AppTextStyles.h1.copyWith(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: AppTextStyles.h1(
+                  context,
+                ).copyWith(fontSize: 34, fontWeight: FontWeight.w800),
               ),
             ],
           ),

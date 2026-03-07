@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../profile/presentation/profile_notifier.dart';
@@ -31,19 +32,8 @@ class DoctorDetailsHeader extends StatelessWidget {
         (visitPrice ?? doctor['hourly_rate']?.toString() ?? '0').toString();
 
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // Premium Radius
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1C222E).withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.all(12),
+      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -60,36 +50,36 @@ class DoctorDetailsHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   doctorName,
-                  style: AppTextStyles.h3.copyWith(fontSize: 18),
+                  style: AppTextStyles.h3(context).copyWith(fontSize: 18),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   " $specialty",
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.star_rounded,
                       size: 14,
                       color: Color(0xFF6AB9AE),
                     ),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     Text(
                       "${ProfileNotifier.instance.currencySymbol} $displayPrice/visit",
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.primaryGreen,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -97,7 +87,7 @@ class DoctorDetailsHeader extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 Row(
                   children: [
                     SizedBox(
@@ -113,7 +103,7 @@ class DoctorDetailsHeader extends StatelessWidget {
                             borderRadius: BorderRadius.circular(6),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           "Book Now",
                           style: TextStyle(
                             color: Colors.white,
@@ -123,7 +113,7 @@ class DoctorDetailsHeader extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const Spacer(),
+                    Spacer(),
                     GestureDetector(
                       onTap: onFavoriteTap,
                       child: Icon(

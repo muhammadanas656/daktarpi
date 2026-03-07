@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../data/medical_record.dart';
@@ -20,7 +21,6 @@ class AddRecordScreen extends StatefulWidget {
 }
 
 class _AddRecordScreenState extends State<AddRecordScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _repository = MedicalRecordRepository();
   final _nameController = TextEditingController();
 
@@ -134,7 +134,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   void _showImageOptions() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder:
@@ -142,16 +142,16 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
             child: Wrap(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.camera_alt),
-                  title: const Text('Take a photo'),
+                  leading: Icon(Icons.camera_alt),
+                  title: Text('Take a photo'),
                   onTap: () {
                     Navigator.pop(context);
                     _takePhoto();
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.photo_library),
-                  title: const Text('Choose from gallery'),
+                  leading: Icon(Icons.photo_library),
+                  title: Text('Choose from gallery'),
                   onTap: () {
                     Navigator.pop(context);
                     _pickImages();
@@ -172,9 +172,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
       builder: (context, child) {
         return Theme(
           data: AppTheme.lightTheme.copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppColors.primaryGreen,
-            ),
+            colorScheme: ColorScheme.light(primary: AppColors.primaryGreen),
           ),
           child: child!,
         );
@@ -188,7 +186,10 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   }
 
   Future<void> _uploadRecord() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_nameController.text.trim().isEmpty) {
+      CustomSnackbar.showError(context, "Please enter who this record is for.");
+      return;
+    }
 
     // Check if at least one file/image exists (new or existing)
     final hasImages =
@@ -264,7 +265,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
               children: [
                 InteractiveViewer(child: Image(image: imageProvider)),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
+                  icon: Icon(Icons.close, color: Colors.white),
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
@@ -276,24 +277,24 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           widget.recordToEdit != null ? "Edit Record" : "Add Records",
-          style: const TextStyle(
-            color: AppColors.textDark,
+          style: TextStyle(
+            color: context.colorTextDark,
             fontWeight: FontWeight.bold,
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: Container(
-          margin: const EdgeInsets.only(left: 16),
+          margin: EdgeInsets.only(left: 16),
           child: IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios,
-              color: AppColors.textDark,
+              color: context.colorTextDark,
               size: 20,
             ),
             onPressed: () => context.pop(),
@@ -301,292 +302,258 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- 1. Top Image Selection ---
-              SizedBox(
-                height: 120,
-                child: Row(
-                  children: [
-                    if (_selectedImages.isNotEmpty ||
-                        _existingImageUrls.isNotEmpty)
-                      Expanded(
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: [
-                            // Existing Images
-                            ..._existingImageUrls.asMap().entries.map((entry) {
-                              final index = entry.key;
-                              final path = entry.value;
-                              return _buildThumbnail(
-                                path: path,
-                                onTap:
-                                    (url) => _showFullImage(NetworkImage(url)),
-                                onDelete:
-                                    () => setState(
-                                      () => _existingImageUrls.removeAt(index),
-                                    ),
-                                isNetwork: true,
-                              );
-                            }),
-                            // New Images
-                            ..._selectedImages.asMap().entries.map((entry) {
-                              final index = entry.key;
-                              final file = entry.value;
-                              return _buildThumbnail(
-                                file: file,
-                                onTap: (_) => _showFullImage(FileImage(file)),
-                                onDelete:
-                                    () => setState(
-                                      () => _selectedImages.removeAt(index),
-                                    ),
-                                isNetwork: false,
-                              );
-                            }),
-                          ],
-                        ),
+        padding: EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // --- 1. Top Image Selection ---
+            SizedBox(
+              height: 120,
+              child: Row(
+                children: [
+                  if (_selectedImages.isNotEmpty ||
+                      _existingImageUrls.isNotEmpty)
+                    Expanded(
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          // Existing Images
+                          ..._existingImageUrls.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final path = entry.value;
+                            return _buildThumbnail(
+                              path: path,
+                              onTap: (url) => _showFullImage(NetworkImage(url)),
+                              onDelete:
+                                  () => setState(
+                                    () => _existingImageUrls.removeAt(index),
+                                  ),
+                              isNetwork: true,
+                            );
+                          }),
+                          // New Images
+                          ..._selectedImages.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final file = entry.value;
+                            return _buildThumbnail(
+                              file: file,
+                              onTap: (_) => _showFullImage(FileImage(file)),
+                              onDelete:
+                                  () => setState(
+                                    () => _selectedImages.removeAt(index),
+                                  ),
+                              isNetwork: false,
+                            );
+                          }),
+                        ],
                       ),
+                    ),
 
-                    if (_selectedImages.isNotEmpty ||
-                        _existingImageUrls.isNotEmpty)
-                      const SizedBox(width: 12),
+                  if (_selectedImages.isNotEmpty ||
+                      _existingImageUrls.isNotEmpty)
+                    SizedBox(width: 12),
 
-                    GestureDetector(
-                      onTap: _showImageOptions,
-                      child: Container(
-                        width: 100,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE0F2F1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(
-                              Icons.add_a_photo,
+                  GestureDetector(
+                    onTap: _showImageOptions,
+                    child: Container(
+                      width: 100,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: Color(0xFFE0F2F1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(
+                            Icons.add_a_photo,
+                            color: AppColors.primaryGreen,
+                            size: 32,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            "Add user\nimage",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
                               color: AppColors.primaryGreen,
-                              size: 32,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
                             ),
-                            SizedBox(height: 8),
-                            Text(
-                              "Add user\nimage",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: AppColors.primaryGreen,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 32),
+
+            // 2. Record For
+            AppTextField(
+              controller: _nameController,
+              label: "Record for",
+              hintText: "Enter Name",
+              textCapitalization: TextCapitalization.words,
+              suffixIcon: Icon(
+                Icons.edit,
+                color: context.colorTextLight,
+                size: 18,
+              ),
+            ),
+            SizedBox(height: 24),
+
+            // 3. Type of Record
+            _buildLabel("Type of record"),
+            SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children:
+                  _recordTypes.map((item) {
+                    final type = item['type'] as String;
+                    final icon = item['icon'] as IconData;
+                    final isSelected = _selectedType == type;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() => _selectedType = type);
+                        // Optional: Trigger specific picker based on type if needed,
+                        // checks context. For now, we rely on the manual buttons.
+                      },
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color:
+                                  isSelected
+                                      ? AppColors.primaryGreen
+                                      : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ],
-                        ),
+                            child: Icon(
+                              icon,
+                              color:
+                                  isSelected
+                                      ? Colors.white
+                                      : context.colorTextLight,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            type,
+                            style: TextStyle(
+                              color:
+                                  isSelected
+                                      ? AppColors.primaryGreen
+                                      : context.colorTextLight,
+                              fontWeight:
+                                  isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+            ),
+            SizedBox(height: 24),
+
+            // --- 4. Document Selection (Beneath Type) ---
+            _buildLabel("Attachments"),
+            SizedBox(height: 12),
+
+            if (_selectedDocs.isNotEmpty || _existingDocUrls.isNotEmpty)
+              Container(
+                height: 60,
+                margin: EdgeInsets.only(bottom: 12),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    ..._existingDocUrls.asMap().entries.map(
+                      (entry) => _buildDocItem(
+                        name: _getCleanFileName(entry.value),
+                        onDelete:
+                            () => setState(
+                              () => _existingDocUrls.removeAt(entry.key),
+                            ),
+                      ),
+                    ),
+                    ..._selectedDocs.asMap().entries.map(
+                      (entry) => _buildDocItem(
+                        name: entry.value.path.split('/').last,
+                        onDelete:
+                            () => setState(
+                              () => _selectedDocs.removeAt(entry.key),
+                            ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
 
-              // 2. Record For
-              _buildLabel("Record for"),
-              TextFormField(
-                controller: _nameController,
-                style: const TextStyle(
-                  color: AppColors.primaryGreen,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+            GestureDetector(
+              onTap: _pickFiles,
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.primaryGreen),
+                  borderRadius: BorderRadius.circular(12),
+                  color: context.colorLightGreenBg.withValues(alpha: 0.3),
                 ),
-                decoration: const InputDecoration(
-                  hintText: "Enter Name",
-                  hintStyle: TextStyle(
-                    color: AppColors.textLight,
-                    fontWeight: FontWeight.normal,
-                  ),
-                  suffixIcon: Icon(
-                    Icons.edit,
-                    color: AppColors.textLight,
-                    size: 18,
-                  ),
-                  border: UnderlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.borderColor),
-                  ),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.borderColor),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.primaryGreen),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 0,
-                    vertical: 8,
-                  ),
-                ),
-                validator:
-                    (value) =>
-                        value == null || value.isEmpty ? "Required" : null,
-              ),
-              const SizedBox(height: 24),
-
-              // 3. Type of Record
-              _buildLabel("Type of record"),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children:
-                    _recordTypes.map((item) {
-                      final type = item['type'] as String;
-                      final icon = item['icon'] as IconData;
-                      final isSelected = _selectedType == type;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() => _selectedType = type);
-                          // Optional: Trigger specific picker based on type if needed,
-                          // checks context. For now, we rely on the manual buttons.
-                        },
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color:
-                                    isSelected
-                                        ? AppColors.primaryGreen
-                                        : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                icon,
-                                color:
-                                    isSelected
-                                        ? Colors.white
-                                        : AppColors.textLight,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              type,
-                              style: TextStyle(
-                                color:
-                                    isSelected
-                                        ? AppColors.primaryGreen
-                                        : AppColors.textLight,
-                                fontWeight:
-                                    isSelected
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-              ),
-              const SizedBox(height: 24),
-
-              // --- 4. Document Selection (Beneath Type) ---
-              _buildLabel("Attachments"),
-              const SizedBox(height: 12),
-
-              if (_selectedDocs.isNotEmpty || _existingDocUrls.isNotEmpty)
-                Container(
-                  height: 60,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      ..._existingDocUrls.asMap().entries.map(
-                        (entry) => _buildDocItem(
-                          name: _getCleanFileName(entry.value),
-                          onDelete:
-                              () => setState(
-                                () => _existingDocUrls.removeAt(entry.key),
-                              ),
-                        ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.upload_file, color: AppColors.primaryGreen),
+                    SizedBox(width: 8),
+                    Text(
+                      "Upload Documents (PDF, DOC)",
+                      style: TextStyle(
+                        color: AppColors.primaryGreen,
+                        fontWeight: FontWeight.w600,
                       ),
-                      ..._selectedDocs.asMap().entries.map(
-                        (entry) => _buildDocItem(
-                          name: entry.value.path.split('/').last,
-                          onDelete:
-                              () => setState(
-                                () => _selectedDocs.removeAt(entry.key),
-                              ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              GestureDetector(
-                onTap: _pickFiles,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.primaryGreen),
-                    borderRadius: BorderRadius.circular(12),
-                    color: AppColors.lightGreenBg.withValues(alpha: 0.3),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.upload_file, color: AppColors.primaryGreen),
-                      SizedBox(width: 8),
-                      Text(
-                        "Upload Documents (PDF, DOC)",
-                        style: TextStyle(
-                          color: AppColors.primaryGreen,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // 5. Date Picker
-              _buildLabel("Record created on"),
-              GestureDetector(
-                onTap: () => _selectDate(context),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: AppColors.borderColor),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        DateFormat('dd MMM, yyyy').format(_selectedDate),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryGreen,
-                        ),
-                      ),
-                      const Icon(
-                        Icons.edit,
-                        color: AppColors.textLight,
-                        size: 18,
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            SizedBox(height: 24),
+
+            // 5. Date Picker
+            _buildLabel("Record created on"),
+            GestureDetector(
+              onTap: () => _selectDate(context),
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: context.colorBorder),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd MMM, yyyy').format(_selectedDate),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryGreen,
+                      ),
+                    ),
+                    Icon(Icons.edit, color: context.colorTextLight, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(24.0),
         child: PrimaryButton(
           label:
               _isLoading
@@ -603,30 +570,33 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
 
   // Helper for Documents
   Widget _buildDocItem({required String name, required VoidCallback onDelete}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 160,
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(8),
+      margin: EdgeInsets.only(right: 12),
+      padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: isDark ? AppColors.darkSurface : Colors.grey[100],
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : Colors.grey[300]!,
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.description, color: AppColors.textGrey, size: 20),
-          const SizedBox(width: 8),
+          Icon(Icons.description, color: context.colorTextGrey, size: 20),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12),
+              style: TextStyle(fontSize: 12),
             ),
           ),
           GestureDetector(
             onTap: onDelete,
-            child: const Icon(Icons.close, size: 16, color: Colors.red),
+            child: Icon(Icons.close, size: 16, color: Colors.red),
           ),
         ],
       ),
@@ -642,7 +612,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
     required bool isNetwork,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(right: 12),
+      padding: EdgeInsets.only(right: 12),
       child: Stack(
         children: [
           ClipRRect(
@@ -663,7 +633,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                         future: _repository.getSignedUrl(path!),
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
-                            return const SizedBox(
+                            return SizedBox(
                               width: 100,
                               height: 120,
                               child: Center(child: CircularProgressIndicator()),
@@ -693,7 +663,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
             right: 5,
             child: GestureDetector(
               onTap: onDelete,
-              child: const CircleAvatar(
+              child: CircleAvatar(
                 radius: 10,
                 backgroundColor: Colors.red,
                 child: Icon(Icons.close, size: 12, color: Colors.white),
@@ -708,10 +678,10 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   Widget _buildLabel(String label) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w500,
-        color: AppColors.textDark,
+        color: context.colorTextDark,
       ),
     );
   }

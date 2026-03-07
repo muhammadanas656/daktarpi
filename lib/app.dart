@@ -34,39 +34,42 @@ class MyApp extends StatelessWidget {
     return AnimatedBuilder(
       animation: SettingsNotifier.instance,
       builder: (context, child) {
-        return MaterialApp.router(
-          title: 'DaktarPai',
-          debugShowCheckedModeBanner: false,
+        return GestureDetector(
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: MaterialApp.router(
+            title: 'DaktarPai',
+            debugShowCheckedModeBanner: false,
 
-          // Theme Settings
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: SettingsNotifier.instance.themeMode,
+            // Theme Settings
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: SettingsNotifier.instance.themeMode,
 
-          // Locale Settings
-          locale: const Locale('en', 'US'),
-          supportedLocales: const [Locale('en', 'US'), Locale('bn', 'BD')],
+            // Locale Settings
+            locale: const Locale('en', 'US'),
+            supportedLocales: const [Locale('en', 'US'), Locale('bn', 'BD')],
 
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
 
-          routerConfig: appRouter,
-          builder: (context, child) {
-            if (child == null) {
-              return const SizedBox.shrink();
-            }
-            return OfflineModeGuard(
-              child: InactivityLockGuard(
-                timeout: _resolveInactivityTimeout(),
-                absoluteTimeout: _resolveAbsoluteSessionTimeout(),
-                child: child,
-              ),
-            );
-          },
+            routerConfig: appRouter,
+            builder: (context, child) {
+              if (child == null) {
+                return const SizedBox.shrink();
+              }
+              return OfflineModeGuard(
+                child: InactivityLockGuard(
+                  timeout: _resolveInactivityTimeout(),
+                  absoluteTimeout: _resolveAbsoluteSessionTimeout(),
+                  child: child,
+                ),
+              );
+            },
+          ),
         );
       },
     );

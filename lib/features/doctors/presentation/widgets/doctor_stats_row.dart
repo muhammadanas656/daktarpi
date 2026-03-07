@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
 class DoctorStatsRow extends StatelessWidget {
@@ -17,43 +18,36 @@ class DoctorStatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // Premium Radius
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1C222E).withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      // PRO FIX: Dynamic surface card
+      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
       child: Row(
         children: [
           Expanded(
             child: _buildStatItem(
+              context,
               icon: Icons.star_rounded,
-              iconColor: const Color(0xFFFFB648),
+              iconColor: Color(0xFFFFB648),
               value: rating,
               label: 'Rating & Review',
             ),
           ),
-          _buildDivider(),
+          _buildDivider(context),
           Expanded(
             child: _buildStatItem(
+              context,
               icon: Icons.work_outline_rounded,
-              iconColor: const Color(0xFF89B2B3),
+              iconColor: Color(0xFF89B2B3),
               value: experience,
               label: 'Years of work',
             ),
           ),
-          _buildDivider(),
+          _buildDivider(context),
           Expanded(
             child: _buildStatItem(
+              context,
               icon: Icons.people_alt_outlined,
-              iconColor: const Color(0xFF80B59A),
+              iconColor: Color(0xFF80B59A),
               value: patients,
               label: 'No. of patients',
             ),
@@ -63,15 +57,18 @@ class DoctorStatsRow extends StatelessWidget {
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 1,
       height: 36,
-      color: const Color(0xFFF0F4F8), // Softer divider
+      // PRO FIX: Dynamic divider color
+      color: isDark ? AppColors.darkBorder : const Color(0xFFF0F4F8), 
     );
   }
 
-  Widget _buildStatItem({
+  Widget _buildStatItem(
+    BuildContext context, {
     required IconData icon,
     required Color iconColor,
     required String value,
@@ -83,11 +80,14 @@ class DoctorStatsRow extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: iconColor, size: 13),
-            const SizedBox(width: 4),
-            Text(value, style: AppTextStyles.h3.copyWith(fontSize: 15)),
+            SizedBox(width: 4),
+            Text(
+              value,
+              style: AppTextStyles.h3(context).copyWith(fontSize: 15),
+            ),
           ],
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           label,
           maxLines: 1,

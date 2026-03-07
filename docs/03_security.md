@@ -1,15 +1,15 @@
-﻿# DaktarPai - Security Architecture
+# DaktarPai - Security Architecture
 
 ## 1. Security Model
 
-DaktarPai uses layered security from startup checks through runtime session controls.
+DaktarPai applies layered controls from startup through runtime interaction.
 
 ```mermaid
 graph TD
-    A[Device Integrity] --> B[Auth Session]
-    B --> C[MFA / AAL2]
-    C --> D[Trusted Device]
-    D --> E[Biometric Step-up]
+    A[Device Integrity Check] --> B[Auth Session]
+    B --> C[MFA and AAL2 Gate]
+    C --> D[Trusted Device Decision]
+    D --> E[Biometric Step-Up]
     E --> F[Inactivity Lock]
     F --> G[Offline Guard]
 ```
@@ -17,79 +17,76 @@ graph TD
 ## 2. Startup Security
 
 `DeviceIntegrityService.enforceOnStartup()` runs before app render.
-If a compromised device is detected:
-1. secure local data is cleared
-2. user is signed out
-3. blocking compromised-device UI is shown
 
-## 3. Authentication and Route Security
+If compromised state is detected, startup flow enforces:
+1. clear sensitive local data,
+2. sign out,
+3. render a blocked compromised-device UI.
 
-- `AuthRepository` encapsulates auth operations.
-- Router refresh listens to Supabase auth state changes.
-- Redirect logic blocks protected routes for unauthenticated sessions.
+## 3. Auth and Route Protection
 
-Post-auth routing via `AuthEntryRouteService`:
+- `AuthRepository` wraps auth operations.
+- Router refresh listens to Supabase auth state.
+- Protected routes redirect unauthenticated users to login with intended-route query.
+
+Post-auth entry routing (`AuthEntryRouteService`):
 - no session -> `/login`
-- step-up required -> `/verify-2fa`
+- step-up route required -> `/verify-2fa`
 - valid session -> `/home`
 
-## 4. MFA and Step-Up Controls
+## 4. MFA, AAL2, and Step-Up
 
-MFA stack includes:
-- TOTP enrollment/verification
-- recovery code fallback
-- AAL2 gate checks via `SecurityGateService`
+Implemented controls include:
+- TOTP enrollment/verification.
+- Recovery code fallback.
+- AAL2 checks via `SecurityGateService`.
+- Sensitive operation gating in settings/account flows.
 
-Sensitive actions use step-up enforcement in settings and records flows.
+Security dialogs in these flows use standardized `AppTextField` for backup code/password input.
 
-## 5. Trusted Devices and Biometrics
+## 5. Trusted Device and Biometric Controls
 
-`TrustedDeviceRepository`, `BiometricAuthService`, and `SensitiveActionStepUpService` provide:
-- trusted-device token lifecycle
-- biometric capability and prompt orchestration
-- step-up bypass path when trusted-device criteria are met
+Main components:
+- `TrustedDeviceRepository`
+- `BiometricAuthService`
+- `SensitiveActionStepUpService`
+
+Responsibilities:
+- trusted-device lifecycle,
+- biometric capability checks,
+- biometric prompt orchestration,
+- fall back to MFA challenge when needed.
 
 ## 6. Session Controls
 
 `InactivityLockGuard` enforces:
-- configurable inactivity timeout
-- lock/unlock flow
-- absolute session timeout sign-out
+- inactivity timeout lock,
+- unlock flow,
+- absolute timeout sign-out.
 
-`MainWrapper` also performs silent data refresh on app resume for key user state (appointments/profile), reducing stale-session UI risk after long background periods.
+`MainWrapper` triggers resume-time data refresh for critical state (`appointments`, `profile`).
 
-## 7. Error Containment and Safe Failure Mapping
+## 7. Data Access Integrity
 
-Global crash/error capture in `main.dart`:
+- Appointment realtime ownership is centralized in `AppointmentNotifier`.
+- Auth-state changes trigger realtime subscription refresh/cleanup.
+- Repository operations map backend/network failures through `AppFailure` where implemented.
+- Complaint flow relies on user-bound records and server-side access controls.
+
+## 8. Error Containment and Telemetry
+
+Global capture paths in `main.dart`:
 - `FlutterError.onError`
 - `PlatformDispatcher.instance.onError`
 - `runZonedGuarded`
 
-`AppErrorFallback` provides a controlled fallback UI.
+`ErrorTelemetryService` logs these paths, and `AppErrorFallback` provides controlled recovery UI.
 
-Repository error normalization:
-- `AppFailure.fromError(...)` is used broadly to map backend/network failures to user-safe messages.
-- Appointment cancellation path now returns typed `AppFailure` fallbacks, not raw SQL/debug strings.
-
-## 8. Data Access and Realtime Integrity
-
-- Appointment realtime is managed in `AppointmentNotifier` (single global ownership).
-- Auth-state changes trigger subscription refresh/cleanup to avoid orphaned channels.
-- `fetchActivityLog()` cross-checks `reviews` to inject `has_review`, preventing duplicate review prompts.
-- **Complaints Integrity**: The `complaints` table is secured via explicit RLS policies. Authenticated users can only INSERT and SELECT complaints where `auth.uid() = user_id`, ensuring absolute privacy for patient disputes.
-
-## 9. Platform Declarations and Privacy
+## 9. Platform Privacy/Permission Notes
 
 Android:
-- Calendar intent queries declared in manifest.
-- `android:enableOnBackInvokedCallback="true"` enabled for modern back behavior.
+- calendar intent visibility declarations in manifest.
+- predictive back compatibility flag enabled.
 
 iOS:
-- `NSCalendarsUsageDescription` and `NSContactsUsageDescription` present in `Info.plist`.
-
-## 10. Review and Submission Integrity
-
-Review integrity controls in source:
-- duplicate-review prevention handled via DB uniqueness + error mapping in `submitReview()`
-- pending review list only includes completed appointments with no review record
-- account activity and appointments UI both respect that review state
+- calendar/contact usage descriptions in `Info.plist`.

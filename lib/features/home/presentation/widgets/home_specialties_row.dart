@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
 class HomeSpecialtiesRow extends StatelessWidget {
@@ -22,13 +23,13 @@ class HomeSpecialtiesRow extends StatelessWidget {
     if (name.toLowerCase().contains('eye')) {
       iconData = Icons.remove_red_eye_rounded;
     }
-    return Icon(iconData, color: const Color(0xFF008FA0), size: 28);
+    return Icon(iconData, color: Color(0xFF008FA0), size: 28);
   }
 
   @override
   Widget build(BuildContext context) {
     if (specialties.isEmpty) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(horizontal: 24),
         child: Text("No specialties found"),
       );
@@ -37,10 +38,10 @@ class HomeSpecialtiesRow extends StatelessWidget {
     return SizedBox(
       height: 100,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: EdgeInsets.symmetric(horizontal: 24),
         scrollDirection: Axis.horizontal,
         itemCount: specialties.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 24),
+        separatorBuilder: (_, __) => SizedBox(width: 24),
         itemBuilder: (context, index) {
           final item = specialties[index];
           final name = item['name'] ?? '';
@@ -53,9 +54,14 @@ class HomeSpecialtiesRow extends StatelessWidget {
                   height: 60,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    // PRO FIX: Dynamic surface color
+                    color: Theme.of(context).colorScheme.surface, 
                     shape: BoxShape.circle,
-                    boxShadow: [
+                    // PRO FIX: Add subtle border in Dark Mode, disable shadow
+                    border: Theme.of(context).brightness == Brightness.dark 
+                        ? Border.all(color: AppColors.darkBorder) 
+                        : null,
+                    boxShadow: Theme.of(context).brightness == Brightness.dark ? [] : [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 10,
@@ -63,16 +69,17 @@ class HomeSpecialtiesRow extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child:
-                      item['icon_url'] != null
-                          ? Image.network(item['icon_url'])
-                          : _getFallbackIcon(name),
+                  child: item['icon_url'] != null
+                      ? Image.network(item['icon_url'])
+                      : _getFallbackIcon(name),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   name,
-                  style: AppTextStyles.bodySmall.copyWith(
+                  style: AppTextStyles.bodySmall(context).copyWith(
                     fontWeight: FontWeight.w500,
+                    // PRO FIX: Ensure text stays visible on dark backgrounds
+                    color: context.colorTextDark, 
                   ),
                 ),
               ],

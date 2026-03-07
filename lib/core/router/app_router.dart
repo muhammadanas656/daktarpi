@@ -30,6 +30,7 @@ import '../../features/appointments/presentation/models/booking_route_args.dart'
 import '../../features/menu/presentation/screens/linked_accounts_screen.dart';
 
 // --- DOCTOR SCREENS ---
+import '../../features/doctors/presentation/screens/global_search_screen.dart';
 import '../../features/doctors/presentation/screens/popular_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/featured_doctors_screen.dart';
 import '../../features/doctors/presentation/screens/doctor_details_screen.dart';
@@ -140,6 +141,12 @@ final appRouter = GoRouter(
       path: AppRoutes.locationPermission,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const EnableLocationScreen(),
+    ),
+
+    GoRoute(
+      path: AppRoutes.globalSearch,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const GlobalSearchScreen(),
     ),
 
     GoRoute(

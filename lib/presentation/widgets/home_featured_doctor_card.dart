@@ -32,10 +32,10 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
       width: 130,
       decoration: BoxDecoration(
         borderRadius: AppStyles.cardRadius,
-        boxShadow: AppStyles.cardShadow,
+        boxShadow: AppStyles.cardShadow(context),
       ),
       child: Material(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: AppShapes.xl,
         child: InkWell(
           onTap: () => context.push(AppRoutes.doctorDetailsById('$id')),
@@ -72,7 +72,7 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                   height: AppDimens.avatarSm,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.grey[200],
+                    color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkBorder : Colors.grey[200],
                   ),
                   child: Hero(
                     tag: 'doctor-hero-$id',

@@ -37,13 +37,12 @@ class PatientDetailsScreen extends StatefulWidget {
 
 class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     with WidgetsBindingObserver {
-  // --- COLORS (aliased from AppColors) ---
-  static const Color primaryGreen = AppColors.primaryGreen;
-  static const Color textDark = AppColors.textDark;
-  static const Color textLight = AppColors.textLight;
-  static const Color textGrey = AppColors.textGrey;
-  static const Color borderColor = AppColors.borderColor;
-  static const Color lightGreenBg = AppColors.lightGreenBg;
+  Color get primaryGreen => AppColors.primaryGreen;
+  Color get textDark => context.colorTextDark;
+  Color get textLight => context.colorTextLight;
+  Color get textGrey => context.colorTextGrey;
+  Color get borderColor => context.colorBorder;
+  Color get lightGreenBg => context.colorLightGreenBg;
 
   final _profileRepo = ProfileRepository();
   final _draftRepo = BookingDraftRepository();
@@ -51,20 +50,17 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   bool _restoringDraft = false;
 
   // --- TYPOGRAPHY ---
-  final TextStyle _labelStyle = const TextStyle(
-    fontSize: 15,
-    fontWeight: FontWeight.w600,
-    color: textDark,
-  );
+  TextStyle get _labelStyle =>
+      TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textDark);
 
-  final TextStyle _inputStyle = const TextStyle(
+  TextStyle get _inputStyle => TextStyle(
     fontSize: 15,
     fontWeight: FontWeight.w500,
     color: textDark,
     height: 1.1,
   );
 
-  final TextStyle _hintStyle = const TextStyle(
+  TextStyle get _hintStyle => TextStyle(
     fontSize: 15,
     fontWeight: FontWeight.w400,
     color: textGrey,
@@ -136,7 +132,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
   void _scheduleDraftSave() {
     _draftDebounce?.cancel();
-    _draftDebounce = Timer(const Duration(milliseconds: 350), _persistDraftNow);
+    _draftDebounce = Timer(Duration(milliseconds: 350), _persistDraftNow);
   }
 
   Future<void> _persistDraftNow() async {
@@ -279,109 +275,93 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     final String? category = await showDialog<String>(
       context: context,
       barrierDismissible: true,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            backgroundColor: Colors.white,
-            elevation: 0,
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Add Profile Category",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: textDark,
-                      ),
+      builder: (dialogCtx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          // PRO FIX: Dialog background
+          backgroundColor: Theme.of(dialogCtx).colorScheme.surface,
+          elevation: 0,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Add Profile Category",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: textDark,
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "Who is this patient? (e.g. Brother, Wife)",
-                      style: TextStyle(fontSize: 14, color: textLight),
-                    ),
-                    const SizedBox(height: 24),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "Who is this patient? (e.g. Brother, Wife)",
+                    style: TextStyle(fontSize: 14, color: textLight),
+                  ),
+                  SizedBox(height: 24),
 
-                    Container(
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF5F6F8),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Center(
-                        child: TextField(
-                          controller: categoryController,
-                          autofocus: true,
-                          style: _inputStyle,
-                          decoration: const InputDecoration(
-                            hintText: "Category Name",
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                  AppTextField(
+                    controller: categoryController,
+                    autofocus: true,
+                    hintText: "Category Name",
+                  ),
+                  SizedBox(height: 24),
 
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(
-                              color: textLight,
-                              fontWeight: FontWeight.w600,
-                            ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          "Cancel",
+                          style: TextStyle(
+                            color: textLight,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () {
-                            if (categoryController.text.trim().isNotEmpty) {
-                              Navigator.pop(
-                                context,
-                                categoryController.text.trim(),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryGreen,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            elevation: 0,
+                      ),
+                      SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (categoryController.text.trim().isNotEmpty) {
+                            Navigator.pop(
+                              context,
+                              categoryController.text.trim(),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryGreen,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Text(
-                            "Add",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          "Add",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
+        );
+      },
     );
 
     if (category != null && category.isNotEmpty) {
@@ -406,19 +386,16 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       context: context,
       builder:
           (ctx) => AlertDialog(
-            title: const Text("Delete Category?"),
+            title: Text("Delete Category?"),
             content: Text("Are you sure you want to remove '$category'?"),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text("Cancel"),
+                child: Text("Cancel"),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(
-                  "Delete",
-                  style: TextStyle(color: Colors.red),
-                ),
+                child: Text("Delete", style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -545,7 +522,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: SafeArea(
           child: Column(
             children: [
@@ -553,7 +530,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 10, 24, 160),
+                  padding: EdgeInsets.fromLTRB(24, 10, 24, 160),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -561,7 +538,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                       Row(
                         children: [
                           Text("Step 1/2", style: _labelStyle),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(4),
@@ -570,7 +547,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                 backgroundColor: primaryGreen.withValues(
                                   alpha: 0.1,
                                 ),
-                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                valueColor: AlwaysStoppedAnimation<Color>(
                                   primaryGreen,
                                 ),
                                 minHeight: 6,
@@ -579,10 +556,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 32),
+                      SizedBox(height: 32),
 
                       // 2. Patient Selector
-                      const Text(
+                      Text(
                         "Who is this patient?",
                         style: TextStyle(
                           fontSize: 18,
@@ -590,7 +567,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                           color: textDark,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         clipBehavior: Clip.none,
@@ -621,7 +598,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                 _scheduleDraftSave();
                               },
                             ),
-                            const SizedBox(width: 16),
+                            SizedBox(width: 16),
 
                             // --- SAVED CATEGORIES (From new DB table) ---
                             ..._savedPatients.map((patientMap) {
@@ -634,7 +611,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                   File(savedImagePath).existsSync();
 
                               return Padding(
-                                padding: const EdgeInsets.only(right: 16),
+                                padding: EdgeInsets.only(right: 16),
                                 child: Draggable<String>(
                                   data: category,
                                   feedback: Material(
@@ -745,7 +722,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                           _newPatientImage!,
                                           fit: BoxFit.cover,
                                         )
-                                        : const Icon(
+                                        : Icon(
                                           Icons.person_add,
                                           color: primaryGreen,
                                           size: 30,
@@ -771,29 +748,35 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     _selectedCategoryName ==
                                     _newPendingCategory,
                               ),
-                              const SizedBox(width: 16),
+                              SizedBox(width: 16),
                             ],
 
+                            // --- ADD BUTTON ---
                             // --- ADD BUTTON ---
                             _buildOptionItem(
                               isSelected: false,
                               label: "Add",
-                              content: const Icon(
+                              content: Icon(
                                 Icons.add,
                                 color: textDark,
                                 size: 30,
                               ),
-                              bgColor: const Color(0xFFF5F6F8),
+                              // PRO FIX: Dynamic background for the Add category button
+                              bgColor:
+                                  Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? AppColors.darkSurface
+                                      : const Color(0xFFF5F6F8),
                               onTap: _showAddCategoryDialog,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
 
                       // --- DRAG TO DELETE BUCKET ---
                       AnimatedSize(
-                        duration: const Duration(milliseconds: 300),
+                        duration: Duration(milliseconds: 300),
                         child:
                             _savedPatients.isNotEmpty
                                 ? DragTarget<String>(
@@ -810,12 +793,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     final isHovering = candidateData.isNotEmpty;
 
                                     return AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
+                                      duration: Duration(milliseconds: 200),
                                       width: double.infinity,
-                                      margin: const EdgeInsets.only(bottom: 16),
-                                      padding: const EdgeInsets.symmetric(
+                                      margin: EdgeInsets.only(bottom: 16),
+                                      padding: EdgeInsets.symmetric(
                                         vertical: 16,
                                       ),
                                       decoration: BoxDecoration(
@@ -850,7 +831,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                                     : Colors.grey,
                                             size: 28,
                                           ),
-                                          const SizedBox(height: 8),
+                                          SizedBox(height: 8),
                                           Text(
                                             isHovering
                                                 ? "Drop to Delete '${candidateData.first}'!"
@@ -872,13 +853,14 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     );
                                   },
                                 )
-                                : const SizedBox.shrink(),
+                                : SizedBox.shrink(),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       // 3. Form Fields
                       Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: EdgeInsets.all(20),
                         decoration: AppStyles.surfaceCard(
+                          context,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Column(
@@ -889,10 +871,10 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                               hintText: "Name",
                               label: "Patient's Name",
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(height: 16),
 
                             Text("Age", style: _labelStyle),
-                            const SizedBox(height: 10),
+                            SizedBox(height: 10),
                             Row(
                               children: [
                                 // DAY
@@ -911,7 +893,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     },
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                SizedBox(width: 12),
                                 // MONTH
                                 Expanded(
                                   flex: 4,
@@ -938,7 +920,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     },
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                SizedBox(width: 12),
                                 // YEAR
                                 Expanded(
                                   flex: 3,
@@ -958,19 +940,19 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                               ],
                             ),
 
-                            const SizedBox(height: 16),
+                            SizedBox(height: 16),
                             Text("Gender", style: _labelStyle),
-                            const SizedBox(height: 10),
+                            SizedBox(height: 10),
                             Row(
                               children: [
                                 _buildRadio("Male"),
-                                const SizedBox(width: 24),
+                                SizedBox(width: 24),
                                 _buildRadio("Female"),
-                                const SizedBox(width: 24),
+                                SizedBox(width: 24),
                                 _buildRadio("Others"),
                               ],
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(height: 16),
 
                             AppTextField(
                               controller: _phoneController,
@@ -978,7 +960,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                               isPhone: true,
                               label: "Mobile Number",
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(height: 16),
 
                             AppTextField(
                               controller: _emailController,
@@ -997,13 +979,22 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         ),
       ),
       bottomSheet: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFF0F0F0))),
+        decoration: BoxDecoration(
+          // PRO FIX: Dynamic surface and border
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(
+              color:
+                  Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.darkBorder
+                      : const Color(0xFFF0F0F0),
+            ),
+          ),
         ),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(24),
             child: SizedBox(
               width: double.infinity,
               height: 54,
@@ -1024,7 +1015,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1034,24 +1025,19 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
             child: Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white,
+              // PRO FIX: Dynamic surface and adaptive shadow
+              decoration: AppStyles.surfaceCard(
+                context,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderColor),
-                boxShadow: AppStyles.cardShadow,
               ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
-                size: 18,
-                color: textDark,
-              ),
+              child: Icon(Icons.arrow_back_ios_new, size: 18, color: textDark),
             ),
           ),
           Text(
             "Patient Details",
-            style: AppTextStyles.h3.copyWith(fontSize: 20),
+            style: AppTextStyles.h3(context).copyWith(fontSize: 20),
           ),
-          const SizedBox(width: 44),
+          SizedBox(width: 44),
         ],
       ),
     );
@@ -1086,7 +1072,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: bgColor ?? Colors.white,
+                  // PRO FIX: Dynamic background for unselected options
+                  color: bgColor ?? Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isSelected ? primaryGreen : Colors.transparent,
@@ -1096,7 +1083,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      offset: Offset(0, 4),
                     ),
                   ],
                 ),
@@ -1118,7 +1105,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                     onAvatarTap?.call();
                   },
                   child: Container(
-                    padding: const EdgeInsets.all(5),
+                    padding: EdgeInsets.all(5),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
@@ -1129,7 +1116,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.add_a_photo,
                       size: 14,
                       color: primaryGreen,
@@ -1146,22 +1133,18 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                 child: GestureDetector(
                   onTap: onDeleteTap,
                   child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
+                    padding: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
                       color: Colors.redAccent,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.close,
-                      size: 12,
-                      color: Colors.white,
-                    ),
+                    child: Icon(Icons.close, size: 12, color: Colors.white),
                   ),
                 ),
               ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Text(
           label,
           style: TextStyle(
@@ -1183,33 +1166,27 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     return DropdownButtonFormField<String>(
       value: value,
       isExpanded: true,
-      icon: const Icon(
-        Icons.keyboard_arrow_down_rounded,
-        color: textGrey,
-        size: 22,
-      ),
+      icon: Icon(Icons.keyboard_arrow_down_rounded, color: textGrey, size: 22),
       style: _inputStyle,
       menuMaxHeight: 240,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: _hintStyle,
         filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 16,
-        ),
+        // PRO FIX: Dynamic dropdown fill
+        fillColor: Theme.of(context).colorScheme.surface,
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.borderColor),
+          borderSide: BorderSide(color: context.colorBorder),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.borderColor),
+          borderSide: BorderSide(color: context.colorBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.primaryGreen),
+          borderSide: BorderSide(color: AppColors.primaryGreen),
         ),
       ),
       dropdownColor: Colors.white,
@@ -1240,7 +1217,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       child: Row(
         children: [
           AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: Duration(milliseconds: 200),
             width: 22,
             height: 22,
             decoration: BoxDecoration(
@@ -1256,7 +1233,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                       child: Container(
                         width: 12,
                         height: 12,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: primaryGreen,
                           shape: BoxShape.circle,
                         ),
@@ -1264,7 +1241,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                     )
                     : null,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text(
             value,
             style: TextStyle(

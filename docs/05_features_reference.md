@@ -1,46 +1,47 @@
-﻿# DaktarPai - Features Reference
+# DaktarPai - Features Reference
 
-This document summarizes active feature modules and current source behavior.
+This document maps active feature modules to current behavior in source.
 
 ## 1. Splash
 
+Key file:
 - `features/splash/presentation/screens/splash_screen.dart`
-- Resolves initial route after auth-state checks.
+
+Behavior:
+- resolves initial route via auth entry logic.
 
 ## 2. Auth
 
 Key files:
 - `features/auth/data/auth_repository.dart`
 - `features/auth/data/auth_entry_route_service.dart`
-- `features/auth/data/auth_route_resolver.dart`
 - `features/auth/data/security_gate_service.dart`
-- `features/auth/data/trusted_device_repository.dart`
 - `features/auth/presentation/screens/login_screen.dart`
 - `features/auth/presentation/screens/signup_screen.dart`
 - `features/auth/presentation/screens/verify_2fa_screen.dart`
 
 Behavior:
-- email/password + Google sign-in
-- MFA and recovery code verification
-- step-up-aware post-auth routing
+- email/password and Google sign-in,
+- MFA verify and backup-code recovery,
+- post-auth route resolution,
+- forgot-password modal flow.
 
 ## 3. Home
 
-Main files:
+Key files:
 - `features/home/presentation/screens/home_screen.dart`
-- `features/home/presentation/widgets/home_header.dart`
-- `features/home/presentation/widgets/home_banner.dart`
-- `features/home/presentation/widgets/home_specialties_row.dart`
-- `features/home/presentation/widgets/home_section_header.dart`
+- `features/home/data/home_repository.dart`
+- `features/home/presentation/widgets/*`
 
 Behavior:
-- pull-to-refresh supported
-- manual refresh paths call doctor repository with `forceRefresh: true` to bypass short-lived in-memory caches
+- doctor discovery sections and quick navigation,
+- refreshable home data composition.
 
 ## 4. Doctors
 
 Screens:
 - `doctors_screen.dart`
+- `global_search_screen.dart`
 - `doctor_details_screen.dart`
 - `popular_doctors_screen.dart`
 - `featured_doctors_screen.dart`
@@ -48,123 +49,99 @@ Screens:
 - `clinic_doctors_screen.dart`
 - `my_doctors_screen.dart`
 
-Widgets:
-- `doctor_details_header.dart`
-- `doctor_stats_row.dart`
-- `doctor_appointment_card.dart`
-- `doctor_timing_list.dart`
-- `clinic_location_map_section.dart`
-
-Data:
+Data layer:
 - `doctor_repository.dart`
 - `route_repository.dart`
 
-Current behavior highlights:
-- doctor view counting via delayed timer + `incrementDoctorViewCount()`
-- smart analytics RPC `increment_doctor_views_smart` requires authenticated user
-- doctor detail screen supports pull-to-refresh
-- map/navigation logic is modularized inside `ClinicLocationMapSection`
-- route fetching uses OSRM direct call with `route-proxy` edge-function fallback
-- Clinic wait times are stored as integer `min_wait_time` and `max_wait_time` in the database, but synthesized into a display string (e.g., "20-30 mins") inside repository to decouple UI from backend calculations.
+Behavior highlights:
+- categorized global search,
+- doctor detail analytics increment flow,
+- modular clinic/map/navigation section,
+- route fetch with OSRM + edge-function fallback.
 
 ## 5. Appointments
 
-### Data layer
-
-- `appointment.dart`
+Data layer:
 - `appointment_repository.dart`
-- `booking_draft_repository.dart`
 - `appointment_secure_cache_repository.dart`
+- `booking_draft_repository.dart`
 
-Current repository capabilities:
-- load active appointments
-- cancel and complete mutations
-- submit review (`submitReview`)
-- fetch pending review candidates (`fetchPendingReviews`)
-- fetch activity log with review-state flag (`fetchActivityLog` adds `has_review`)
-- submit complaint (`submitComplaint`)
-- fetch pending complaint candidates (`fetchPendingComplaints`)
-
-Cancellation and transition behavior:
-- cancellation failures are mapped to `AppFailure` with user-safe fallback messages
-- Database utilizes highly precise `pg_cron` jobs (running every 5 mins) to automatically transition expired confirmed appointments to `waiting` (based on clinic max wait time) and then to `missed` (after a 15-minute grace period).
-
-### Presentation and state
-
+Presentation/state:
 - `patient_details_screen.dart`
 - `appointment_confirmation_screen.dart`
 - `dummy_payment_screen.dart`
 - `my_appointments_screen.dart`
 - `appointment_notifier.dart`
-- `booking_route_args.dart`
 
-State behavior:
-- `AppointmentNotifier` is singleton owner of appointment realtime subscription
-- notifier listens to auth-state changes and refreshes/resubscribes accordingly
-- notifier combines pending reviews and complaints into a single `actionRequiredItems` getter for the UI carousel
-- Appointment booking dynamically schedules local time-out notifications precisely synced with the clinic's `max_wait_time` + 15m grace period. This scheduling is strictly gated by `SettingsNotifier.instance.notificationsEnabled`.
-
-UX behavior:
-- step 3 success dialog supports add-to-calendar
-- My Appointments action sheet supports add-to-calendar, reschedule, complete, cancel
-- pending review carousel is rendered from notifier state
-- list supports pull-to-refresh in empty/non-empty states
+Behavior highlights:
+- booking is a multi-step flow,
+- realtime appointment sync is owned by `AppointmentNotifier`,
+- pull-to-refresh + action sheet controls,
+- Action Required carousel combines pending review and complaint items,
+- review submission dialogs now use `AppTextField` and keyboard-safe layout composition.
 
 ## 6. Medical Records
 
-- `medical_record_repository.dart`
+Key files:
 - `medical_records_screen.dart`
 - `add_record_screen.dart`
+- `medical_record_repository.dart`
 
 Behavior:
-- security-gated record access
-- record CRUD with file support
+- record list and add/edit flows,
+- attachment upload support,
+- record-for input now standardized on `AppTextField`.
 
 ## 7. Profile
 
-- `profile_repository.dart`
-- `profile_notifier.dart`
+Key files:
 - `profile_screen.dart`
 - `profileview_screen.dart`
+- `profile_repository.dart`
+- `profile_notifier.dart`
 
 Behavior:
-- view/edit profile
-- country/currency-aware profile display
-- saved patient profiles
+- profile display/edit,
+- saved patient relations,
+- location/timezone-related profile persistence.
 
 ## 8. Menu and Settings
 
 Screens:
 - `settings_screen.dart`
+- `linked_accounts_screen.dart`
 - `account_activity_screen.dart`
 - `privacy_policy_screen.dart`
-- `linked_accounts_screen.dart`
 
 Widgets:
-- `settings_account_security_section.dart`
-- `settings_preferences_section.dart`
-- `settings_support_legal_section.dart`
 - `review_dialog.dart`
+- `complaint_dialog.dart`
+- settings section widgets
 
-Current behavior:
-- Account Activity is accessible from settings section tile
-- Account Activity supports review submission via reusable dialog
-- review CTA only renders for completed activities without `has_review`
-- Account Activity natively handles the automated `WAITING` status, displaying a contextual "running behind schedule" banner to prevent user confusion during the 15-minute grace period.
-- Account Activity supports complaint submission via `ComplaintDialog` with dynamic routing to either Platform Support or the specific Doctor
+Behavior:
+- account/security operations with step-up checks,
+- linked account management (Google/email),
+- account activity timeline with review/complaint actions.
 
 ## 9. Support and Legal
 
+Support:
 - `help_center_screen.dart`
+
+Legal:
 - `terms_of_service_screen.dart`
-- `legal_text.dart`
+- legal constants/text modules
 
-## 10. Common
+Behavior:
+- help center FAQ search now uses standardized `AppTextField`.
 
-- `enable_location_screen.dart`
+## 10. Common/Infrastructure-Adjacent Feature
 
-## 11. Core Services Used Across Features
+- `enable_location_screen.dart` for location permission onboarding.
+
+## 11. Shared Cross-Feature Services
 
 - `appointment_notification_service.dart`
 - `error_telemetry_service.dart`
 - security services under `core/security/`
+- offline/inactivity guards applied at app builder level (`app.dart`)

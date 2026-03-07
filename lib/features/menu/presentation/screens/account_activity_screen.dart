@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../presentation/widgets/complaint_dialog.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../appointments/data/appointment_repository.dart';
 import '../widgets/review_dialog.dart';
 
@@ -56,7 +57,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       case 'waiting':
         return Colors.amber;
       default:
-        return AppColors.textLight;
+        return context.colorTextLight;
     }
   }
 
@@ -112,12 +113,12 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgColor,
+      backgroundColor: context.colorBg,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           "Account Activity",
           style: TextStyle(
-            color: AppColors.textDark,
+            color: context.colorTextDark,
             fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
@@ -126,19 +127,19 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark),
+          icon: Icon(Icons.arrow_back_ios_new, color: context.colorTextDark),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body:
           _isLoading
-              ? const Center(
+              ? Center(
                 child: CircularProgressIndicator(color: AppColors.primaryGreen),
               )
               : _activities.isEmpty
               ? _buildEmptyState()
               : ListView.builder(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(24),
                 itemCount: _activities.length,
                 itemBuilder: (context, index) {
                   final item = _activities[index];
@@ -154,25 +155,14 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                   }
 
                   return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.borderColor),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                    margin: EdgeInsets.only(bottom: 16),
+                    padding: EdgeInsets.all(16),
+                    decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: _getActionColor(
                               action,
@@ -185,7 +175,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                             size: 24,
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,31 +189,31 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   letterSpacing: 1.2,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(height: 4),
                               Text(
                                 "Appointment with $doctorName",
-                                style: const TextStyle(
-                                  color: AppColors.textDark,
+                                style: TextStyle(
+                                  color: context.colorTextDark,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(height: 4),
                               if (date != null)
                                 Text(
                                   DateFormat(
                                     "MMM d, yyyy - h:mm a",
                                   ).format(date),
-                                  style: const TextStyle(
-                                    color: AppColors.textLight,
+                                  style: TextStyle(
+                                    color: context.colorTextLight,
                                     fontSize: 13,
                                   ),
                                 ),
 
                               if (action == 'WAITING') ...[
-                                const SizedBox(height: 16),
+                                SizedBox(height: 16),
                                 Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: EdgeInsets.all(12),
                                   decoration: BoxDecoration(
                                     color: Colors.amber.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(10),
@@ -233,7 +223,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                       ),
                                     ),
                                   ),
-                                  child: const Row(
+                                  child: Row(
                                     children: [
                                       Icon(
                                         Icons.info_outline_rounded,
@@ -258,15 +248,12 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
 
                               if (action == 'COMPLETED' &&
                                   item['has_review'] != true) ...[
-                                const SizedBox(height: 16),
+                                SizedBox(height: 16),
                                 OutlinedButton.icon(
                                   onPressed:
                                       () => _showReviewDialog(context, item),
-                                  icon: const Icon(
-                                    Icons.star_rate_rounded,
-                                    size: 18,
-                                  ),
-                                  label: const Text(
+                                  icon: Icon(Icons.star_rate_rounded, size: 18),
+                                  label: Text(
                                     "Leave a Review",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
@@ -274,14 +261,11 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   ),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: AppColors.primaryGreen,
-                                    side: const BorderSide(
+                                    side: BorderSide(
                                       color: AppColors.primaryGreen,
                                       width: 1.5,
                                     ),
-                                    minimumSize: const Size(
-                                      double.infinity,
-                                      40,
-                                    ),
+                                    minimumSize: Size(double.infinity, 40),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -292,11 +276,11 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                               // --- UPDATED: Button only shows if has_complaint is false ---
                               // --- UPDATED: Show Complaint Button OR Status Badge ---
                               if (action == 'MISSED') ...[
-                                const SizedBox(height: 16),
+                                SizedBox(height: 16),
                                 if (item['has_complaint'] == true)
                                   // Show a non-interactive status badge if already submitted
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
+                                    padding: EdgeInsets.symmetric(
                                       vertical: 8,
                                       horizontal: 12,
                                     ),
@@ -309,7 +293,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                         ),
                                       ),
                                     ),
-                                    child: const Row(
+                                    child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
@@ -335,11 +319,11 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                     onPressed:
                                         () =>
                                             _showComplaintDialog(context, item),
-                                    icon: const Icon(
+                                    icon: Icon(
                                       Icons.report_problem_outlined,
                                       size: 18,
                                     ),
-                                    label: const Text(
+                                    label: Text(
                                       "File Complaint",
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
@@ -347,14 +331,11 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                     ),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: Colors.deepOrange,
-                                      side: const BorderSide(
+                                      side: BorderSide(
                                         color: Colors.deepOrange,
                                         width: 1.5,
                                       ),
-                                      minimumSize: const Size(
-                                        double.infinity,
-                                        40,
-                                      ),
+                                      minimumSize: Size(double.infinity, 40),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
@@ -378,19 +359,19 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.history_toggle_off, size: 80, color: Colors.grey[300]),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: 16),
+          Text(
             "No Activity Yet",
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: AppColors.textDark,
+              color: context.colorTextDark,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             "Your booking history will appear here.",
-            style: TextStyle(color: AppColors.textLight),
+            style: TextStyle(color: context.colorTextLight),
           ),
         ],
       ),

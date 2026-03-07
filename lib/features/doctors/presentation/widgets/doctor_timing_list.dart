@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 
 class DoctorTimingList extends StatelessWidget {
   final List<dynamic> schedules;
@@ -10,10 +10,7 @@ class DoctorTimingList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (schedules.isEmpty) {
-      return const Text(
-        "No schedule info",
-        style: TextStyle(color: Colors.grey),
-      );
+      return Text("No schedule info", style: TextStyle(color: Colors.grey));
     }
 
     return SingleChildScrollView(
@@ -27,25 +24,10 @@ class DoctorTimingList extends StatelessWidget {
 
               return Container(
                 margin: const EdgeInsets.only(right: 10),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 width: 118,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20), // Premium Radius
-                  border: Border.all(
-                    color: AppColors.borderColor.withValues(alpha: 0.5),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1C222E).withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
+                // PRO FIX: Dynamic surface pills
+                decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -53,15 +35,15 @@ class DoctorTimingList extends StatelessWidget {
                       day,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    SizedBox(height: 5),
                     Text(
                       "$start - $end",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10.5,
                         color: Color(0xFF8D97A4),
                         fontWeight: FontWeight.w500,

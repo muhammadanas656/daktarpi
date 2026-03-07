@@ -62,24 +62,24 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
+        backgroundColor: context.colorScaffoldBackground,
         appBar: AppBar(
-          title: Text("My Doctors", style: AppTextStyles.h2),
+          title: Text("My Doctors", style: AppTextStyles.h2(context)),
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios,
-              color: AppColors.textDark,
+              color: context.colorTextDark,
               size: 20,
             ),
             onPressed: () => context.pop(),
           ),
           bottom: TabBar(
             labelColor: AppColors.primaryGreen,
-            unselectedLabelColor: AppColors.textGrey,
-            labelStyle: AppTextStyles.bodyBold,
+            unselectedLabelColor: context.colorTextGrey,
+            labelStyle: AppTextStyles.bodyBold(context),
             indicatorColor: AppColors.primaryGreen,
             tabs: const [Tab(text: "Favorites"), Tab(text: "Recent Visits")],
           ),
@@ -102,21 +102,25 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
       future: future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
+          return Center(
             child: CircularProgressIndicator(color: AppColors.primaryGreen),
           );
         } else if (snapshot.hasError) {
           return Center(
             child: Text(
               'Error loading doctors',
-              style: AppTextStyles.body.copyWith(color: AppColors.dangerRed),
+              style: AppTextStyles.body(
+                context,
+              ).copyWith(color: AppColors.dangerRed),
             ),
           );
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(
             child: Text(
               isFavoritesTab ? 'No favorite doctors yet.' : 'No recent visits.',
-              style: AppTextStyles.body.copyWith(color: AppColors.textGrey),
+              style: AppTextStyles.body(
+                context,
+              ).copyWith(color: context.colorTextGrey),
             ),
           );
         }
@@ -124,9 +128,9 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
         final doctors = snapshot.data!;
 
         return ListView.separated(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(24),
           itemCount: doctors.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 16),
+          separatorBuilder: (_, __) => SizedBox(height: 16),
           itemBuilder: (context, index) {
             final doctor = doctors[index];
             final docId = doctor['id'] as int;
@@ -175,20 +179,16 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
             if (!isFavoritesTab) {
               // Recent Visits: Show "Book Again" (arrow or simple button)
               trailing = Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.primaryGreen.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   "Book",
-                  style: AppTextStyles.bodyBold.copyWith(
-                    color: AppColors.primaryGreen,
-                    fontSize: 12,
-                  ),
+                  style: AppTextStyles.bodyBold(
+                    context,
+                  ).copyWith(color: AppColors.primaryGreen, fontSize: 12),
                 ),
               );
             }

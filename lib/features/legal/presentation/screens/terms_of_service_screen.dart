@@ -12,28 +12,28 @@ class TermsOfServiceScreen extends StatelessWidget {
     final List<String> sections = LegalText.termsOfService.split('## ');
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           "Terms of Service",
           style: TextStyle(
-            color: AppColors.textDark,
+            color: context.colorTextDark,
             fontWeight: FontWeight.bold,
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: const BackButton(color: AppColors.textDark),
+        leading: BackButton(color: context.colorTextDark),
       ),
       body: Scrollbar(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children:
                 sections.map((section) {
-                  if (section.trim().isEmpty) return const SizedBox.shrink();
+                  if (section.trim().isEmpty) return SizedBox.shrink();
 
                   // First line is header, rest is body
                   final lines = section.split('\n');
@@ -41,26 +41,26 @@ class TermsOfServiceScreen extends StatelessWidget {
                   final body = lines.sublist(1).join('\n').trim();
 
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
+                    padding: EdgeInsets.only(bottom: 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (header.isNotEmpty)
                           Text(
                             header,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textDark,
+                              color: context.colorTextDark,
                             ),
                           ),
-                        if (header.isNotEmpty) const SizedBox(height: 8),
+                        if (header.isNotEmpty) SizedBox(height: 8),
                         Text(
                           body,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             height: 1.6,
-                            color: AppColors.textLight,
+                            color: context.colorTextLight,
                           ),
                         ),
                       ],

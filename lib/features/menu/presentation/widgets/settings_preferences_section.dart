@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/services/appointment_notification_service.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../profile/presentation/profile_notifier.dart';
@@ -46,29 +47,27 @@ class _SettingsPreferencesSectionState
   void _showTimeoutSelectionDialog() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
         return Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(16.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 "Inactivity Lock",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               ...[0, 60000, 300000, 900000, 1800000, 3600000].map((timeout) {
                 return ListTile(
                   title: Text(_getTimeoutName(timeout)),
                   trailing:
                       SettingsNotifier.instance.inactivityTimeoutMs == timeout
-                          ? const Icon(
-                            Icons.check,
-                            color: AppColors.primaryGreen,
-                          )
+                          ? Icon(Icons.check, color: AppColors.primaryGreen)
                           : null,
                   onTap: () {
                     SettingsNotifier.instance.updateInactivityTimeout(timeout);
@@ -89,45 +88,43 @@ class _SettingsPreferencesSectionState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SettingsSectionHeader(title: "Preferences"),
+        SettingsSectionHeader(title: "Preferences"),
         AnimatedBuilder(
           animation: SettingsNotifier.instance,
           builder: (context, child) {
-            return SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              secondary: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.notifications_none, color: AppColors.primaryGreen, size: 20),
                 ),
-                child: const Icon(
-                  Icons.notifications_none,
-                  color: AppColors.primaryGreen,
-                  size: 20,
+                title: Text(
+                  "Notifications",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colorTextDark),
+                ),
+                subtitle: Text(
+                  "Receive appointment reminders",
+                  style: TextStyle(fontSize: 12, color: context.colorTextLight),
+                ),
+                trailing: Switch(
+                  value: SettingsNotifier.instance.notificationsEnabled,
+                  activeColor: AppColors.primaryGreen,
+                  onChanged: (val) async {
+                    await SettingsNotifier.instance.updateNotificationsEnabled(val);
+                    if (!val) {
+                      await AppointmentNotificationService.instance.cancelAllReminders();
+                    }
+                  },
                 ),
               ),
-              title: const Text(
-                "Notifications",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textDark,
-                ),
-              ),
-              subtitle: const Text(
-                "Receive appointment reminders",
-                style: TextStyle(fontSize: 12, color: AppColors.textLight),
-              ),
-              value: SettingsNotifier.instance.notificationsEnabled,
-              activeColor: AppColors.primaryGreen,
-              onChanged: (val) async {
-                await SettingsNotifier.instance.updateNotificationsEnabled(val);
-                if (!val) {
-                  await AppointmentNotificationService.instance
-                      .cancelAllReminders();
-                }
-              },
             );
           },
         ),
@@ -163,30 +160,31 @@ class _SettingsPreferencesSectionState
           onTap: () async {
             await showModalBottomSheet(
               context: context,
-              shape: const RoundedRectangleBorder(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               builder: (context) {
                 return Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(16.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
+                      Text(
                         "Appearance",
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       ListTile(
-                        leading: const Icon(Icons.brightness_auto),
-                        title: const Text("System Default"),
+                        leading: Icon(Icons.brightness_auto),
+                        title: Text("System Default"),
                         trailing:
                             SettingsNotifier.instance.themeMode ==
                                     ThemeMode.system
-                                ? const Icon(
+                                ? Icon(
                                   Icons.check,
                                   color: AppColors.primaryGreen,
                                 )
@@ -199,12 +197,12 @@ class _SettingsPreferencesSectionState
                         },
                       ),
                       ListTile(
-                        leading: const Icon(Icons.light_mode),
-                        title: const Text("Light"),
+                        leading: Icon(Icons.light_mode),
+                        title: Text("Light"),
                         trailing:
                             SettingsNotifier.instance.themeMode ==
                                     ThemeMode.light
-                                ? const Icon(
+                                ? Icon(
                                   Icons.check,
                                   color: AppColors.primaryGreen,
                                 )
@@ -217,12 +215,12 @@ class _SettingsPreferencesSectionState
                         },
                       ),
                       ListTile(
-                        leading: const Icon(Icons.dark_mode),
-                        title: const Text("Dark"),
+                        leading: Icon(Icons.dark_mode),
+                        title: Text("Dark"),
                         trailing:
                             SettingsNotifier.instance.themeMode ==
                                     ThemeMode.dark
-                                ? const Icon(
+                                ? Icon(
                                   Icons.check,
                                   color: AppColors.primaryGreen,
                                 )
@@ -245,37 +243,36 @@ class _SettingsPreferencesSectionState
         AnimatedBuilder(
           animation: SettingsNotifier.instance,
           builder: (context, child) {
-            return SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              secondary: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.animation, color: AppColors.primaryGreen, size: 20),
                 ),
-                child: const Icon(
-                  Icons.animation,
-                  color: AppColors.primaryGreen,
-                  size: 20,
+                title: Text(
+                  "Menu Drawer Hint",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colorTextDark),
+                ),
+                subtitle: Text(
+                  "Show animation on startup",
+                  style: TextStyle(fontSize: 12, color: context.colorTextLight),
+                ),
+                trailing: Switch(
+                  value: SettingsNotifier.instance.showDrawerHint,
+                  activeColor: AppColors.primaryGreen,
+                  onChanged: (val) {
+                    SettingsNotifier.instance.updateShowDrawerHint(val);
+                  },
                 ),
               ),
-              title: const Text(
-                "Menu Drawer Hint",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textDark,
-                ),
-              ),
-              subtitle: const Text(
-                "Show animation on startup",
-                style: TextStyle(fontSize: 12, color: AppColors.textLight),
-              ),
-              value: SettingsNotifier.instance.showDrawerHint,
-              activeColor: AppColors.primaryGreen,
-              onChanged: (val) {
-                SettingsNotifier.instance.updateShowDrawerHint(val);
-              },
             );
           },
         ),

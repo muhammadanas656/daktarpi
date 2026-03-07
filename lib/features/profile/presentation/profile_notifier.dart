@@ -21,7 +21,7 @@ class ProfileNotifier extends ChangeNotifier {
 
   String get fullName => _profile?.fullName ?? 'User';
   String? get avatarUrl => _profile?.profilePictureUrl;
-  
+
   String? get phoneNumber {
     if (_profile?.countryCode != null && _profile?.phoneNumber != null) {
       return '${_profile!.countryCode} ${_profile!.phoneNumber}';
@@ -31,19 +31,26 @@ class ProfileNotifier extends ChangeNotifier {
 
   String get currencySymbol {
     final iso = _profile?.countryIso?.toUpperCase() ?? '';
-    
+
     switch (iso) {
-      case 'PK': return 'Rs';
-      case 'BD': return '৳';
-      case 'IN': return '₹';
-      case 'US': return '\$';
-      case 'GB': return '£';
+      case 'PK':
+        return 'Rs';
+      case 'BD':
+        return '৳';
+      case 'IN':
+        return '₹';
+      case 'US':
+        return '\$';
+      case 'GB':
+        return '£';
       case 'DE':
       case 'FR':
       case 'IT':
       case 'ES':
-      case 'EU': return '€';
-      default: return '\$';
+      case 'EU':
+        return '€';
+      default:
+        return '\$';
     }
   }
 

@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
-
 import '../../core/theme/app_text_styles.dart';
+import '../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
+import '../../features/appointments/presentation/widgets/live_countdown_badge.dart';
 
 class AppointmentCard extends StatelessWidget {
   final String name;
@@ -11,6 +12,10 @@ class AppointmentCard extends StatelessWidget {
   final String date;
   final String time;
   final String imageUrl;
+  final String status; 
+  final String scheduleDate;
+  final String startTime;
+  final int maxWaitTime;
   final VoidCallback onTap;
   final VoidCallback onMoreTap;
 
@@ -21,36 +26,35 @@ class AppointmentCard extends StatelessWidget {
     required this.date,
     required this.time,
     required this.imageUrl,
+    required this.status, 
+    required this.scheduleDate,
+    required this.startTime,
+    this.maxWaitTime = 30,
     required this.onTap,
     required this.onMoreTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: onTap,
       onLongPress: onMoreTap,
       child: Container(
         padding: const EdgeInsets.all(AppDimens.spaceXl),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: AppShapes.xl, // Premium Radius
+        // PRO FIX: Instantly adapts to Dark Mode (removes shadow, shifts to Deep Slate)
+        decoration: AppStyles.surfaceCard(context, borderRadius: AppShapes.xl).copyWith(
           border: Border.all(
-            color: AppColors.borderColor.withValues(alpha: 0.5),
+            color: status == 'waiting'
+                ? Colors.amber.withValues(alpha: 0.5) 
+                : (isDark ? AppColors.darkBorder : context.colorBorder.withValues(alpha: 0.5)),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(
-                0xFF1C222E,
-              ).withValues(alpha: 0.06), // Soft Shadow
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
         child: Column(
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start, 
               children: [
                 // Avatar
                 Container(
@@ -58,23 +62,18 @@ class AppointmentCard extends StatelessWidget {
                   height: 70,
                   decoration: BoxDecoration(
                     borderRadius: AppShapes.lg,
-                    color: Colors.grey[100],
-                    image:
-                        imageUrl.isNotEmpty
-                            ? DecorationImage(
-                              image: NetworkImage(imageUrl),
-                              fit: BoxFit.cover,
-                            )
-                            : null,
-                  ),
-                  child:
-                      imageUrl.isEmpty
-                          ? const Icon(
-                            Icons.person,
-                            size: 40,
-                            color: Colors.grey,
+                    // PRO FIX: Context-aware avatar placeholder background
+                    color: isDark ? AppColors.darkBorder : Colors.grey[100],
+                    image: imageUrl.isNotEmpty
+                        ? DecorationImage(
+                            image: NetworkImage(imageUrl),
+                            fit: BoxFit.cover,
                           )
-                          : null,
+                        : null,
+                  ),
+                  child: imageUrl.isEmpty
+                      ? Icon(Icons.person, size: 40, color: isDark ? AppColors.darkTextSecondary : Colors.grey)
+                      : null,
                 ),
                 const SizedBox(width: AppDimens.spaceLg),
 
@@ -83,33 +82,44 @@ class AppointmentCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        name,
-                        style: AppTextStyles.h3.copyWith(fontSize: 18),
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: AppTextStyles.h3(context).copyWith(fontSize: 18),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: onMoreTap,
+                              borderRadius: AppShapes.pill,
+                              child: Padding(
+                                padding: const EdgeInsets.all(AppDimens.spaceXs),
+                                child: Icon(
+                                  Icons.more_vert,
+                                  color: context.colorTextLight,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: AppDimens.space2xs),
                       Text(
                         specialty,
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textLight,
-                          fontSize: 14,
-                        ),
+                        style: AppTextStyles.body(context).copyWith(color: context.colorTextLight, fontSize: 14),
+                      ),
+                      const SizedBox(height: 8),
+                      LiveCountdownBadge(
+                        status: status,
+                        scheduleDate: scheduleDate,
+                        startTime: startTime,
+                        maxWaitTime: maxWaitTime,
                       ),
                     ],
-                  ),
-                ),
-
-                // Action Button
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: onMoreTap,
-                    borderRadius: AppShapes.pill,
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppDimens.spaceXs),
-                      child: Icon(Icons.more_vert, color: AppColors.textLight),
-                    ),
                   ),
                 ),
               ],
@@ -120,14 +130,10 @@ class AppointmentCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: _buildInfoItem(Icons.calendar_today_outlined, date),
+                  child: _buildInfoItem(context, Icons.calendar_today_outlined, date),
                 ),
                 Expanded(
-                  child: _buildInfoItem(
-                    Icons.access_time_rounded,
-                    time,
-                    alignRight: true,
-                  ),
+                  child: _buildInfoItem(context, Icons.access_time_rounded, time, alignRight: true),
                 ),
               ],
             ),
@@ -137,22 +143,17 @@ class AppointmentCard extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoItem(IconData icon, String text, {bool alignRight = false}) {
+  Widget _buildInfoItem(BuildContext context, IconData icon, String text, {bool alignRight = false}) {
     return Row(
-      mainAxisAlignment:
-          alignRight ? MainAxisAlignment.end : MainAxisAlignment.start,
+      mainAxisAlignment: alignRight ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: AppDimens.iconMd,
-          color: AppColors.textGrey,
-        ), // Slightly larger icon
+        Icon(icon, size: AppDimens.iconMd, color: context.colorTextGrey),
         const SizedBox(width: AppDimens.spaceXs),
         Flexible(
           child: Text(
             text,
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.textDark, // Darker text for better readability
+            style: AppTextStyles.bodySmall(context).copyWith(
+              color: context.colorTextDark,
               fontWeight: FontWeight.w500,
             ),
             overflow: TextOverflow.ellipsis,

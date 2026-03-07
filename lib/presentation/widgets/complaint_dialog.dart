@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../features/appointments/data/appointment_repository.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 
 class ComplaintDialog extends StatefulWidget {
   final Map<String, dynamic> appointment;
@@ -76,20 +77,22 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
     return GestureDetector(
       onTap: () => setState(() => _selectedRecipient = value),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
+        duration: Duration(milliseconds: 200),
+        padding: EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? activeColor.withValues(alpha: 0.1) : Colors.white,
+          color: isSelected 
+              ? activeColor.withValues(alpha: 0.1) 
+              : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? activeColor : AppColors.borderColor,
+            color: isSelected ? activeColor : context.colorBorder,
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
             Icon(icon, color: isSelected ? activeColor : Colors.grey, size: 28),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,14 +101,14 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
                     title,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? activeColor : AppColors.textDark,
+                      color: isSelected ? activeColor : context.colorTextDark,
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textLight,
+                      color: context.colorTextLight,
                     ),
                   ),
                 ],
@@ -125,11 +128,11 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      insetPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,39 +140,39 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.deepOrange.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.report_problem_outlined,
                       color: Colors.deepOrange,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
+                  SizedBox(width: 12),
+                  Expanded(
                     child: Text(
                       "File a Complaint",
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
+                        color: context.colorTextDark,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
-              const Text(
+              Text(
                 "Who would you like to contact?",
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textDark,
+                  color: context.colorTextDark,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               _buildSelectionCard(
                 "Directly to $doctorName",
@@ -177,7 +180,7 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
                 Icons.person_outline,
                 'doctor',
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _buildSelectionCard(
                 "DaktarPai Support",
                 "Report app issues, payment errors, or platform disputes.",
@@ -185,41 +188,22 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
                 'support',
               ),
 
-              const SizedBox(height: 24),
-              const Text(
+              SizedBox(height: 24),
+              Text(
                 "Details",
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textDark,
+                  color: context.colorTextDark,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
 
-              TextField(
+              AppTextField(
                 controller: _commentController,
                 maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: "Please explain what went wrong...",
-                  hintStyle: const TextStyle(
-                    color: AppColors.hintText,
-                    fontSize: 14,
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.borderColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Colors.deepOrange,
-                      width: 2,
-                    ),
-                  ),
-                ),
+                hintText: "Please explain what went wrong...",
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               Row(
                 children: [
@@ -227,13 +211,13 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
                     child: TextButton(
                       onPressed:
                           _isSubmitting ? null : () => Navigator.pop(context),
-                      child: const Text(
+                      child: Text(
                         "Cancel",
-                        style: TextStyle(color: AppColors.textLight),
+                        style: TextStyle(color: context.colorTextLight),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: _isSubmitting ? null : _submit,
@@ -243,11 +227,11 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: EdgeInsets.symmetric(vertical: 14),
                       ),
                       child:
                           _isSubmitting
-                              ? const SizedBox(
+                              ? SizedBox(
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(
@@ -255,7 +239,7 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
                                   strokeWidth: 2,
                                 ),
                               )
-                              : const Text(
+                              : Text(
                                 "Submit",
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,

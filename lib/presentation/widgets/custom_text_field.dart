@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
+import 'app_text_field.dart';
 
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -20,29 +21,11 @@ class CustomTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.spaceLg,
-        vertical: AppDimens.spaceMd,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppShapes.md,
-        border: Border.all(color: AppColors.borderColor),
-      ),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        style: const TextStyle(fontSize: 16, color: Color(0xFF555555)),
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          hintText: hintText,
-          hintStyle: const TextStyle(color: AppColors.hintText),
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
+    return AppTextField(
+      controller: controller,
+      hintText: hintText,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
     );
   }
 }
@@ -60,22 +43,22 @@ class ProfileInputCard extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: AppColors.textDark,
+            color: context.colorTextDark,
           ),
         ),
-        const SizedBox(height: AppDimens.spaceXs),
+        SizedBox(height: AppDimens.spaceXs),
         Container(
-          padding: const EdgeInsets.symmetric(
+          padding: EdgeInsets.symmetric(
             horizontal: AppDimens.spaceLg,
             vertical: AppDimens.spaceMdPlus,
           ),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: AppShapes.md,
-            border: Border.all(color: AppColors.borderColor),
+            border: Border.all(color: context.colorBorder),
           ),
           child: child,
         ),

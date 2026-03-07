@@ -71,7 +71,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
 
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
+    _debounce = Timer(Duration(milliseconds: 500), () {
       // Trigger refresh with search query
       setState(() => _isLoading = true);
       _fetchDoctors();
@@ -208,7 +208,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: SafeArea(
           child: Column(
             children: [
@@ -218,7 +218,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               Expanded(
                 child:
                     _isLoading
-                        ? const Center(
+                        ? Center(
                           child: CircularProgressIndicator(
                             color: AppColors.primaryGreen,
                           ),
@@ -243,13 +243,13 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text("Doctors", style: AppTextStyles.h1),
+          Text("Doctors", style: AppTextStyles.h1(context)),
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
@@ -257,13 +257,13 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
             child: Icon(
               Icons.notifications_none_rounded,
-              color: AppColors.textDark,
+              color: context.colorTextDark,
               size: 24,
             ),
           ),
@@ -274,7 +274,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: EdgeInsets.symmetric(horizontal: 24),
       child: CustomSearchBar(
         controller: _searchController,
         hintText: "Search doctor, specialty...",
@@ -287,12 +287,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   Widget _buildFilterChips() {
     return Container(
       height: 40,
-      margin: const EdgeInsets.only(top: 24, bottom: 16),
+      margin: EdgeInsets.only(top: 24, bottom: 16),
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: EdgeInsets.symmetric(horizontal: 24),
         scrollDirection: Axis.horizontal,
         itemCount: _filters.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        separatorBuilder: (_, __) => SizedBox(width: 12),
         itemBuilder: (context, index) {
           final filter = _filters[index];
           final isSelected = _selectedFilter == filter;
@@ -300,8 +300,8 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           return GestureDetector(
             onTap: () => _onFilterTap(filter),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              duration: Duration(milliseconds: 200),
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
               decoration: BoxDecoration(
                 color: isSelected ? AppColors.primaryGreen : Colors.white,
                 borderRadius: BorderRadius.circular(20), // Premium Radius
@@ -309,18 +309,18 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                     isSelected
                         ? null
                         : Border.all(
-                          color: AppColors.borderColor.withValues(alpha: 0.5),
+                          color: context.colorBorder.withValues(alpha: 0.5),
                         ),
                 boxShadow: [
                   BoxShadow(
                     color:
                         isSelected
                             ? AppColors.primaryGreen.withValues(alpha: 0.3)
-                            : const Color(
+                            : Color(
                               0xFF1C222E,
                             ).withValues(alpha: 0.05), // Soft Premium Shadow
                     blurRadius: isSelected ? 12 : 8,
-                    offset: const Offset(0, 4),
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
@@ -328,7 +328,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               child: Text(
                 filter,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textGrey,
+                  color: isSelected ? Colors.white : context.colorTextGrey,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   fontSize: 14,
                 ),
@@ -347,11 +347,11 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.search_off_rounded, size: 64, color: Colors.grey[300]),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               "No doctors found",
               style: TextStyle(
-                color: AppColors.textLight,
+                color: context.colorTextLight,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -362,9 +362,9 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
       itemCount: _doctors.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 16),
+      separatorBuilder: (_, __) => SizedBox(height: 16),
       itemBuilder: (context, index) {
         final doctor = _doctors[index];
         final docId = doctor['id'] as int;
@@ -395,13 +395,15 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       return Center(
         child: Text(
           "No hospitals found.",
-          style: AppTextStyles.body.copyWith(color: AppColors.textGrey),
+          style: AppTextStyles.body(
+            context,
+          ).copyWith(color: context.colorTextGrey),
         ),
       );
     }
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      padding: EdgeInsets.all(16),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
@@ -420,13 +422,15 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       return Center(
         child: Text(
           "No clinics found.",
-          style: AppTextStyles.body.copyWith(color: AppColors.textGrey),
+          style: AppTextStyles.body(
+            context,
+          ).copyWith(color: context.colorTextGrey),
         ),
       );
     }
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      padding: EdgeInsets.all(16),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
@@ -463,7 +467,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
-              offset: const Offset(0, 4),
+              offset: Offset(0, 4),
             ),
           ],
         ),
@@ -486,19 +490,19 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               ),
               child:
                   imageUrl == null
-                      ? const Icon(
+                      ? Icon(
                         Icons.local_hospital,
                         color: AppColors.primaryGreen,
                         size: 40,
                       )
                       : null,
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.symmetric(horizontal: 8),
               child: Text(
                 name,
-                style: AppTextStyles.bodyBold.copyWith(fontSize: 14),
+                style: AppTextStyles.bodyBold(context).copyWith(fontSize: 14),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

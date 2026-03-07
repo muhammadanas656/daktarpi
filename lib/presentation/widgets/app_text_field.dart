@@ -4,10 +4,11 @@ import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
 import 'package:flutter/services.dart';
 
-class AppTextField extends StatelessWidget {
-  final TextEditingController controller;
+class AppTextField extends StatefulWidget {
+  final TextEditingController? controller;
   final String hintText;
   final bool isPhone;
+  final bool isPassword;
   final bool readOnly;
   final VoidCallback? onTap;
   final String? label;
@@ -17,12 +18,21 @@ class AppTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final int maxLines;
   final bool enabled;
+  final bool isEmail;
+  final bool? isPasswordVisible;
+  final VoidCallback? onVisibilityToggle;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final TextAlign textAlign;
+  final TextCapitalization textCapitalization;
+  final bool autofocus;
 
   const AppTextField({
     super.key,
-    required this.controller,
+    this.controller,
     required this.hintText,
     this.isPhone = false,
+    this.isPassword = false,
     this.readOnly = false,
     this.onTap,
     this.label,
@@ -32,28 +42,45 @@ class AppTextField extends StatelessWidget {
     this.keyboardType,
     this.maxLines = 1,
     this.enabled = true,
+    this.isEmail = false,
+    this.isPasswordVisible,
+    this.onVisibilityToggle,
+    this.onChanged,
+    this.onSubmitted,
+    this.textAlign = TextAlign.start,
+    this.textCapitalization = TextCapitalization.none,
+    this.autofocus = false,
   });
+
+  @override
+  State<AppTextField> createState() => _AppTextFieldState();
+}
+
+class _AppTextFieldState extends State<AppTextField> {
+  bool _internalIsVisible = false;
 
   @override
   Widget build(BuildContext context) {
     final radius = AppShapes.xl;
-    final bool singleLine = maxLines == 1;
+    final bool singleLine = widget.maxLines == 1;
+    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
+    final isVisible = widget.isPasswordVisible ?? _internalIsVisible;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (label != null) ...[
+        if (widget.label != null) ...[
           RichText(
             text: TextSpan(
-              text: label!.replaceAll('*', ''),
-              style: const TextStyle(
+              text: widget.label!.replaceAll('*', ''),
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textDark,
+                color: context.colorTextDark,
               ),
               children: [
-                if (label!.contains('*'))
-                  const TextSpan(
+                if (widget.label!.contains('*'))
+                  TextSpan(
                     text: ' *',
                     style: TextStyle(
                       color: Colors.red,
@@ -63,91 +90,134 @@ class AppTextField extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: AppDimens.spaceSm),
+          SizedBox(height: AppDimens.spaceSm),
         ],
         Container(
           decoration: BoxDecoration(
             borderRadius: radius,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(
-                  0xFF1C222E,
-                ).withValues(alpha: 0.05), // Soft Premium Shadow
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            // PRO FIX: Remove the hardcoded shadow in Dark Mode
+            boxShadow:
+                isDark
+                    ? []
+                    : [
+                      BoxShadow(
+                        color: const Color(0xFF1C222E).withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
           ),
           constraints:
               singleLine
-                  ? const BoxConstraints(
+                  ? BoxConstraints(
                     minHeight: AppDimens.fieldHeight,
                     maxHeight: AppDimens.fieldHeight,
                   )
-                  : const BoxConstraints(minHeight: AppDimens.fieldHeight),
+                  : BoxConstraints(minHeight: AppDimens.fieldHeight),
           child: Center(
             child: TextField(
-              controller: controller,
+              controller: widget.controller,
+              autofocus: widget.autofocus,
+              obscureText: widget.isPassword && !isVisible,
               keyboardType:
-                  keyboardType ??
-                  (isPhone ? TextInputType.phone : TextInputType.text),
-              readOnly: readOnly,
-              onTap: onTap,
-              inputFormatters: inputFormatters,
-              enabled: enabled,
-              maxLines: maxLines,
+                  widget.keyboardType ??
+                  (widget.isEmail
+                      ? TextInputType.emailAddress
+                      : (widget.isPhone
+                          ? TextInputType.phone
+                          : TextInputType.text)),
+              readOnly: widget.readOnly,
+              onTap: widget.onTap,
+              inputFormatters: widget.inputFormatters,
+              enabled: widget.enabled,
+              maxLines: widget.isPassword ? 1 : widget.maxLines,
+              onChanged: widget.onChanged,
+              onSubmitted: widget.onSubmitted,
+              textAlign: widget.textAlign,
+              textCapitalization: widget.textCapitalization,
               textAlignVertical:
                   singleLine ? TextAlignVertical.center : TextAlignVertical.top,
               cursorColor: AppColors.primaryGreen,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textDark,
+                color: context.colorTextDark,
                 height: 1.1,
               ),
               decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: const TextStyle(
+                hintText: widget.hintText,
+                hintStyle: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w400,
-                  color: AppColors.textGrey,
+                  color: context.colorTextGrey,
                   height: 1.1,
                 ),
                 filled: true,
-                fillColor: enabled ? Colors.white : const Color(0xFFF5F7FA),
+                // PRO FIX: Dynamic background colors for the text input
+                fillColor:
+                    widget.enabled
+                        ? Theme.of(context).colorScheme.surface
+                        : (isDark
+                            ? AppColors.darkScaffold
+                            : const Color(0xFFF5F7FA)),
                 prefixIcon:
-                    prefix == null
+                    widget.prefix == null
                         ? null
                         : Padding(
-                          padding: const EdgeInsetsDirectional.only(
+                          padding: EdgeInsetsDirectional.only(
                             start: AppDimens.spaceMd,
                             end: AppDimens.space2xs,
                           ),
-                          child: prefix,
+                          child: widget.prefix,
                         ),
                 prefixIconConstraints:
-                    prefix == null
+                    widget.prefix == null
                         ? null
-                        : const BoxConstraints(minWidth: 0, minHeight: 0),
-                suffixIcon: suffixIcon,
+                        : BoxConstraints(minWidth: 0, minHeight: 0),
+                suffixIcon:
+                    widget.isPassword
+                        ? IconButton(
+                          icon: Icon(
+                            isVisible ? Icons.visibility : Icons.visibility_off,
+                            color: const Color(0xFFC4C4C4),
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            if (widget.onVisibilityToggle != null) {
+                              widget.onVisibilityToggle!();
+                            } else {
+                              setState(
+                                () => _internalIsVisible = !_internalIsVisible,
+                              );
+                            }
+                          },
+                        )
+                        : widget.suffixIcon,
                 border: OutlineInputBorder(
                   borderRadius: radius,
-                  borderSide: const BorderSide(color: AppColors.borderColor),
+                  // PRO FIX: Dynamic border color removes the light halo
+                  borderSide: BorderSide(
+                    color: isDark ? AppColors.darkBorder : context.colorBorder,
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: radius,
-                  borderSide: const BorderSide(color: AppColors.borderColor),
+                  borderSide: BorderSide(
+                    color: isDark ? AppColors.darkBorder : context.colorBorder,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: radius,
-                  borderSide: const BorderSide(
+                  borderSide: BorderSide(
                     color: AppColors.primaryGreen,
                     width: 1.3,
                   ),
                 ),
                 disabledBorder: OutlineInputBorder(
                   borderRadius: radius,
-                  borderSide: const BorderSide(color: AppColors.borderColor),
+                  borderSide: BorderSide(
+                    color: isDark ? AppColors.darkBorder : context.colorBorder,
+                  ),
                 ),
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(

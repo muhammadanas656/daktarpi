@@ -29,7 +29,7 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
     setState(() => _isProcessing = true);
 
     // 1. Simulate Network Delay for Payment Gateway (Escrow transaction)
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(Duration(seconds: 2));
 
     try {
       // 2. Payment Success! Now lock it into the Database
@@ -62,13 +62,13 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
       try {
         if (SettingsNotifier.instance.notificationsEnabled &&
             widget.args.reminderMinutes > 0) {
-              
           // --- NEW: Calculate precise timeout based on DB max_wait_time ---
           final maxWaitTime = widget.args.clinic['max_wait_time'] ?? 30;
-          final maxWaitInt = maxWaitTime is int 
-              ? maxWaitTime 
-              : int.tryParse(maxWaitTime.toString()) ?? 30;
-              
+          final maxWaitInt =
+              maxWaitTime is int
+                  ? maxWaitTime
+                  : int.tryParse(maxWaitTime.toString()) ?? 30;
+
           // Timeout = Appointment Time + Doctor's Max Wait + 15 Min Grace Period
           final timeoutDateTime = widget.args.appointmentDateTime.add(
             Duration(minutes: maxWaitInt + 15),
@@ -78,7 +78,8 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
           await _notificationService.scheduleReminder(
             appointmentId: persistedAppointmentId,
             appointmentLocalDateTime: widget.args.appointmentDateTime,
-            appointmentEndDateTime: timeoutDateTime, // <--- Passes dynamic timeout!
+            appointmentEndDateTime:
+                timeoutDateTime, // <--- Passes dynamic timeout!
             reminderMinutes: widget.args.reminderMinutes,
             doctorName: widget.args.doctorName,
           );
@@ -120,9 +121,10 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
-            backgroundColor: Colors.white,
+            // PRO FIX: Dynamic success modal
+            backgroundColor: Theme.of(context).colorScheme.surface,
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: EdgeInsets.all(24.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -133,7 +135,7 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                       color: AppColors.primaryGreen.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Icon(
                         Icons.check_rounded,
                         color: AppColors.primaryGreen,
@@ -141,47 +143,49 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   Text(
                     isReschedule ? "Rescheduled!" : "Payment Successful!",
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textDark,
+                      color: context.colorTextDark,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     isReschedule
                         ? "Appointment Updated"
                         : "Your booking is confirmed",
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
-                      color: AppColors.textLight,
+                      color: context.colorTextLight,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   Text(
                     "You have booked with ${widget.args.doctorName} on ${widget.args.displayDate}, at ${widget.args.displayTime}",
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textGrey,
+                      color: context.colorTextGrey,
                       height: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 30),
+                  SizedBox(height: 30),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () {
                         // Calculate end time using max wait time
-                        final maxWaitTime = widget.args.clinic['max_wait_time'] ?? 30;
-                        final maxWaitInt = maxWaitTime is int 
-                            ? maxWaitTime 
-                            : int.tryParse(maxWaitTime.toString()) ?? 30;
+                        final maxWaitTime =
+                            widget.args.clinic['max_wait_time'] ?? 30;
+                        final maxWaitInt =
+                            maxWaitTime is int
+                                ? maxWaitTime
+                                : int.tryParse(maxWaitTime.toString()) ?? 30;
 
                         final Event event = Event(
                           title: 'Appointment with ${widget.args.doctorName}',
@@ -195,11 +199,11 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                         );
                         Add2Calendar.addEvent2Cal(event);
                       },
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.calendar_month,
                         color: AppColors.primaryGreen,
                       ),
-                      label: const Text(
+                      label: Text(
                         "Add to Calendar",
                         style: TextStyle(
                           color: AppColors.primaryGreen,
@@ -208,18 +212,18 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
+                        side: BorderSide(
                           color: AppColors.primaryGreen,
                           width: 2,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -227,7 +231,7 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                         Navigator.of(context).pop();
                         context.go(
                           AppRoutes.appointments,
-                          extra: const AppointmentsRouteArgs(refresh: true),
+                          extra: AppointmentsRouteArgs(refresh: true),
                         );
                       },
                       style: ElevatedButton.styleFrom(
@@ -235,9 +239,9 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text(
+                      child: Text(
                         "Done",
                         style: TextStyle(
                           color: Colors.white,
@@ -257,18 +261,18 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgColor,
+      backgroundColor: context.colorBg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark),
+          icon: Icon(Icons.arrow_back_ios_new, color: context.colorTextDark),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
+        title: Text(
           "Checkout",
           style: TextStyle(
-            color: AppColors.textDark,
+            color: context.colorTextDark,
             fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
@@ -276,84 +280,85 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
         centerTitle: true,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               decoration: AppStyles.surfaceCard(
+                context,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     "Order Summary",
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textDark,
+                      color: context.colorTextDark,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "Consultation Fee",
                         style: TextStyle(
                           fontSize: 14,
-                          color: AppColors.textLight,
+                          color: context.colorTextLight,
                         ),
                       ),
-                      const Text(
+                      Text(
                         "\$50.00",
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
+                          color: context.colorTextDark,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "Platform Fee",
                         style: TextStyle(
                           fontSize: 14,
-                          color: AppColors.textLight,
+                          color: context.colorTextLight,
                         ),
                       ),
-                      const Text(
+                      Text(
                         "\$2.50",
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
+                          color: context.colorTextDark,
                         ),
                       ),
                     ],
                   ),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Divider(color: AppColors.borderColor),
+                    child: Divider(color: context.colorBorder),
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "Total (Escrow)",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
+                          color: context.colorTextDark,
                         ),
                       ),
-                      const Text(
+                      Text(
                         "\$52.50",
                         style: TextStyle(
                           fontSize: 18,
@@ -366,24 +371,24 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
-            const Text(
+            SizedBox(height: 32),
+            Text(
               "Payment Method",
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: AppColors.textDark,
+                color: context.colorTextDark,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.primaryGreen.withValues(alpha: 0.05),
                 border: Border.all(color: AppColors.primaryGreen, width: 2),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   Icon(
                     Icons.account_balance_wallet,
@@ -398,14 +403,14 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                           "DaktarPai Wallet",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: AppColors.textDark,
+                            color: context.colorTextDark,
                           ),
                         ),
                         Text(
                           "Available Balance: \$150.00",
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textLight,
+                            color: context.colorTextLight,
                           ),
                         ),
                       ],
@@ -415,7 +420,7 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                 ],
               ),
             ),
-            const Spacer(),
+            Spacer(),
             SizedBox(
               width: double.infinity,
               height: 54,

@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: const Color(0xFFFBFBFB),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primaryGreen),
         ),
@@ -144,12 +144,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: RefreshIndicator(
         onRefresh: _refreshData,
         color: AppColors.primaryGreen,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics: AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [_buildHeader(), _buildBanner(), _buildContentSections()],
@@ -167,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
       avatarUrl: _profileNotifier.avatarUrl,
       searchController: _searchController,
       onSearchTap: () async {
-        await context.push(AppRoutes.popularDoctors);
+        await context.push(AppRoutes.globalSearch);
         if (mounted) _refreshData();
       },
     );
@@ -185,10 +186,10 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: EdgeInsets.symmetric(horizontal: 24),
           child: Text(
             "Specialities most relevant to you",
-            style: AppTextStyles.h2.copyWith(fontSize: 18),
+            style: AppTextStyles.h2(context).copyWith(fontSize: 18),
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         HomeSpecialtiesRow(
           specialties: _specialties,
           onSpecialtyTap: _navigateToSpecialty,
@@ -201,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
         if (_popularDoctors.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 24),
             child: Text("No popular doctors found"),
           )
@@ -209,10 +210,10 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             height: 240,
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: EdgeInsets.symmetric(horizontal: 24),
               scrollDirection: Axis.horizontal,
               itemCount: _popularDoctors.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              separatorBuilder: (_, __) => SizedBox(width: 16),
               itemBuilder: (context, index) {
                 final doc = _popularDoctors[index];
                 return HomePopularDoctorCard(
@@ -233,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
         if (_featuredDoctors.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 24),
             child: Text("No featured doctors found"),
           )
@@ -241,10 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             height: 160,
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: EdgeInsets.symmetric(horizontal: 24),
               scrollDirection: Axis.horizontal,
               itemCount: _featuredDoctors.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              separatorBuilder: (_, __) => SizedBox(width: 16),
               itemBuilder: (context, index) {
                 final doc = _featuredDoctors[index];
                 return HomeFeaturedDoctorCard(
@@ -258,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ),
-        const SizedBox(height: 40),
+        SizedBox(height: 40),
       ],
     );
   }

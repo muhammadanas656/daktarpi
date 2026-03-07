@@ -27,7 +27,11 @@ class HomeRepository {
     String? userLocation,
     String? countryIso,
   }) async {
-    return _doctorRepo.fetchPopularDoctors(limit: limit, userLocation: userLocation, countryIso: countryIso);
+    return _doctorRepo.fetchPopularDoctors(
+      limit: limit,
+      userLocation: userLocation,
+      countryIso: countryIso,
+    );
   }
 
   /// Fetches featured doctors (limited for the home carousel).
@@ -36,18 +40,22 @@ class HomeRepository {
     String? userLocation,
     String? countryIso,
   }) async {
-    return _doctorRepo.fetchFeaturedDoctors(limit: limit, userLocation: userLocation, countryIso: countryIso);
+    return _doctorRepo.fetchFeaturedDoctors(
+      limit: limit,
+      userLocation: userLocation,
+      countryIso: countryIso,
+    );
   }
-  
+
   /// Fetches banners for the home screen filtered by country.
   Future<List<Map<String, dynamic>>> fetchBanners(String? countryIso) async {
     try {
       var dbQuery = _client.from('banners').select().eq('is_active', true);
-      
+
       if (countryIso != null && countryIso.isNotEmpty) {
         dbQuery = dbQuery.eq('country_iso', countryIso);
       }
-      
+
       final response = await dbQuery;
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../appointments/data/appointment_repository.dart';
 
 class ReviewDialog extends StatefulWidget {
@@ -60,30 +61,27 @@ class _ReviewDialogState extends State<ReviewDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(24),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 "Rate Your Experience",
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
+                  color: context.colorTextDark,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 "With ${widget.appointment['doctors']?['full_name'] ?? 'Doctor'}",
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textLight,
-                ),
+                style: TextStyle(fontSize: 14, color: context.colorTextLight),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(5, (index) {
@@ -100,45 +98,26 @@ class _ReviewDialogState extends State<ReviewDialog> {
                   );
                 }),
               ),
-              const SizedBox(height: 16),
-              TextField(
+              SizedBox(height: 16),
+              AppTextField(
                 controller: _commentController,
                 maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: "Write your review here (optional)...",
-                  hintStyle: const TextStyle(
-                    color: AppColors.hintText,
-                    fontSize: 14,
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.borderColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: AppColors.primaryGreen,
-                      width: 2,
-                    ),
-                  ),
-                ),
+                hintText: "Write your review here (optional)...",
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
               Row(
                 children: [
                   Expanded(
                     child: TextButton(
                       onPressed:
                           _isSubmitting ? null : () => Navigator.pop(context),
-                      child: const Text(
+                      child: Text(
                         "Cancel",
-                        style: TextStyle(color: AppColors.textLight),
+                        style: TextStyle(color: context.colorTextLight),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
                       onPressed:
@@ -152,11 +131,11 @@ class _ReviewDialogState extends State<ReviewDialog> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: EdgeInsets.symmetric(vertical: 14),
                       ),
                       child:
                           _isSubmitting
-                              ? const SizedBox(
+                              ? SizedBox(
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(
@@ -164,7 +143,7 @@ class _ReviewDialogState extends State<ReviewDialog> {
                                   strokeWidth: 2,
                                 ),
                               )
-                              : const Text(
+                              : Text(
                                 "Submit",
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,

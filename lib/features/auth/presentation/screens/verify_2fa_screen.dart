@@ -10,6 +10,7 @@ import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/primary_button.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/security_formatters.dart';
@@ -85,7 +86,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
       _showRecoveryAssist = false;
     }
 
-    _recoveryAssistTimer = Timer(const Duration(seconds: 5), () {
+    _recoveryAssistTimer = Timer(Duration(seconds: 5), () {
       if (!mounted || _isRecoveryMode) {
         return;
       }
@@ -149,16 +150,19 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    title: const Row(
+                    title: Row(
                       children: [
                         Icon(Icons.check_circle, color: AppColors.primaryGreen),
                         SizedBox(width: 10),
                         Text("Access Recovered"),
                       ],
                     ),
-                    content: const Text(
+                    content: Text(
                       "Your backup code was accepted.\n\nFor your security, your account is currently unprotected. We highly recommend re-enabling 2FA in your settings soon.",
-                      style: TextStyle(height: 1.5, color: AppColors.textDark),
+                      style: TextStyle(
+                        height: 1.5,
+                        color: context.colorTextDark,
+                      ),
                     ),
                     actions: [
                       TextButton(
@@ -166,7 +170,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                           Navigator.pop(ctx);
                           await _handleVerificationSuccess();
                         },
-                        child: const Text(
+                        child: Text(
                           "Continue",
                           style: TextStyle(
                             color: AppColors.primaryGreen,
@@ -276,15 +280,15 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
     final defaultPinTheme = PinTheme(
       width: 56,
       height: 64,
-      textStyle: const TextStyle(
+      textStyle: TextStyle(
         fontSize: 24,
-        color: AppColors.textDark,
+        color: context.colorTextDark,
         fontWeight: FontWeight.bold,
       ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderColor),
+        border: Border.all(color: context.colorBorder),
       ),
     );
 
@@ -301,15 +305,15 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
     );
 
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: context.colorScaffoldBackground,
       body: Container(
-        decoration: const BoxDecoration(gradient: AppStyles.pageGradient),
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: Center(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              padding: EdgeInsets.symmetric(horizontal: 24.0),
               child: Container(
-                padding: const EdgeInsets.all(32),
+                padding: EdgeInsets.all(32),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
@@ -317,7 +321,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 20,
-                      offset: const Offset(0, 10),
+                      offset: Offset(0, 10),
                     ),
                   ],
                 ),
@@ -325,7 +329,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color:
                             _isRecoveryMode
@@ -344,17 +348,17 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                                 : AppColors.primaryGreen,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: 24),
                     AnimatedSwitcher(
                       duration: AppMotion.defaultDuration,
                       child: Text(
                         _isRecoveryMode ? "Account Recovery" : "Security Check",
                         key: ValueKey(_isRecoveryMode),
-                        style: AppTextStyles.h2,
+                        style: AppTextStyles.h2(context),
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     AnimatedSwitcher(
                       duration: AppMotion.defaultDuration,
                       child: Text(
@@ -363,15 +367,15 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                             : "We sent a challenge to your authenticator app. Please enter the 6-digit code below.",
                         key: ValueKey(_isRecoveryMode),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.textLight,
+                        style: TextStyle(
+                          color: context.colorTextLight,
                           fontSize: 14,
                           height: 1.5,
                         ),
                       ),
                     ),
                     if (!_isRecoveryMode) ...[
-                      const SizedBox(height: 14),
+                      SizedBox(height: 14),
                       Container(
                         width: double.infinity,
                         decoration: BoxDecoration(
@@ -383,14 +387,12 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                           value: _rememberThisDevice,
                           activeColor: AppColors.primaryGreen,
                           controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          title: const Text(
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                          title: Text(
                             "Remember this device for 30 days",
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.textDark,
+                              color: context.colorTextDark,
                             ),
                           ),
                           onChanged:
@@ -404,7 +406,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                         ),
                       ),
                     ],
-                    const SizedBox(height: 32),
+                    SizedBox(height: 32),
 
                     AnimatedCrossFade(
                       firstChild: LayoutBuilder(
@@ -438,43 +440,15 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                           );
                         },
                       ),
-                      secondChild: TextField(
+                      secondChild: AppTextField(
                         controller: _recoveryController,
                         keyboardType: TextInputType.text,
                         textCapitalization: TextCapitalization.characters,
+                        textAlign: TextAlign.center,
                         inputFormatters: [
                           BackupCodeFormatter(),
                         ], // AUTO-FORMATTER
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                          fontFamily: 'monospace',
-                        ),
-                        decoration: InputDecoration(
-                          hintText: "XXXX-XXXX",
-                          hintStyle: TextStyle(color: Colors.grey[300]),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: AppColors.borderColor,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: AppColors.borderColor,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: Colors.orange,
-                              width: 2,
-                            ),
-                          ),
-                        ),
+                        hintText: "XXXX-XXXX",
                         onChanged: (val) {
                           final extracted = extractFirstBackupCode(val);
                           if (extracted != null &&
@@ -496,7 +470,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                       duration: AppMotion.defaultDuration,
                     ),
 
-                    const SizedBox(height: 32),
+                    SizedBox(height: 32),
                     PrimaryButton(
                       label: _isRecoveryMode ? "Unlock Account" : "Verify",
                       onTap: _verify,
@@ -506,18 +480,18 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                               ? Colors.orange
                               : AppColors.primaryGreen,
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: 24),
                     AnimatedSwitcher(
                       duration: AppMotion.defaultDuration,
                       child:
                           _isRecoveryMode
                               ? TextButton(
-                                key: const ValueKey('back_to_totp_button'),
+                                key: ValueKey('back_to_totp_button'),
                                 onPressed:
                                     _isLoading
                                         ? null
                                         : () => _setRecoveryMode(false),
-                                child: const Text(
+                                child: Text(
                                   "I found my authenticator app",
                                   style: TextStyle(
                                     color: AppColors.primaryGreen,
@@ -527,7 +501,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                                 ),
                               )
                               : AnimatedOpacity(
-                                key: const ValueKey('recovery_assist_button'),
+                                key: ValueKey('recovery_assist_button'),
                                 opacity: _showRecoveryAssist ? 1 : 0,
                                 duration: AppMotion.defaultDuration,
                                 curve: Curves.easeOut,
@@ -535,7 +509,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                                   ignoring: !_showRecoveryAssist || _isLoading,
                                   child: TextButton(
                                     onPressed: () => _setRecoveryMode(true),
-                                    child: const Text(
+                                    child: Text(
                                       "Lost your authenticator? Use a backup code",
                                       style: TextStyle(
                                         color: AppColors.primaryGreen,
@@ -547,10 +521,10 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                                 ),
                               ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     TextButton(
                       onPressed: _handleCancel,
-                      child: const Text(
+                      child: Text(
                         "Cancel",
                         style: TextStyle(color: Colors.grey, fontSize: 12),
                       ),

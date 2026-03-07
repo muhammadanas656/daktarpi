@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../features/menu/presentation/widgets/custom_drawer.dart';
 import '../../features/doctors/presentation/screens/doctors_screen.dart';
 import '../../features/appointments/presentation/appointment_notifier.dart';
 import '../../features/profile/presentation/profile_notifier.dart';
 import '../../features/settings/presentation/settings_notifier.dart';
 import '../theme/app_motion.dart';
+import '../theme/app_colors.dart'; // PRO FIX: Utilizing centralized tokens
 
 class MainWrapper extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -24,9 +26,7 @@ class _MainWrapperState extends State<MainWrapper>
   static const Curve _openCurve = Curves.easeOutQuint;
   static const Curve _closeCurve = Curves.easeOutCirc;
 
-  final Color primaryGreen = const Color(0xFF00C689);
-  final Color drawerBgColor = const Color(0xFF626F8D);
-
+  // PRO FIX: Removed hardcoded color variables to rely on AppColors tokens
   late AnimationController _drawerController;
   final double _maxSlide = 290.0;
 
@@ -40,6 +40,8 @@ class _MainWrapperState extends State<MainWrapper>
       vsync: this,
       duration: AppMotion.defaultDuration,
     );
+
+    // Global Notifier Initialization
     AppointmentNotifier.instance.initializeRealtime();
     unawaited(AppointmentNotifier.instance.fetchAppointments());
     unawaited(ProfileNotifier.instance.loadProfile());
@@ -65,7 +67,6 @@ class _MainWrapperState extends State<MainWrapper>
   }
 
   Future<void> _runIntroTutorial() async {
-    // Check setting before running hint
     await SettingsNotifier.instance.loadSettings();
     if (!SettingsNotifier.instance.showDrawerHint) return;
 
@@ -119,17 +120,12 @@ class _MainWrapperState extends State<MainWrapper>
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    // FIX: Only allow drawer drag on Home Screen (index 0)
-    // User requested to remove global swipe
     if (widget.navigationShell.currentIndex != 0) return;
 
     double delta = details.primaryDelta! / _maxSlide;
-
-    // Only allow dragging open (positive delta) or closing if already open
     if (_drawerController.value > 0 || delta > 0) {
       _drawerController.value += delta;
     }
-
     if (_drawerController.value > 0.0) {
       _isDraggingDrawer = true;
     }
@@ -139,60 +135,44 @@ class _MainWrapperState extends State<MainWrapper>
     double velocity = details.primaryVelocity ?? 0;
     int currentIndex = widget.navigationShell.currentIndex;
 
-    // 1. Handle Drawer Snap Logic
     if (_isDraggingDrawer || _drawerController.value > 0.0) {
-      // If moving fast, snap based on direction
-      // REDUCED THRESHOLD: 400 -> 200 for easier sensitivity
       if (velocity.abs() > 200) {
-        if (velocity > 0) {
-          _drawerController.forward();
-        } else {
-          _drawerController.reverse();
-        }
+        velocity > 0
+            ? _drawerController.forward()
+            : _drawerController.reverse();
       } else {
-        // If moving slow, snap based on position (>50% open)
-        if (_drawerController.value > 0.5) {
-          _drawerController.forward();
-        } else {
-          _drawerController.reverse();
-        }
+        _drawerController.value > 0.5
+            ? _drawerController.forward()
+            : _drawerController.reverse();
       }
       _isDraggingDrawer = false;
       return;
     }
 
-    // 2. Handle Tab Switching Swipe Logic
-    // Only allow swipe switching if drawer is closed
     if (_drawerController.isDismissed && velocity.abs() > 300) {
       if (velocity < 0) {
-        // Swipe Left -> Next Tab
-        if (currentIndex < 3) {
-          _goToBranch(currentIndex + 1);
-        }
+        if (currentIndex < 3) _goToBranch(currentIndex + 1);
       } else {
-        // Swipe Right -> Open Drawer (on any screen if at edge, or previous tab)
-        // Improved logic: If user swipes right significantly, we prioritized drawer above.
-        // But if drawer detected no drag (e.g. started in middle), we handle tabs.
-
-        if (currentIndex > 0) {
-          _goToBranch(currentIndex - 1);
-        } else {
-          // On Home, swipe right opens drawer (handled by drag update usually, but fallback here)
-          _drawerController.forward();
-        }
+        currentIndex > 0
+            ? _goToBranch(currentIndex - 1)
+            : _drawerController.forward();
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // PRO FIX: Soft Ocean Slate Aura for premium dark mode blending
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dynamicDrawerBg =
+        isDark ? const Color(0xFF162236) : const Color(0xFF626F8D);
+
     final size = MediaQuery.sizeOf(context);
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-
         if (_drawerController.value > 0) {
           _drawerController.reverse();
           return;
@@ -212,9 +192,9 @@ class _MainWrapperState extends State<MainWrapper>
         }
       },
       child: Scaffold(
-        backgroundColor: drawerBgColor,
+        backgroundColor: dynamicDrawerBg,
+        resizeToAvoidBottomInset: false,
         body: GestureDetector(
-          // Allow gestures to pass through to child widgets (like lists)
           behavior: HitTestBehavior.translucent,
           onHorizontalDragStart: _onDragStart,
           onHorizontalDragUpdate: _onDragUpdate,
@@ -227,15 +207,13 @@ class _MainWrapperState extends State<MainWrapper>
                 builder: (context, child) {
                   double slide = 265 * _drawerController.value;
                   double scale = 1 - (_drawerController.value * 0.45);
-                  double rotate = 0.0;
                   double fade = (_drawerController.value * 6).clamp(0.0, 1.0);
 
                   return Transform(
                     transform:
                         Matrix4.identity()
                           ..translate(slide)
-                          ..scale(scale)
-                          ..rotateZ(rotate),
+                          ..scale(scale),
                     alignment: Alignment.centerLeft,
                     child: Opacity(
                       opacity: fade,
@@ -245,7 +223,8 @@ class _MainWrapperState extends State<MainWrapper>
                           width: size.width,
                           height: size.height,
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            // PRO FIX: Context-aware back card background
+                            color: Theme.of(context).scaffoldBackgroundColor,
                             borderRadius: BorderRadius.circular(30),
                             boxShadow: [
                               BoxShadow(
@@ -261,7 +240,7 @@ class _MainWrapperState extends State<MainWrapper>
                               children: [
                                 const DoctorsScreen(),
                                 Container(
-                                  color: drawerBgColor.withValues(
+                                  color: dynamicDrawerBg.withValues(
                                     alpha: (0.8 * _drawerController.value)
                                         .clamp(0.0, 1.0),
                                   ),
@@ -294,7 +273,6 @@ class _MainWrapperState extends State<MainWrapper>
                   double slide = _maxSlide * _drawerController.value;
                   double scale = 1 - (_drawerController.value * 0.3);
                   bool isDrawerOpen = _drawerController.value > 0.1;
-
                   double cornerRadius = (_drawerController.value * 400).clamp(
                     0.0,
                     40.0,
@@ -336,15 +314,18 @@ class _MainWrapperState extends State<MainWrapper>
                   bottomNavigationBar: NavigationBar(
                     selectedIndex: widget.navigationShell.currentIndex,
                     onDestinationSelected: _goToBranch,
-                    backgroundColor: Colors.white,
-                    indicatorColor: primaryGreen.withValues(alpha: 0.15),
+                    // PRO FIX: Surface cards now respect the active theme palette
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    indicatorColor: AppColors.primaryGreen.withValues(
+                      alpha: 0.15,
+                    ),
                     elevation: 0,
                     destinations: const [
                       NavigationDestination(
                         icon: Icon(Icons.home_outlined),
                         selectedIcon: Icon(
                           Icons.home_rounded,
-                          color: Color(0xFF00C689),
+                          color: AppColors.primaryGreen,
                         ),
                         label: 'Home',
                       ),
@@ -352,7 +333,7 @@ class _MainWrapperState extends State<MainWrapper>
                         icon: Icon(Icons.medical_services_outlined),
                         selectedIcon: Icon(
                           Icons.medical_services_rounded,
-                          color: Color(0xFF00C689),
+                          color: AppColors.primaryGreen,
                         ),
                         label: 'Doctors',
                       ),
@@ -360,7 +341,7 @@ class _MainWrapperState extends State<MainWrapper>
                         icon: Icon(Icons.assignment_outlined),
                         selectedIcon: Icon(
                           Icons.assignment_rounded,
-                          color: Color(0xFF00C689),
+                          color: AppColors.primaryGreen,
                         ),
                         label: 'Appointment',
                       ),
@@ -368,7 +349,7 @@ class _MainWrapperState extends State<MainWrapper>
                         icon: Icon(Icons.account_circle_outlined),
                         selectedIcon: Icon(
                           Icons.account_circle_rounded,
-                          color: Color(0xFF00C689),
+                          color: AppColors.primaryGreen,
                         ),
                         label: 'Profile',
                       ),
@@ -394,7 +375,7 @@ class _MainWrapperState extends State<MainWrapper>
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.red,
+                            color: Colors.redAccent,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(

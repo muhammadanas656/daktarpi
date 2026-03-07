@@ -1,5 +1,3 @@
-// lib/core/theme/app_theme.dart
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
@@ -63,20 +61,23 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(
-        0xFF121212,
-      ), // Standard dark background
+      // PRO FIX: Deep Slate instead of generic #121212
+      scaffoldBackgroundColor: AppColors.darkScaffold,
+
       // Color Scheme
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primaryGreen,
         brightness: Brightness.dark,
-        surface: const Color(0xFF121212),
+        surface: AppColors.darkSurface,
       ),
 
-      // Typography
-      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+      // PRO FIX: Inject the soft off-white text colors into Poppins
+      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme).apply(
+        bodyColor: AppColors.darkTextPrimary,
+        displayColor: AppColors.darkTextPrimary,
+      ),
 
-      // Elevated Button Theme
+      // Elevated Button Theme (Primary green looks amazing on dark backgrounds)
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryGreen,
@@ -93,15 +94,18 @@ class AppTheme {
       // Input Decoration Theme
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF1E1E1E), // Darker surface
-        hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+        fillColor: AppColors.darkSurface, // Elevated slate background
+        hintStyle: GoogleFonts.poppins(
+          color: AppColors.darkTextSecondary,
+          fontSize: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: AppShapes.md,
-          borderSide: const BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: AppColors.darkBorder),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppShapes.md,
-          borderSide: const BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: AppColors.darkBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppShapes.md,

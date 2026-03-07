@@ -18,25 +18,35 @@ class HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
+
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 70, 24, 30),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF00C689), Color(0xFF008FA0)], // Richer Gradient
+          // PRO FIX: Deeper, richer gradient for Dark Mode
+          colors:
+              isDark
+                  ? const [Color(0xFF009668), Color(0xFF006B78)]
+                  : const [Color(0xFF00C689), Color(0xFF008FA0)],
         ),
-        borderRadius: BorderRadius.only(
+        borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x33008FA0),
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
+        // PRO FIX: Disable glowing shadow in Dark Mode
+        boxShadow:
+            isDark
+                ? []
+                : [
+                  const BoxShadow(
+                    color: Color(0x33008FA0),
+                    blurRadius: 20,
+                    offset: Offset(0, 10),
+                  ),
+                ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,15 +59,16 @@ class HomeHeader extends StatelessWidget {
                 children: [
                   Text(
                     "Hi $fullName!",
-                    style: AppTextStyles.body.copyWith(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
+                    style: AppTextStyles.body(
+                      context,
+                    ).copyWith(color: Colors.white70, fontSize: 16),
                   ),
                   const SizedBox(height: 5),
                   Text(
                     "Find Your Doctor",
-                    style: AppTextStyles.h1.copyWith(color: Colors.white),
+                    style: AppTextStyles.h1(
+                      context,
+                    ).copyWith(color: Colors.white),
                   ),
                 ],
               ),
@@ -66,10 +77,15 @@ class HomeHeader extends StatelessWidget {
                     radius: 24,
                     backgroundImage: NetworkImage(avatarUrl!),
                   )
-                  : const CircleAvatar(
+                  : CircleAvatar(
                     radius: 24,
-                    backgroundColor: Colors.white24,
-                    child: Icon(Icons.person, color: Colors.white, size: 28),
+                    // PRO FIX: Darker placeholder background in Dark Mode
+                    backgroundColor: isDark ? Colors.black26 : Colors.white24,
+                    child: const Icon(
+                      Icons.person,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                   ),
             ],
           ),

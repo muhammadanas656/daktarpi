@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
 
 class SettingsTile extends StatelessWidget {
   final IconData icon;
@@ -23,19 +24,15 @@ class SettingsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
+      // PRO FIX: Instantly adapts to Dark Mode (removes shadow, shifts to Deep Slate)
+      decoration: AppStyles.surfaceCard(
+        context,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        onTap:
+            onTap, // Added the onTap handler to the ListTile so the whole tile is clickable
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
@@ -56,17 +53,20 @@ class SettingsTile extends StatelessWidget {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: isDestructive ? Colors.red : AppColors.textDark,
+            color:
+                isDestructive
+                    ? Colors.red
+                    : context.colorTextDark, // Context-aware text
           ),
         ),
         subtitle:
             subtitle != null
                 ? Text(
                   subtitle!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.textLight,
-                  ),
+                    color: context.colorTextLight,
+                  ), // Context-aware text
                 )
                 : null,
         trailing: Row(
@@ -75,22 +75,17 @@ class SettingsTile extends StatelessWidget {
             if (value != null)
               Text(
                 value!,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: AppColors.textLight,
+                  color: context.colorTextLight, // Context-aware text
                 ),
               ),
             if (value != null) const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right,
-              color: AppColors.textLight,
-              size: 20,
-            ),
+            Icon(Icons.chevron_right, color: context.colorTextLight, size: 20),
           ],
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        onTap: onTap,
       ),
     );
   }

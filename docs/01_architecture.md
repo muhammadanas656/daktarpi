@@ -1,15 +1,15 @@
-﻿# DaktarPai - Architecture Overview
+# DaktarPai - Architecture Overview
 
 ## 1. High-Level Summary
 
-DaktarPai is a Flutter healthcare app with Supabase as the primary backend (auth, database, realtime, storage, and edge functions). The app includes doctor discovery, appointment booking, reviews, profile/settings security, and medical records.
+DaktarPai is a feature-first Flutter healthcare app backed by Supabase.
 
-Current architecture reflected in source:
-- Doctor map/navigation moved into a dedicated `ClinicLocationMapSection` widget.
-- Doctor view analytics is tracked via delayed screen-stay timer plus Supabase RPC (`increment_doctor_views_smart`).
-- Appointment realtime subscription is now owned globally by `AppointmentNotifier` rather than screen-local wiring.
-- `MainWrapper` refreshes critical notifiers when app lifecycle returns to `resumed`.
-- Appointment cancellation now throws typed `AppFailure` fallback messages instead of raw debug exceptions.
+Primary capabilities:
+- Auth with MFA and security step-up.
+- Doctor discovery and detail exploration.
+- Multi-step appointment booking and appointment lifecycle handling.
+- Medical record management with attachments.
+- Profile and account/security settings.
 
 ## 2. Project Structure
 
@@ -49,85 +49,63 @@ lib/
 ## 3. Architectural Pattern
 
 Feature-first layered architecture:
-- Presentation layer: screens/widgets and local UI state.
-- Shared state layer: singleton `ChangeNotifier` instances.
-- Data layer: repositories for Supabase and external APIs.
-- Core layer: router, guards, security, telemetry, theme, and app shell.
+- Presentation: screens/widgets and local UI state.
+- State: singleton `ChangeNotifier` instances for shared app state.
+- Data: repositories wrapping Supabase and external APIs.
+- Core: routing, guards, security services, telemetry, themes, and shell layout.
 
-```mermaid
-graph TD
-    UI[Presentation] --> N[Notifiers]
-    UI --> R[Repositories]
-    N --> R
-    R --> B[Supabase / External APIs]
-    UI --> C[Core Services + Guards]
-```
+## 4. Runtime Composition
 
-## 4. Key Architectural Decisions
-
-| Decision | Rationale |
-|---|---|
-| GoRouter + shell routing | Centralized redirects with persistent tab scaffolding |
-| Supabase-first backend | Unified auth/data/realtime/storage/edge-function path |
-| Singleton notifiers | Lightweight global state without introducing extra frameworks |
-| Global notifier-owned realtime | Background appointment freshness across all tabs/screens |
-| Feature modularization | Isolates complex UI logic (for example, map/navigation widget) |
-| Security-first startup | Device integrity checks before app render |
-| Production-friendly failures | `AppFailure` normalization with user-safe fallback messaging |
-
-## 5. Runtime Composition
-
-Startup (`main.dart`):
-1. Initialize bindings and environment.
+### Startup (`main.dart`)
+1. Initialize Flutter bindings and environment.
 2. Initialize Supabase.
-3. Load settings and notification services.
-4. Run device-integrity enforcement.
-5. Configure telemetry/error handlers.
-6. Start app inside `runZonedGuarded`.
+3. Load persisted settings and initialize notifications.
+4. Run device integrity enforcement.
+5. Wire global error telemetry handlers.
+6. Launch `MyApp` (or compromised-device fallback app) in `runZonedGuarded`.
 
-Global wrappers and shell:
-- `app.dart` applies `OfflineModeGuard` and `InactivityLockGuard`.
-- `MainWrapper` initializes appointment realtime, does initial profile/appointment sync, and triggers silent refresh on app resume.
+### App Shell (`app.dart`, `MainWrapper`)
+- `MaterialApp.router` with centralized `GoRouter` config.
+- Global wrappers: `OfflineModeGuard` and `InactivityLockGuard`.
+- Global tap-to-unfocus for keyboard dismissal.
+- `MainWrapper` owns shell tabs, drawer choreography, app-resume refresh, and bootstraps appointment realtime/profile refresh.
 
-## 6. Backend Integration Snapshot
+## 5. Key Ownership Decisions
 
-| Area | Source |
-|---|---|
-| Authentication and MFA | `supabase.auth`, `supabase.auth.mfa` |
-| Doctors, specialties, clinics, schedules | `doctors`, `specialties`, `clinics`, `doctor_clinics`, `doctor_schedules` |
-| Doctor view analytics | RPC `increment_doctor_views_smart` |
-| Appointments and history | `appointments`, `appointment_history` |
-| Automated Status Management | Supabase `pg_cron` (auto-marks confirmed as waiting based on clinic max_wait_time, and missed after a 15-min grace period) |
-| Clinic Configuration | `doctor_clinics` stores `min_wait_time` and `max_wait_time` as calculable integers. |
-| Reviews & Complaints | `reviews`, `complaints` (with support/doctor routing) |
-| Appointment realtime | Supabase channel on `public.appointments` (managed by notifier) |
-| Route geometry | OSRM direct call with Supabase edge-function fallback (`route-proxy`) |
-| Profiles and saved patients | `profiles`, `saved_patients` |
-| Medical records | `medical_records` + storage |
-| Trusted devices | `trusted_devices` |
+- Routing and redirects: `core/router/app_router.dart`.
+- Shared settings: `SettingsNotifier` singleton.
+- Shared profile state: `ProfileNotifier` singleton.
+- Shared appointments + realtime: `AppointmentNotifier` singleton.
+- Data access and mutation: feature repositories.
 
-## 7. Native and Plugin Integration
+## 6. Input Architecture (Current)
 
-| Capability | Implementation |
-|---|---|
-| Calendar event creation | `add_2_calendar` from appointment flows |
-| Android calendar intent visibility | Manifest `<queries>` for calendar insert intent/mime |
-| Android predictive back compatibility | `android:enableOnBackInvokedCallback="true"` |
-| iOS calendar/contacts disclosure | `NSCalendarsUsageDescription`, `NSContactsUsageDescription` |
+Input entry points are centralized around `AppTextField` (`lib/presentation/widgets/app_text_field.dart`).
 
-## 8. Current Behavior Notes
+Current state in source:
+- Active text-entry screens/dialogs now use `AppTextField`.
+- `CustomTextField` and `AuthTextField` are now wrappers that delegate to `AppTextField`.
+- Keyboard-sensitive dialogs/sheets use scroll/inset-safe patterns (`SingleChildScrollView` and/or bottom inset padding) where input is present.
 
-- Cancellation path uses typed `AppFailure` mapping and user-friendly fallback messages.
-- Pending review UX is backed by completed appointments without existing reviews.
-- Activity log injects `has_review` from `reviews` lookup to suppress duplicate review prompts.
+## 7. Backend Integration Snapshot
 
-## 9. Relevant Packages
+Supabase-backed areas in active use:
+- Auth + MFA: `supabase.auth`, `supabase.auth.mfa`.
+- Doctors and clinic data: `doctors`, `specialties`, `clinics`, `doctor_clinics`, schedules.
+- Appointments/history: `appointments`, `appointment_history`.
+- Reviews/complaints: `reviews`, `complaints`.
+- Profiles/saved patients: `profiles`, `saved_patients`.
+- Medical records + storage buckets.
+- Trusted devices: `trusted_devices`.
 
-- `supabase_flutter`
-- `go_router`
-- `flutter_map`
-- `latlong2`
-- `geolocator`
-- `flutter_local_notifications`
-- `local_auth`
-- `add_2_calendar`
+Additional integration:
+- Route geometry: OSRM direct call with edge-function fallback (`route-proxy`).
+- Realtime appointments channel managed by `AppointmentNotifier`.
+
+## 8. Platform/Plugin Integration
+
+- Calendar export: `add_2_calendar`.
+- Local notifications: `flutter_local_notifications`.
+- Biometric step-up: `local_auth`.
+- Secure storage and preferences: `flutter_secure_storage`, `shared_preferences`.
+- Maps and geolocation stack: `flutter_map`, `latlong2`, `geolocator`, `map_launcher`.

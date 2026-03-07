@@ -10,7 +10,7 @@ class SettingsNotifier extends ChangeNotifier {
   static const String keyInactivityTimeout = 'inactivity_timeout';
   static const String keyNotificationsEnabled = 'notifications_enabled';
   static const String keyMedicalRecordsLocked = 'medical_records_locked';
-  
+
   static const String keyHasBiometricHardware = 'has_biometric_hardware';
   static const String keyIsBiometricEnabled = 'is_biometric_enabled';
 
@@ -25,7 +25,7 @@ class SettingsNotifier extends ChangeNotifier {
   bool _notificationsEnabled = true;
   // Internal state for medical records lock
   bool _medicalRecordsLocked = false;
-  
+
   // Cached biometric state for instant UI rendering
   bool _hasBiometricHardware = false;
   bool _isBiometricEnabled = false;
@@ -40,7 +40,7 @@ class SettingsNotifier extends ChangeNotifier {
   bool get notificationsEnabled => _notificationsEnabled;
   // Getter for the medical records lock state
   bool get medicalRecordsLocked => _medicalRecordsLocked;
-  
+
   bool get hasBiometricHardware => _hasBiometricHardware;
   bool get isBiometricEnabled => _isBiometricEnabled;
 
@@ -63,13 +63,13 @@ class SettingsNotifier extends ChangeNotifier {
       _notificationsEnabled = prefs.getBool(keyNotificationsEnabled) ?? true;
       // Load the saved medical records lock state
       _medicalRecordsLocked = prefs.getBool(keyMedicalRecordsLocked) ?? false;
-      
+
       _hasBiometricHardware = prefs.getBool(keyHasBiometricHardware) ?? false;
       _isBiometricEnabled = prefs.getBool(keyIsBiometricEnabled) ?? false;
 
       // NEW: Load cached security statuses from disk
       _is2FAEnabled = prefs.getBool(key2FAEnabled) ?? false;
-      
+
       // Enforce security dependency on medical records lock
       final hasSecurityConfigured = _is2FAEnabled || _isBiometricEnabled;
       if (!hasSecurityConfigured) {
@@ -92,7 +92,7 @@ class SettingsNotifier extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(key2FAEnabled, value);
-      
+
       // If turning off 2FA and biometrics is also off, unlock records
       if (!value && !_isBiometricEnabled) {
         await updateMedicalRecordsLock(false);
@@ -111,7 +111,7 @@ class SettingsNotifier extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyHasBiometricHardware, hasHardware);
       await prefs.setBool(keyIsBiometricEnabled, isEnabled);
-      
+
       // If turning off biometrics and 2FA is also off, unlock records
       if (!isEnabled && !_is2FAEnabled) {
         await updateMedicalRecordsLock(false);

@@ -22,6 +22,7 @@ class AppRoutes {
   static const profileEdit = '/profile/edit';
 
   // Doctor details & lists
+  static const globalSearch = '/global_search';
   static const popularDoctors = '/popular_doctors';
   static const featuredDoctors = '/featured_doctors';
   static const doctorDetails = '/doctor_details'; // append /:id

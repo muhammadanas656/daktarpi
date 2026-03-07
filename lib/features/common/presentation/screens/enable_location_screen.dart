@@ -67,13 +67,13 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              margin: const EdgeInsets.all(8),
+              margin: EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.grey.shade200),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_back_ios_new,
                 size: 18,
                 color: Colors.black,
@@ -83,7 +83,7 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
           title: Text(
             "Enable Location Services",
             style: TextStyle(
-              color: AppColors.textDark,
+              color: context.colorTextDark,
               fontWeight: FontWeight.bold,
               fontSize: 18,
             ),
@@ -92,17 +92,17 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
         ),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Spacer(flex: 1),
+                Spacer(flex: 1),
                 // --- ILLUSTRATION ---
                 Container(
                   width: 200,
                   height: 200,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0F7FA), // Light Cyan circle
+                    color: Color(0xFFE0F7FA), // Light Cyan circle
                     shape: BoxShape.circle,
                   ),
                   child: Stack(
@@ -152,7 +152,7 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                     ],
                   ),
                 ),
-                const SizedBox(height: 40),
+                SizedBox(height: 40),
 
                 // --- TITLE & DESCRIPTION ---
                 Text(
@@ -160,10 +160,10 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
+                    color: context.colorTextDark,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Text(
                   "Your location services are switched off. Please\nenable location, to help us serve better.",
                   textAlign: TextAlign.center,
@@ -173,7 +173,7 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                     height: 1.5,
                   ),
                 ),
-                const Spacer(flex: 2),
+                Spacer(flex: 2),
 
                 // --- BUTTON ---
                 SizedBox(
@@ -188,7 +188,7 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                       ),
                       elevation: 2,
                     ),
-                    child: const Text(
+                    child: Text(
                       "Enable Location",
                       style: TextStyle(
                         color: Colors.white,
@@ -198,7 +198,7 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                     ),
                   ),
                 ),
-                const SizedBox(height: 20), // Bottom padding
+                SizedBox(height: 20), // Bottom padding
               ],
             ),
           ),

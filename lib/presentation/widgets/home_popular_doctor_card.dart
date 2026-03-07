@@ -28,10 +28,10 @@ class HomePopularDoctorCard extends StatelessWidget {
       width: 170,
       decoration: BoxDecoration(
         borderRadius: AppStyles.cardRadius,
-        boxShadow: AppStyles.cardShadow,
+        boxShadow: AppStyles.cardShadow(context),
       ),
       child: Material(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: AppShapes.xl,
         child: InkWell(
           onTap: () => context.push(AppRoutes.doctorDetailsById('$id')),

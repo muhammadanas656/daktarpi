@@ -166,6 +166,89 @@ class DoctorRepository {
     return minParamsDiff;
   }
 
+  /// Global search across doctor name and specialty name (and clinic name locally).
+  /// Results can be sorted by distance if userLat and userLng are provided.
+  Future<List<Map<String, dynamic>>> fetchGlobalSearch({
+    required String query,
+    double? userLat,
+    double? userLng,
+    String? userLocation,
+    String? countryIso,
+  }) async {
+    try {
+      // !inner on specialties allows us to search by specialty name
+      var dbQuery = _client
+          .from('doctors')
+          .select(
+            '*, specialties!inner(name), doctor_clinics(clinics(name, latitude, longitude))',
+          );
+
+      if (query.isNotEmpty) {
+        dbQuery = dbQuery.or(
+          'full_name.ilike.%$query%,specialties.name.ilike.%$query%,doctor_clinics.clinics.name.ilike.%$query%',
+        );
+      }
+
+      if (countryIso != null && countryIso.isNotEmpty) {
+        dbQuery = dbQuery.eq('country_iso', countryIso);
+      } else if (userLocation != null && userLocation.isNotEmpty) {
+        dbQuery = dbQuery.eq('location', userLocation);
+      }
+
+      final isSortingByDistance = userLat != null && userLng != null;
+
+      if (!isSortingByDistance) {
+        final response = await dbQuery.order('rating', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      } else {
+        final response = await dbQuery;
+        var data = List<Map<String, dynamic>>.from(response);
+
+        data.sort((a, b) {
+          final distA = _getMinDistance(a, userLat, userLng);
+          final distB = _getMinDistance(b, userLat, userLng);
+          return distA.compareTo(distB);
+        });
+
+        return data;
+      }
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to perform global search right now.',
+      );
+    }
+  }
+
+  /// Fetches lightweight hints for the progressive search dropdown.
+  Future<Map<String, List<Map<String, dynamic>>>> fetchSearchHints({
+    required String query,
+  }) async {
+    try {
+      // Use RPC or separate queries for speed. Here we use parallel queries for clinics and doctors.
+      final doctorFuture = _client
+          .from('doctors')
+          .select('id, full_name, profile_picture_url, specialties!inner(name)')
+          .ilike('full_name', '%$query%')
+          .limit(3);
+
+      final clinicFuture = _client
+          .from('clinics')
+          .select('id, name, address')
+          .ilike('name', '%$query%')
+          .limit(2);
+
+      final results = await Future.wait([doctorFuture, clinicFuture]);
+
+      return {
+        'doctors': List<Map<String, dynamic>>.from(results[0]),
+        'clinics': List<Map<String, dynamic>>.from(results[1]),
+      };
+    } catch (error) {
+      return {'doctors': [], 'clinics': []};
+    }
+  }
+
   /// Fetches popular doctors (is_popular = true).
   /// Uses in-memory cache if available and [forceRefresh] is false.
   Future<List<Map<String, dynamic>>> fetchPopularDoctors({
@@ -395,10 +478,10 @@ class DoctorRepository {
       final List<dynamic> data = response as List<dynamic>;
       return data.map((e) {
         final clinicData = e['clinics'] as Map<String, dynamic>;
-        
+
         final min = e['min_wait_time'] ?? 20;
         final max = e['max_wait_time'] ?? 30;
-        
+
         return {
           ...clinicData,
           'junction_id': e['id'],

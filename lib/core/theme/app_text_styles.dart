@@ -4,54 +4,54 @@ import 'app_colors.dart';
 
 class AppTextStyles {
   // Headings
-  static TextStyle get h1 => GoogleFonts.poppins(
+  static TextStyle h1(BuildContext context) => GoogleFonts.poppins(
     fontSize: 24,
     fontWeight: FontWeight.bold,
-    color: AppColors.textDark,
+    color: context.colorTextDark,
   );
 
-  static TextStyle get h2 => GoogleFonts.poppins(
+  static TextStyle h2(BuildContext context) => GoogleFonts.poppins(
     fontSize: 20,
     fontWeight: FontWeight.bold,
-    color: AppColors.textDark,
+    color: context.colorTextDark,
   );
 
-  static TextStyle get h3 => GoogleFonts.poppins(
+  static TextStyle h3(BuildContext context) => GoogleFonts.poppins(
     fontSize: 18,
     fontWeight: FontWeight.w600,
-    color: AppColors.textDark,
+    color: context.colorTextDark,
   );
 
   // Body
-  static TextStyle get body => GoogleFonts.poppins(
+  static TextStyle body(BuildContext context) => GoogleFonts.poppins(
     fontSize: 14,
     fontWeight: FontWeight.normal,
-    color: AppColors.textLight,
+    color: context.colorTextLight,
   );
 
-  static TextStyle get bodySmall => GoogleFonts.poppins(
+  static TextStyle bodySmall(BuildContext context) => GoogleFonts.poppins(
     fontSize: 12,
     fontWeight: FontWeight.normal,
-    color: AppColors.textGrey,
+    color: context.colorTextGrey,
   );
 
-  static TextStyle get bodyBold => GoogleFonts.poppins(
+  static TextStyle bodyBold(BuildContext context) => GoogleFonts.poppins(
     fontSize: 14,
     fontWeight: FontWeight.w600,
-    color: AppColors.textDark,
+    color: context.colorTextDark,
   );
 
   // Button
-  static TextStyle get button => GoogleFonts.poppins(
+  static TextStyle button(BuildContext context) => GoogleFonts.poppins(
     fontSize: 16,
     fontWeight: FontWeight.w600,
     color: Colors.white,
   );
 
   // Input Label
-  static TextStyle get label => GoogleFonts.poppins(
+  static TextStyle label(BuildContext context) => GoogleFonts.poppins(
     fontSize: 14,
     fontWeight: FontWeight.w500,
-    color: AppColors.textLight,
+    color: context.colorTextLight,
   );
 }

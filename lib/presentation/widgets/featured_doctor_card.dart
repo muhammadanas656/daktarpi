@@ -41,12 +41,12 @@ class FeaturedDoctorCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: AppShapes.xl,
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
+        border: Border.all(color: context.colorBorder.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C222E).withValues(alpha: 0.06),
+            color: Color(0xFF1C222E).withValues(alpha: 0.06),
             blurRadius: 20,
-            offset: const Offset(0, 10),
+            offset: Offset(0, 10),
           ),
         ],
       ),
@@ -57,7 +57,7 @@ class FeaturedDoctorCard extends StatelessWidget {
           onTap: onCardTap,
           borderRadius: AppShapes.lg,
           child: Padding(
-            padding: const EdgeInsets.all(AppDimens.spaceMd),
+            padding: EdgeInsets.all(AppDimens.spaceMd),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -78,7 +78,7 @@ class FeaturedDoctorCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: AppDimens.spaceLg),
+                SizedBox(width: AppDimens.spaceLg),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,7 +89,9 @@ class FeaturedDoctorCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               name,
-                              style: AppTextStyles.h3.copyWith(fontSize: 16),
+                              style: AppTextStyles.h3(
+                                context,
+                              ).copyWith(fontSize: 16),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -97,7 +99,7 @@ class FeaturedDoctorCard extends StatelessWidget {
                           GestureDetector(
                             onTap: onFavoriteTap,
                             child: Padding(
-                              padding: const EdgeInsets.only(
+                              padding: EdgeInsets.only(
                                 left: AppDimens.spaceXs,
                                 bottom: AppDimens.space2xs,
                               ),
@@ -115,56 +117,60 @@ class FeaturedDoctorCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppDimens.space2xs),
+                      SizedBox(height: AppDimens.space2xs),
                       Text(
                         specialty,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textLight,
-                        ),
+                        style: AppTextStyles.bodySmall(
+                          context,
+                        ).copyWith(color: context.colorTextLight),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: AppDimens.spaceXs),
+                      SizedBox(height: AppDimens.spaceXs),
                       Row(
                         children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 14),
-                          const SizedBox(width: 4),
+                          Icon(Icons.star, color: Colors.amber, size: 14),
+                          SizedBox(width: 4),
                           Text(
                             rating,
-                            style: AppTextStyles.bodyBold.copyWith(
-                              fontSize: 12,
-                            ),
+                            style: AppTextStyles.bodyBold(
+                              context,
+                            ).copyWith(fontSize: 12),
                           ),
-                          const SizedBox(width: 12),
-                          const Icon(
+                          SizedBox(width: 12),
+                          Icon(
                             Icons.visibility_outlined,
                             color: Color(0xFF9FA8DA),
                             size: 14,
                           ),
-                          const SizedBox(width: 4),
+                          SizedBox(width: 4),
                           Text(
                             views,
-                            style: AppTextStyles.bodySmall.copyWith(
+                            style: AppTextStyles.bodySmall(context).copyWith(
                               fontSize: 12,
-                              color: AppColors.textLight,
+                              color: context.colorTextLight,
                             ),
                           ),
-                          const Spacer(),
+                          Spacer(),
                           RichText(
                             text: TextSpan(
                               children: [
                                 TextSpan(
                                   text:
                                       "${ProfileNotifier.instance.currencySymbol} ",
-                                  style: AppTextStyles.bodyBold.copyWith(
+                                  style: AppTextStyles.bodyBold(
+                                    context,
+                                  ).copyWith(
                                     color: AppColors.primaryGreen,
                                     fontSize: 14,
                                   ),
                                 ),
                                 TextSpan(
                                   text: "$price/hour",
-                                  style: AppTextStyles.bodySmall.copyWith(
-                                    color: AppColors.textLight,
+                                  style: AppTextStyles.bodySmall(
+                                    context,
+                                  ).copyWith(
+                                    color: context.colorTextLight,
                                     fontSize: 12,
                                   ),
                                 ),

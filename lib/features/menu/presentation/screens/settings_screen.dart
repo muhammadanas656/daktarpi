@@ -14,7 +14,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/security_formatters.dart';
-import '../../../../presentation/widgets/auth_text_field.dart';
+import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -169,11 +169,11 @@ class _SettingsScreenState extends State<SettingsScreen>
       context: context,
       builder:
           (ctx) => AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(ctx).colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            title: const Row(
+            title: Row(
               children: [
                 Icon(Icons.shield_outlined, color: AppColors.primaryGreen),
                 SizedBox(width: 10),
@@ -185,16 +185,16 @@ class _SettingsScreenState extends State<SettingsScreen>
                 ),
               ],
             ),
-            content: const SingleChildScrollView(
+            content: SingleChildScrollView(
               child: Text(
                 "You currently have no security measures enabled. We strongly recommend setting up Two-Factor Authentication to secure your medical records.",
-                style: TextStyle(color: AppColors.textLight, height: 1.4),
+                style: TextStyle(color: context.colorTextLight, height: 1.4),
               ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text(
+                child: Text(
                   "Maybe Later",
                   style: TextStyle(color: Colors.grey),
                 ),
@@ -211,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   Navigator.pop(ctx);
                   _start2FASetupWizard();
                 },
-                child: const Text(
+                child: Text(
                   "Set Up Security",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
@@ -253,18 +253,19 @@ class _SettingsScreenState extends State<SettingsScreen>
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
             final defaultPinTheme = PinTheme(
               width: 36,
               height: 46,
-              textStyle: const TextStyle(
+              textStyle: TextStyle(
                 fontSize: 18,
-                color: AppColors.textDark,
+                color: context.colorTextDark,
                 fontWeight: FontWeight.bold,
               ),
               decoration: BoxDecoration(
-                color: Colors.grey[50],
+                color: isDark ? AppColors.darkScaffold : Colors.grey[50],
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.borderColor),
+                border: Border.all(color: isDark ? AppColors.darkBorder : context.colorBorder),
               ),
             );
 
@@ -301,7 +302,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             }
 
             return AlertDialog(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -312,7 +313,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     color:
                         isRecoveryMode ? Colors.orange : AppColors.primaryGreen,
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Text(isRecoveryMode ? "Account Recovery" : "Security Check"),
                 ],
               ),
@@ -324,13 +325,13 @@ class _SettingsScreenState extends State<SettingsScreen>
                       isRecoveryMode
                           ? "Enter an 8-character backup code to verify your identity."
                           : "Please verify your identity with your 6-digit authenticator code.",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textLight,
+                        color: context.colorTextLight,
                         height: 1.4,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: 24),
                     AnimatedCrossFade(
                       firstChild: Pinput(
                         length: 6,
@@ -353,35 +354,13 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ],
                         onCompleted: submitCode,
                       ),
-                      secondChild: TextField(
+                      secondChild: AppTextField(
                         controller: recoveryController,
                         keyboardType: TextInputType.text,
                         textCapitalization: TextCapitalization.characters,
-                        enableInteractiveSelection: false,
                         inputFormatters: [BackupCodeFormatter()],
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                          fontFamily: 'monospace',
-                        ),
-                        decoration: InputDecoration(
-                          hintText: "XXXX-XXXX",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: AppColors.borderColor,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: Colors.orange,
-                              width: 2,
-                            ),
-                          ),
-                        ),
+                        hintText: "XXXX-XXXX",
                         onChanged: (val) {
                           if (val.length == 9) {
                             submitCode(val);
@@ -393,10 +372,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                           isRecoveryMode
                               ? CrossFadeState.showSecond
                               : CrossFadeState.showFirst,
-                      duration: const Duration(milliseconds: 300),
+                      duration: Duration(milliseconds: 300),
                     ),
                     if (isDialogLoading)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(top: 16),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
@@ -409,10 +388,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               actions: [
                 TextButton(
                   onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
                 ),
                 TextButton(
                   onPressed:
@@ -464,7 +440,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           return false;
         }
 
-        await Future.delayed(const Duration(milliseconds: 300));
+        await Future.delayed(Duration(milliseconds: 300));
 
         final authenticated = await _biometricAuthService.authenticate(
           localizedReason:
@@ -609,31 +585,27 @@ class _SettingsScreenState extends State<SettingsScreen>
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.security,
-                    size: 50,
-                    color: AppColors.primaryGreen,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
+                  Icon(Icons.security, size: 50, color: AppColors.primaryGreen),
+                  SizedBox(height: 16),
+                  Text(
                     "Protect your account",
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textDark,
+                      color: context.colorTextDark,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(height: 12),
+                  Text(
                     "Add an extra layer of security using an authenticator app.\n\nYou'll need:\n• Google Authenticator or Authy\n• 30 seconds to setup",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textLight,
+                      color: context.colorTextLight,
                       height: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                   PrimaryButton(
                     isLoading: isDialogLoading,
                     label: "Set Up 2FA",
@@ -675,10 +647,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
-                    child: const Text(
-                      "Close",
-                      style: TextStyle(color: Colors.grey),
-                    ),
+                    child: Text("Close", style: TextStyle(color: Colors.grey)),
                   ),
                 ],
               );
@@ -686,60 +655,64 @@ class _SettingsScreenState extends State<SettingsScreen>
 
             Widget buildQRStep() {
               // FIX: Defined explicit pin dimensions to prevent stretching
+              final isDark = Theme.of(ctx).brightness == Brightness.dark;
               final defaultPinTheme = PinTheme(
                 width: 44,
                 height: 54,
-                textStyle: const TextStyle(
+                textStyle: TextStyle(
                   fontSize: 22,
-                  color: AppColors.textDark,
+                  color: context.colorTextDark,
                   fontWeight: FontWeight.bold,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.grey[50],
+                  color: isDark ? AppColors.darkScaffold : Colors.grey[50],
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.borderColor),
+                  border: Border.all(color: isDark ? AppColors.darkBorder : context.colorBorder),
                 ),
               );
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     "Scan QR Code",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     "Scan this with your authenticator app:",
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: AppColors.textLight),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.colorTextLight,
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   if (qrCodeSvg != null)
                     SizedBox(
                       height: 130,
                       width: 130,
                       child: SvgPicture.string(qrCodeSvg!),
                     ),
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(height: 12),
+                  Text(
                     "Or enter this key manually:",
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   SelectableText(
                     secretKey ?? "",
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
+                  SizedBox(height: 24),
+                  Text(
                     "Enter the 6-digit code:",
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   // FIX: Wrapped in Center to maintain proper proportions
                   Center(
                     child: Pinput(
@@ -767,17 +740,17 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                   if (isDialogLoading)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: 16),
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: AppColors.primaryGreen,
                       ),
                     ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
-                    child: const Text(
+                    child: Text(
                       "Cancel 2FA Setup",
                       style: TextStyle(color: Colors.grey),
                     ),
@@ -790,33 +763,29 @@ class _SettingsScreenState extends State<SettingsScreen>
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.vpn_key_outlined,
-                    size: 40,
-                    color: Colors.orange,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
+                  Icon(Icons.vpn_key_outlined, size: 40, color: Colors.orange),
+                  SizedBox(height: 12),
+                  Text(
                     "Save Backup Codes",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     "If you lose your device, these codes are the ONLY way to log in.",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textLight,
+                      color: context.colorTextLight,
                       height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.grey[50],
+                      color: Theme.of(ctx).brightness == Brightness.dark ? AppColors.darkScaffold : Colors.grey[50],
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[200]!),
+                      border: Border.all(color: Theme.of(ctx).brightness == Brightness.dark ? AppColors.darkBorder : Colors.grey[200]!),
                     ),
                     child: Wrap(
                       spacing: 8,
@@ -826,7 +795,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           generatedCodes
                               .map(
                                 (c) => Container(
-                                  padding: const EdgeInsets.symmetric(
+                                  padding: EdgeInsets.symmetric(
                                     horizontal: 8,
                                     vertical: 4,
                                   ),
@@ -839,7 +808,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                   ),
                                   child: Text(
                                     c,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontFamily: 'monospace',
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
@@ -850,7 +819,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               .toList(),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: () {
                       Clipboard.setData(
@@ -863,19 +832,19 @@ class _SettingsScreenState extends State<SettingsScreen>
                         );
                       }
                     },
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: const Text("Copy Codes"),
+                    icon: Icon(Icons.copy, size: 16),
+                    label: Text("Copy Codes"),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textDark,
+                      foregroundColor: context.colorTextDark,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   CheckboxListTile(
                     value: hasSavedCodes,
                     onChanged:
                         (val) =>
                             setDialogState(() => hasSavedCodes = val == true),
-                    title: const Text(
+                    title: Text(
                       "I have safely stored these codes",
                       style: TextStyle(
                         fontSize: 13,
@@ -903,30 +872,33 @@ class _SettingsScreenState extends State<SettingsScreen>
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.fingerprint_rounded,
                     size: 60,
                     color: AppColors.primaryGreen,
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
+                  SizedBox(height: 16),
+                  Text(
                     "Enable Biometrics",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     "Would you like to enable Biometric Login for faster access on this device?",
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, color: AppColors.textLight),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: context.colorTextLight,
+                    ),
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                   PrimaryButton(
                     label: "Enable Biometric Login",
                     isLoading: isDialogLoading,
                     onTap: () async {
                       setDialogState(() => isDialogLoading = true);
                       try {
-                        await Future.delayed(const Duration(milliseconds: 400));
+                        await Future.delayed(Duration(milliseconds: 400));
                         final authenticated = await _biometricAuthService
                             .authenticate(localizedReason: "Verify to link");
                         if (authenticated) {
@@ -948,10 +920,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                       }
                     },
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
-                    child: const Text(
+                    child: Text(
                       "Skip Biometrics",
                       style: TextStyle(color: Colors.grey),
                     ),
@@ -964,23 +936,26 @@ class _SettingsScreenState extends State<SettingsScreen>
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.check_circle,
                     size: 60,
                     color: AppColors.primaryGreen,
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
+                  SizedBox(height: 16),
+                  Text(
                     "Security Updated",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     "Your security preferences have been successfully updated.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, color: AppColors.textLight),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: context.colorTextLight,
+                    ),
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                   PrimaryButton(
                     label: "Done",
                     onTap: () async {
@@ -995,11 +970,11 @@ class _SettingsScreenState extends State<SettingsScreen>
             }
 
             return AlertDialog(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              contentPadding: const EdgeInsets.all(24),
+              contentPadding: EdgeInsets.all(24),
               content: SingleChildScrollView(
                 child: AnimatedSwitcher(
                   duration: AppMotion.defaultDuration,
@@ -1096,11 +1071,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             return AlertDialog(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              title: const Row(
+              title: Row(
                 children: [
                   Icon(Icons.lock_outline, color: AppColors.primaryGreen),
                   SizedBox(width: 10),
@@ -1112,7 +1087,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Icon(
                           Icons.verified,
@@ -1130,25 +1105,25 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
+                    SizedBox(height: 16),
+                    Text(
                       "Enter your new password below.",
                       style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
-                    const SizedBox(height: 16),
-                    AuthTextField(
+                    SizedBox(height: 16),
+                    AppTextField(
                       controller: newPassController,
                       hintText: "New Password",
                       isPassword: true,
                     ),
-                    const SizedBox(height: 12),
-                    AuthTextField(
+                    SizedBox(height: 12),
+                    AppTextField(
                       controller: confirmPassController,
                       hintText: "Confirm Password",
                       isPassword: true,
                     ),
                     if (isDialogLoading)
-                      const Center(
+                      Center(
                         child: Padding(
                           padding: EdgeInsets.only(top: 16),
                           child: CircularProgressIndicator(
@@ -1164,10 +1139,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 TextButton(
                   onPressed:
                       isDialogLoading ? null : () => Navigator.pop(dialogCtx),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
                 ),
                 TextButton(
                   onPressed:
@@ -1217,7 +1189,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               );
                             }
                           },
-                  child: const Text(
+                  child: Text(
                     "Update",
                     style: TextStyle(
                       color: AppColors.primaryGreen,
@@ -1249,11 +1221,11 @@ class _SettingsScreenState extends State<SettingsScreen>
           builder: (ctx, setDialogState) {
             bool canDelete = confirmController.text == "DELETE";
             return AlertDialog(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              title: const Row(
+              title: Row(
                 children: [
                   Icon(Icons.warning_amber_rounded, color: Colors.red),
                   SizedBox(width: 8),
@@ -1271,12 +1243,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       "This action is irreversible. All your data, medical records, and appointments will be permanently removed.",
-                      style: TextStyle(fontSize: 14, color: AppColors.textDark),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: context.colorTextDark,
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
+                    SizedBox(height: 16),
+                    Text(
                       "Type DELETE to confirm:",
                       style: TextStyle(
                         fontSize: 12,
@@ -1284,19 +1259,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                         color: Colors.grey,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
+                    SizedBox(height: 8),
+                    AppTextField(
                       controller: confirmController,
-                      decoration: InputDecoration(
-                        hintText: "DELETE",
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                      ),
+                      hintText: "DELETE",
                       onChanged: (val) => setDialogState(() {}),
                     ),
                   ],
@@ -1305,10 +1271,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
                 ),
                 TextButton(
                   onPressed:
@@ -1360,20 +1323,20 @@ class _SettingsScreenState extends State<SettingsScreen>
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: Colors.grey[50],
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
-            title: Text("Settings", style: AppTextStyles.h2),
+            title: Text("Settings", style: AppTextStyles.h2(context)),
             centerTitle: true,
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              icon: Icon(Icons.arrow_back_ios_new_rounded),
               onPressed: () => context.pop(),
-              color: AppColors.textDark,
+              color: context.colorTextDark,
             ),
           ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1393,13 +1356,13 @@ class _SettingsScreenState extends State<SettingsScreen>
                   onTapChangePassword: _showChangePasswordDialog,
                   onTapDeleteAccount: _showDeleteConfirmation,
                 ),
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
                 SettingsPreferencesSection(
                   isBiometricEnabled: _isBiometricEnabled,
                 ),
-                const SizedBox(height: 32),
-                const SettingsSupportLegalSection(),
-                const SizedBox(height: 40),
+                SizedBox(height: 32),
+                SettingsSupportLegalSection(),
+                SizedBox(height: 40),
               ],
             ),
           ),
@@ -1407,15 +1370,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (_isLoading)
           Container(
             color: Colors.black.withValues(alpha: 0.5),
-            child: const Center(
+            child: Center(
               child: CircularProgressIndicator(color: AppColors.primaryGreen),
             ),
           ),
       ],
     );
   }
-
-
-
-
 }

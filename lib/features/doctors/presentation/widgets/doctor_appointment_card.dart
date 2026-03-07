@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import 'package:intl/intl.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 
@@ -39,6 +40,7 @@ class DoctorAppointmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
     final bool hasData = clinics.isNotEmpty && selectedClinic != null;
     final clinicName =
         hasData ? selectedClinic!['name'].toString() : 'No Clinic Available';
@@ -50,18 +52,16 @@ class DoctorAppointmentCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EDF3)),
-      ),
+      // PRO FIX: Dynamic surface instead of Colors.white and Color(0xFFE8EDF3)
+      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: const BoxDecoration(
-              color: Color(0xFFCEE3E5),
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              // PRO FIX: Darker header in Dark Mode
+              color: isDark ? AppColors.darkScaffold : const Color(0xFFCEE3E5),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -69,19 +69,19 @@ class DoctorAppointmentCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     "In-Clinic Appointment",
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: AppColors.textDark,
+                      color: context.colorTextDark,
                     ),
                   ),
                 ),
                 Text(
                   "${ProfileNotifier.instance.currencySymbol} ${_formatPrice(price)}",
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Color(0xFF2B7A74),
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -91,7 +91,7 @@ class DoctorAppointmentCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            padding: EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -99,13 +99,13 @@ class DoctorAppointmentCard extends StatelessWidget {
                   clinicName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
-                    color: AppColors.textDark,
+                    color: context.colorTextDark,
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Row(
                   children: [
                     Expanded(
@@ -113,7 +113,7 @@ class DoctorAppointmentCard extends StatelessWidget {
                         clinicAddress,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Color(0xFF5F9CA8),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -139,7 +139,7 @@ class DoctorAppointmentCard extends StatelessWidget {
                         },
                         child: Text(
                           "$moreClinicCount More clinic",
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Color(0xFF4A8ED9),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -148,7 +148,7 @@ class DoctorAppointmentCard extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Text(
                   "$waitTime or less wait time",
                   style: TextStyle(
@@ -157,14 +157,15 @@ class DoctorAppointmentCard extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Row(
                   children: [
-                    for (final date in datesToShow) _buildDateTab(date),
+                    for (final date in datesToShow)
+                      _buildDateTab(context, date),
                     InkWell(
                       onTap: onCustomDateTap,
                       borderRadius: BorderRadius.circular(6),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(4),
                         child: Icon(
                           Icons.calendar_month_rounded,
@@ -175,12 +176,12 @@ class DoctorAppointmentCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                const Divider(height: 1, color: Color(0xFFDFE5EA)),
-                const SizedBox(height: 12),
+                SizedBox(height: 6),
+                Divider(height: 1, color: Color(0xFFDFE5EA)),
+                SizedBox(height: 12),
                 if (timeSlots.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: EdgeInsets.symmetric(vertical: 8),
                     child: Text(
                       "No slots available",
                       style: TextStyle(color: Colors.grey[600], fontSize: 12),
@@ -195,11 +196,13 @@ class DoctorAppointmentCard extends StatelessWidget {
                             final isBooked = bookedSlots.contains(slot);
                             final isSelected = slot == selectedTimeSlot;
 
-                            Color chipColor = const Color(0xFFD7EEF1);
-                            Color textColor = const Color(0xFF2B757E);
+                            // PRO FIX: Adaptive chip colors for Dark Mode
+                            Color chipColor = isDark ? AppColors.darkScaffold : const Color(0xFFD7EEF1);
+                            Color textColor = isDark ? AppColors.primaryGreen : const Color(0xFF2B757E);
+                            
                             if (isBooked) {
-                              chipColor = const Color(0xFFEEF1F4);
-                              textColor = const Color(0xFF9CA7B3);
+                              chipColor = isDark ? AppColors.darkBorder : const Color(0xFFEEF1F4);
+                              textColor = isDark ? Colors.grey[600]! : const Color(0xFF9CA7B3);
                             } else if (isSelected) {
                               chipColor = AppColors.primaryGreen;
                               textColor = Colors.white;
@@ -211,8 +214,8 @@ class DoctorAppointmentCard extends StatelessWidget {
                                       ? () => onTimeSlotSelected!(slot)
                                       : null,
                               child: Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(
+                                margin: EdgeInsets.only(right: 8),
+                                padding: EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 8,
                                 ),
@@ -241,11 +244,11 @@ class DoctorAppointmentCard extends StatelessWidget {
     );
   }
 
-  Widget _buildDateTab(DateTime date) {
+  Widget _buildDateTab(BuildContext context, DateTime date) {
     final isSelected = _isSameDay(date, selectedDate);
     final now = DateTime.now();
     final isToday = _isSameDay(date, now);
-    final isTomorrow = _isSameDay(date, now.add(const Duration(days: 1)));
+    final isTomorrow = _isSameDay(date, now.add(Duration(days: 1)));
 
     String label = DateFormat('EEE').format(date);
     if (isToday) {
@@ -262,33 +265,34 @@ class DoctorAppointmentCard extends StatelessWidget {
         onTap: () => onDateSelected(date),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: EdgeInsets.symmetric(vertical: 4),
           child: Column(
             children: [
               Text(
                 label,
                 style: TextStyle(
-                  color: isSelected ? AppColors.textDark : Colors.grey[700],
+                  color: isSelected ? context.colorTextDark : Colors.grey[700],
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                   fontSize: 11.5,
                 ),
               ),
               if (secondLine.isNotEmpty) ...[
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Text(
                   secondLine,
                   style: TextStyle(
-                    color: isSelected ? AppColors.textDark : Colors.grey[600],
+                    color:
+                        isSelected ? context.colorTextDark : Colors.grey[600],
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
-              const SizedBox(height: 7),
+              SizedBox(height: 7),
               Container(
                 height: 2,
                 width: 38,
-                color: isSelected ? AppColors.textDark : Colors.transparent,
+                color: isSelected ? context.colorTextDark : Colors.transparent,
               ),
             ],
           ),
