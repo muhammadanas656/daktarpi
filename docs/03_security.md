@@ -12,6 +12,7 @@ graph TD
     D --> E[Biometric Step-Up]
     E --> F[Inactivity Lock]
     F --> G[Offline Guard]
+    G --> H[Online-Only Feature Gates]
 ```
 
 ## 2. Startup Security
@@ -72,8 +73,25 @@ Responsibilities:
 - Auth-state changes trigger realtime subscription refresh/cleanup.
 - Repository operations map backend/network failures through `AppFailure` where implemented.
 - Complaint flow relies on user-bound records and server-side access controls.
+- Offline write actions are captured in repository queues and replayed only when a live network is available.
 
-## 8. Error Containment and Telemetry
+## 8. Online-Only Guardrails
+
+Connectivity-aware gating is enforced for operations that cannot be safely executed offline:
+- storage uploads of binary files,
+- signed URL generation for private assets,
+- live server-dependent search/availability checks.
+
+If these actions are attempted while offline, repositories return `AppFailureType.network` with user-safe messaging.
+
+## 9. Local Data Storage Constraints
+
+To reduce memory and privacy risk:
+- Hive stores lightweight JSON payloads and storage path/URL references only.
+- Heavy binaries (images, PDFs, map data) are excluded from local persistence.
+- Cache entries are bounded by a 60-minute validity window to avoid stale long-lived snapshots.
+
+## 10. Error Containment and Telemetry
 
 Global capture paths in `main.dart`:
 - `FlutterError.onError`
@@ -82,7 +100,7 @@ Global capture paths in `main.dart`:
 
 `ErrorTelemetryService` logs these paths, and `AppErrorFallback` provides controlled recovery UI.
 
-## 9. Platform Privacy/Permission Notes
+## 11. Platform Privacy/Permission Notes
 
 Android:
 - calendar intent visibility declarations in manifest.

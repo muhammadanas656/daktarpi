@@ -317,13 +317,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 20,
-                      offset: Offset(0, 10),
-                    ),
-                  ],
+                  boxShadow: AppStyles.elevatedShadow(context),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

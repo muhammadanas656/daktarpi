@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../data/medical_record.dart';
 
 class RecordCard extends StatelessWidget {
@@ -30,17 +31,7 @@ class RecordCard extends StatelessWidget {
       child: Container(
         margin: EdgeInsets.only(bottom: 16),
         padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
+        decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
             // Date Box
@@ -193,14 +184,15 @@ class RecordCard extends StatelessWidget {
                         GestureDetector(
                           onTap: onFileTap,
                           child: Container(
-                            padding: EdgeInsets.all(6),
+                            padding: EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              shape: BoxShape.circle,
+                              color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkSurface : Colors.grey[50],
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
                             ),
                             child: Icon(
-                              Icons.description_outlined,
-                              size: 16,
+                              Icons.insert_drive_file_rounded, // PRO FIX: Premium document icon
+                              size: 18,
                               color: AppColors.primaryGreen,
                             ),
                           ),

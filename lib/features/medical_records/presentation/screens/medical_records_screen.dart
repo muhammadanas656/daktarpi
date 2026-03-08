@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/security/biometric_auth_service.dart';
 import '../../../../features/auth/data/trusted_device_repository.dart';
@@ -373,18 +374,11 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   Widget _buildBottomBar() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        boxShadow: isDark ? [] : [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: Offset(0, -5),
-          ),
-        ],
+        boxShadow: AppStyles.cardShadow(context),
       ),
       child: SafeArea(
         child: PrimaryButton(

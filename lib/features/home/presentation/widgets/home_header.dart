@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
+import '../../../../presentation/widgets/app_network_image.dart'; // PRO FIX
 
 class HomeHeader extends StatelessWidget {
   final String fullName;
@@ -18,7 +20,7 @@ class HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 70, 24, 30),
@@ -26,7 +28,6 @@ class HomeHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          // PRO FIX: Deeper, richer gradient for Dark Mode
           colors:
               isDark
                   ? const [Color(0xFF009668), Color(0xFF006B78)]
@@ -36,17 +37,11 @@ class HomeHeader extends StatelessWidget {
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
-        // PRO FIX: Disable glowing shadow in Dark Mode
-        boxShadow:
-            isDark
-                ? []
-                : [
-                  const BoxShadow(
-                    color: Color(0x33008FA0),
-                    blurRadius: 20,
-                    offset: Offset(0, 10),
-                  ),
-                ],
+        boxShadow: AppStyles.primaryShadow(
+          context,
+          const Color(0xFF008FA0),
+          alpha: 0.2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,14 +67,16 @@ class HomeHeader extends StatelessWidget {
                   ),
                 ],
               ),
-              avatarUrl != null
-                  ? CircleAvatar(
-                    radius: 24,
-                    backgroundImage: NetworkImage(avatarUrl!),
+              // PRO FIX: Replaced NetworkImage with AppNetworkImage
+              avatarUrl != null && avatarUrl!.isNotEmpty
+                  ? AppNetworkImage(
+                    imageUrl: avatarUrl,
+                    width: 48,
+                    height: 48,
+                    circular: true,
                   )
                   : CircleAvatar(
                     radius: 24,
-                    // PRO FIX: Darker placeholder background in Dark Mode
                     backgroundColor: isDark ? Colors.black26 : Colors.white24,
                     child: const Icon(
                       Icons.person,

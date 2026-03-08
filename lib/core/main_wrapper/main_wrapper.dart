@@ -11,6 +11,7 @@ import '../../features/profile/presentation/profile_notifier.dart';
 import '../../features/settings/presentation/settings_notifier.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_colors.dart'; // PRO FIX: Utilizing centralized tokens
+import '../theme/app_styles.dart';
 
 class MainWrapper extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -226,19 +227,18 @@ class _MainWrapperState extends State<MainWrapper>
                             // PRO FIX: Context-aware back card background
                             color: Theme.of(context).scaffoldBackgroundColor,
                             borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 10,
-                                offset: const Offset(-15, 15),
-                              ),
-                            ],
+                            // Using innerShadow or elevatedShadow here for the back card. Actually cardShadow works well.
+                            // However, back card had: offset(-15, 15), blur 10, alpha 0.1. Let's just use drawerShadow with a slightly lower intensity.
+                            boxShadow: AppStyles.cardShadow(context),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(30),
                             child: Stack(
                               children: [
-                                const DoctorsScreen(),
+                                // REVERTED: The premium background screen is back!
+                                // Wrapped in IgnorePointer so you don't accidentally scroll it while the drawer is open
+                                const IgnorePointer(child: DoctorsScreen()),
+                                // The dynamic shading overlay
                                 Container(
                                   color: dynamicDrawerBg.withValues(
                                     alpha: (0.8 * _drawerController.value)
@@ -288,13 +288,7 @@ class _MainWrapperState extends State<MainWrapper>
                       borderRadius: BorderRadius.circular(cornerRadius),
                       child: Container(
                         decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 40,
-                              offset: const Offset(-30, 30),
-                            ),
-                          ],
+                          boxShadow: AppStyles.drawerShadow(context),
                         ),
                         child: AbsorbPointer(
                           absorbing: isDrawerOpen,

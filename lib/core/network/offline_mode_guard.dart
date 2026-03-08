@@ -1,11 +1,10 @@
-import 'dart:async';
-
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'network_notifier.dart';
+import '../theme/app_colors.dart'; // PRO FIX: Imported theme tokens
 
 class OfflineModeGuard extends StatefulWidget {
   final Widget child;
-
   const OfflineModeGuard({super.key, required this.child});
 
   @override
@@ -13,70 +12,110 @@ class OfflineModeGuard extends StatefulWidget {
 }
 
 class _OfflineModeGuardState extends State<OfflineModeGuard> {
-  final Connectivity _connectivity = Connectivity();
-  StreamSubscription<dynamic>? _subscription;
-  bool _isOffline = false;
-
   @override
   void initState() {
     super.initState();
-    _initConnectivity();
-    _subscription = _connectivity.onConnectivityChanged.listen(
-      _updateOfflineState,
-    );
-  }
-
-  Future<void> _initConnectivity() async {
-    final current = await _connectivity.checkConnectivity();
-    _updateOfflineState(current);
-  }
-
-  void _updateOfflineState(dynamic result) {
-    final bool isOffline;
-    if (result is ConnectivityResult) {
-      isOffline = result == ConnectivityResult.none;
-    } else if (result is List<ConnectivityResult>) {
-      isOffline = !result.any((value) => value != ConnectivityResult.none);
-    } else {
-      isOffline = false;
-    }
-
-    if (!mounted || _isOffline == isOffline) {
-      return;
-    }
-    setState(() => _isOffline = isOffline);
+    NetworkNotifier.instance.addListener(_onNetworkChange);
   }
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    NetworkNotifier.instance.removeListener(_onNetworkChange);
     super.dispose();
+  }
+
+  void _onNetworkChange() {
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final isOffline = NetworkNotifier.instance.isOffline;
+    final safeAreaTop = MediaQuery.paddingOf(context).top;
+
+    // PRO FIX: Listen to the current theme brightness
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Stack(
       children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-          height: _isOffline ? 40 : 0,
-          width: double.infinity,
-          color: const Color(0xFFF8C146),
-          alignment: Alignment.center,
-          child:
-              _isOffline
-                  ? const Text(
-                    'Offline Mode: Viewing cached records.',
-                    style: TextStyle(
-                      color: Color(0xFF3A2A00),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+        widget.child,
+
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutBack,
+          top: isOffline ? safeAreaTop + 10 : -100,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                  )
-                  : null,
+                    decoration: BoxDecoration(
+                      // PRO FIX: Dynamic Surface Color instead of hardcoded hex
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        // PRO FIX: Uses your AppColors for precise dark mode borders
+                        color:
+                            isDark ? AppColors.darkBorder : Colors.grey[300]!,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.3 : 0.08,
+                          ),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            // Dynamic Red that softens in Dark Mode
+                            color: Colors.redAccent.withValues(
+                              alpha: isDark ? 0.2 : 0.1,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.wifi_off_rounded,
+                            color: isDark ? Colors.red[300] : Colors.redAccent,
+                            size: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          "Operating Offline",
+                          style: TextStyle(
+                            // PRO FIX: Text strictly follows the current theme
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-        Expanded(child: widget.child),
       ],
     );
   }

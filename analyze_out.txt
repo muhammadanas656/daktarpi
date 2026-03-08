@@ -1,0 +1,17 @@
+Analyzing daktarpi...                                           
+
+   info - Statements in an if should be enclosed in a block - lib\features\auth\presentation\screens\signup_screen.dart:183:9 - curly_braces_in_flow_control_structures
+  error - The named parameter 'technicalMessage' is required, but there's no corresponding argument - lib\features\doctors\data\doctor_repository.dart:42:15 - missing_required_argument
+  error - The named parameter 'type' is required, but there's no corresponding argument - lib\features\doctors\data\doctor_repository.dart:42:15 - missing_required_argument
+  error - The named parameter 'userMessage' is required, but there's no corresponding argument - lib\features\doctors\data\doctor_repository.dart:42:15 - missing_required_argument
+  error - Too many positional arguments: 0 expected, but 1 found - lib\features\doctors\data\doctor_repository.dart:42:26 - extra_positional_arguments_could_be_named
+  error - The named parameter 'technicalMessage' is required, but there's no corresponding argument - lib\features\doctors\data\doctor_repository.dart:499:14 - missing_required_argument
+  error - The named parameter 'type' is required, but there's no corresponding argument - lib\features\doctors\data\doctor_repository.dart:499:14 - missing_required_argument
+  error - The named parameter 'userMessage' is required, but there's no corresponding argument - lib\features\doctors\data\doctor_repository.dart:499:14 - missing_required_argument
+  error - Too many positional arguments: 0 expected, but 1 found - lib\features\doctors\data\doctor_repository.dart:499:25 - extra_positional_arguments_could_be_named
+   info - Statements in an if should be enclosed in a block - lib\features\medical_records\presentation\screens\add_record_screen.dart:92:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\medical_records\presentation\screens\add_record_screen.dart:106:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\medical_records\presentation\screens\add_record_screen.dart:127:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\medical_records\presentation\screens\add_record_screen.dart:243:11 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\medical_records\presentation\screens\add_record_screen.dart:252:11 - curly_braces_in_flow_control_structures
+

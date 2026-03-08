@@ -64,7 +64,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-    _debounce = Timer(Duration(milliseconds: 500), () {
+    _debounce = Timer(const Duration(milliseconds: 500), () {
       setState(() => _isLoading = true);
       _fetchData(query: _searchController.text);
     });
@@ -110,7 +110,9 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: context.colorScaffoldBackground,
+      // PRO FIX: Extend body to let gradient flow underneath
+      extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -123,7 +125,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: Colors.white,
+                // PRO FIX: Dynamic surface color for the back button
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: context.colorBorder),
                 boxShadow: AppStyles.cardShadow(context),
@@ -143,67 +146,74 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
       ),
       body: Container(
         decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: Column(
-          children: [
-            // --- SEARCH BAR ---
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-              child: CustomSearchBar(
-                controller: _searchController,
-                hintText: "Search",
-                showClearIcon: _showClearIcon,
-                onClear: _clearSearch,
+        // PRO FIX: SafeArea prevents content from clipping into the notch
+        child: SafeArea(
+          child: Column(
+            children: [
+              // --- SEARCH BAR ---
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 10,
+                ),
+                child: CustomSearchBar(
+                  controller: _searchController,
+                  hintText: "Search",
+                  showClearIcon: _showClearIcon,
+                  onClear: _clearSearch,
+                ),
               ),
-            ),
 
-            // --- DOCTOR LIST ---
-            Expanded(
-              child:
-                  _isLoading
-                      ? Center(
-                        child: CircularProgressIndicator(
+              // --- DOCTOR LIST ---
+              Expanded(
+                child:
+                    _isLoading
+                        ? const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primaryGreen,
+                          ),
+                        )
+                        : _doctors.isEmpty
+                        ? const Center(child: Text("No popular doctors found"))
+                        : RefreshIndicator(
+                          onRefresh: () => _fetchData(forceRefresh: true),
                           color: AppColors.primaryGreen,
-                        ),
-                      )
-                      : _doctors.isEmpty
-                      ? Center(child: Text("No popular doctors found"))
-                      : RefreshIndicator(
-                        onRefresh: () => _fetchData(forceRefresh: true),
-                        color: AppColors.primaryGreen,
-                        child: ListView.separated(
-                          padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
-                          itemCount: _doctors.length,
-                          separatorBuilder:
-                              (context, index) => SizedBox(height: 16),
-                          itemBuilder: (context, index) {
-                            final doctor = _doctors[index];
-                            final docId = doctor['id'] as int;
-                            final specialtyName =
-                                doctor['specialties'] != null
-                                    ? doctor['specialties']['name']
-                                    : 'Specialist';
-                            final views =
-                                doctor['views_count']?.toString() ?? '0';
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                            itemCount: _doctors.length,
+                            separatorBuilder:
+                                (context, index) => const SizedBox(height: 16),
+                            itemBuilder: (context, index) {
+                              final doctor = _doctors[index];
+                              final docId = doctor['id'] as int;
+                              final specialtyName =
+                                  doctor['specialties'] != null
+                                      ? doctor['specialties']['name']
+                                      : 'Specialist';
+                              final views =
+                                  doctor['views_count']?.toString() ?? '0';
 
-                            final isFavorite = _favNotifier.isFavorite(docId);
+                              final isFavorite = _favNotifier.isFavorite(docId);
 
-                            return DoctorListCard(
-                              id: docId,
-                              name: doctor['full_name'] ?? 'Unknown',
-                              specialty: " $specialtyName",
-                              rating: doctor['rating']?.toString() ?? '0.0',
-                              views: views,
-                              imageUrl: doctor['profile_picture_url'],
-                              isFavorite: isFavorite,
-                              heroTagPrefix: 'popular-',
-                              onFavoriteTap: () => _favNotifier.toggle(docId),
-                              onCardTap: () => _navigateToDoctorDetails(docId),
-                            );
-                          },
+                              return DoctorListCard(
+                                id: docId,
+                                name: doctor['full_name'] ?? 'Unknown',
+                                specialty: " $specialtyName",
+                                rating: doctor['rating']?.toString() ?? '0.0',
+                                views: views,
+                                imageUrl: doctor['profile_picture_url'],
+                                isFavorite: isFavorite,
+                                heroTagPrefix: 'popular-',
+                                onFavoriteTap: () => _favNotifier.toggle(docId),
+                                onCardTap:
+                                    () => _navigateToDoctorDetails(docId),
+                              );
+                            },
+                          ),
                         ),
-                      ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

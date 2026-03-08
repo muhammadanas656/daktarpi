@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
 class HomeBanner extends StatefulWidget {
@@ -55,8 +56,9 @@ class _HomeBannerState extends State<HomeBanner> {
       child: Column(
         children: [
           SizedBox(
-            height: 160,
+            height: 185, // PRO FIX: Expanded height for shadow
             child: PageView.builder(
+              clipBehavior: Clip.none, // PRO FIX: Prevent shadow clipping
               controller: _pageController,
               onPageChanged: (index) {
                 setState(() => _currentPage = index);
@@ -66,7 +68,7 @@ class _HomeBannerState extends State<HomeBanner> {
                 final banner = widget.banners[index];
                 
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 8), // Room for shadow
+                  margin: const EdgeInsets.only(bottom: 24), // PRO FIX: Room for shadow
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF008FA0), Color(0xFF00C689)],
@@ -74,13 +76,7 @@ class _HomeBannerState extends State<HomeBanner> {
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: isDark ? [] : [
-                      BoxShadow(
-                        color: const Color(0xFF008FA0).withValues(alpha: 0.3),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                    boxShadow: AppStyles.primaryShadow(context, const Color(0xFF008FA0)),
                   ),
                   child: Stack(
                     children: [

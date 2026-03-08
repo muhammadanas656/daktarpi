@@ -179,11 +179,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } on AuthException catch (e) {
       if (mounted) CustomSnackbar.showError(context, e.message);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         CustomSnackbar.showError(
           context,
           'Something went wrong. Please try again.',
         );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

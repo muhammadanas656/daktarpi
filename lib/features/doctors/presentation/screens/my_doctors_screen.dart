@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../data/doctor_repository.dart';
 import '../../presentation/favorites_notifier.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../../../core/theme/app_styles.dart';
 
 class MyDoctorsScreen extends StatefulWidget {
   const MyDoctorsScreen({super.key});
@@ -62,7 +63,9 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: context.colorScaffoldBackground,
+        // PRO FIX: Extend body to let gradient flow under the AppBar
+        extendBodyBehindAppBar: true,
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: Text("My Doctors", style: AppTextStyles.h2(context)),
           centerTitle: true,
@@ -84,11 +87,17 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
             tabs: const [Tab(text: "Favorites"), Tab(text: "Recent Visits")],
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildDoctorList(_favoritesFuture, isFavoritesTab: true),
-            _buildDoctorList(_recentFuture, isFavoritesTab: false),
-          ],
+        body: Container(
+          // PRO FIX: Unified Deep Medical Slate gradient
+          decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
+          child: SafeArea(
+            child: TabBarView(
+              children: [
+                _buildDoctorList(_favoritesFuture, isFavoritesTab: true),
+                _buildDoctorList(_recentFuture, isFavoritesTab: false),
+              ],
+            ),
+          ),
         ),
       ),
     );

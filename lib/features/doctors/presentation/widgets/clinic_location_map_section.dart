@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../core/utils/navigation_helper.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../data/route_repository.dart';
@@ -571,13 +572,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 6,
-                              offset: Offset(0, 3),
-                            ),
-                          ],
+                          boxShadow: AppStyles.cardShadow(context),
                           gradient: RadialGradient(
                             center: Alignment.center,
                             radius: 0.8,
@@ -601,12 +596,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                             color: Colors.blueAccent,
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                blurRadius: 5,
-                              ),
-                            ],
+                            boxShadow: AppStyles.cardShadow(context),
                           ),
                           child: Icon(
                             Icons.navigation,
@@ -681,13 +671,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                               borderRadius: BorderRadius.circular(
                                 _isDistanceBarExpanded ? 16 : 20,
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
+                              boxShadow: AppStyles.cardShadow(context),
                             ),
                             child: AnimatedSize(
                               duration: AppMotion.defaultDuration,

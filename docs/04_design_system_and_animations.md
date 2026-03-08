@@ -57,6 +57,12 @@ This pattern is used in auth recovery, review/complaint dialogs, settings/accoun
 - `ClinicLocationMapSection` isolates map interaction and animated section behavior.
 - Guarded map actions reduce timing-related map errors.
 
+### Offline Indicator Motion
+- `OfflineModeGuard` renders a non-blocking floating glassmorphism pill at shell level.
+- Connectivity loss triggers a top-down animated entrance; reconnection hides it above the viewport.
+- `IgnorePointer` keeps underlying screens interactive while the indicator is visible.
+- Visual treatment uses blur, translucent deep-slate background, subtle border/shadow, and compact warning iconography.
+
 ## 6. Shared Components Frequently Used
 
 - `AppTextField`
@@ -65,3 +71,4 @@ This pattern is used in auth recovery, review/complaint dialogs, settings/accoun
 - `AppointmentCard`
 - `PessimisticSwitch`
 - `AppStyles` helpers for cards, gradients, and shadows
+- `OfflineModeGuard` for global connectivity feedback

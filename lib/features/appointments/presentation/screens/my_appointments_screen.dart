@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // PRO FIX
 import 'package:add_2_calendar/add_2_calendar.dart';
 import '../../../../core/services/appointment_notification_service.dart';
 import 'package:go_router/go_router.dart';
@@ -765,15 +766,15 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       children: [
                         CircleAvatar(
                           radius: 22,
-                          // PRO FIX: Context aware avatar background
                           backgroundColor:
                               Theme.of(context).brightness == Brightness.dark
                                   ? AppColors.darkBorder
                                   : Colors.grey[100],
+                          // PRO FIX: Use CachedNetworkImageProvider for offline support
                           backgroundImage:
                               doctor['profile_picture_url'] != null &&
                                       doctor['profile_picture_url'].isNotEmpty
-                                  ? NetworkImage(doctor['profile_picture_url'])
+                                  ? CachedNetworkImageProvider(doctor['profile_picture_url'])
                                   : null,
                           child:
                               (doctor['profile_picture_url'] == null ||

@@ -57,7 +57,9 @@ Behavior highlights:
 - categorized global search,
 - doctor detail analytics increment flow,
 - modular clinic/map/navigation section,
-- route fetch with OSRM + edge-function fallback.
+- route fetch with OSRM + edge-function fallback,
+- nearest-first sorting when coordinates are available (`get_nearby_doctors` RPC with client-side Haversine fallback),
+- global search/live server-dependent fetches gated behind active network checks.
 
 ## 5. Appointments
 
@@ -78,7 +80,8 @@ Behavior highlights:
 - realtime appointment sync is owned by `AppointmentNotifier`,
 - pull-to-refresh + action sheet controls,
 - Action Required carousel combines pending review and complaint items,
-- review submission dialogs now use `AppTextField` and keyboard-safe layout composition.
+- review submission dialogs now use `AppTextField` and keyboard-safe layout composition,
+- offline write actions are queued in local storage and replayed automatically on reconnect via `NetworkNotifier`.
 
 ## 6. Medical Records
 
@@ -90,7 +93,9 @@ Key files:
 Behavior:
 - record list and add/edit flows,
 - attachment upload support,
-- record-for input now standardized on `AppTextField`.
+- record-for input now standardized on `AppTextField`,
+- Hive-backed record caching and dedicated offline queue (`medical_offline_queue`),
+- signed URL and physical upload operations are online-only with `AppFailureType.network` fallback.
 
 ## 7. Profile
 
@@ -103,7 +108,9 @@ Key files:
 Behavior:
 - profile display/edit,
 - saved patient relations,
-- location/timezone-related profile persistence.
+- location/timezone-related profile persistence,
+- Hive-backed profile/saved-patient caching and dedicated offline queue (`profile_offline_queue`),
+- profile image upload is online-only and safely blocked while offline.
 
 ## 8. Menu and Settings
 
@@ -144,4 +151,5 @@ Behavior:
 - `appointment_notification_service.dart`
 - `error_telemetry_service.dart`
 - security services under `core/security/`
-- offline/inactivity guards applied at app builder level (`app.dart`)
+- offline/inactivity guards applied at app builder level (`app.dart`),
+- `NetworkNotifier` global connectivity observer and offline-queue replay coordinator

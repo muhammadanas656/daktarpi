@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
+import '../../../../features/profile/presentation/profile_notifier.dart'; // PRO FIX: Added notifier
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../models/booking_route_args.dart';
@@ -213,7 +214,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     final userId = _profileRepo.currentUserId;
     if (userId != null) {
       try {
-        // 1. Fetch patients FIRST (this will be instant thanks to cache)
+        // 1. Fetch saved patients (fetches instantly if cached natively)
         final patients = await _profileRepo.getSavedPatients(userId);
 
         if (mounted) {
@@ -222,34 +223,34 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           });
         }
 
-        // 2. Fetch profile in the background
-        final profile = await _profileRepo.getProfile(userId);
-        final userEmail = _profileRepo.currentUserEmail;
+        // 2. Fetch the logged-in user's profile INSTANTLY from the Notifier
+        final notifier = ProfileNotifier.instance;
+        final profile = notifier.profile;
+        if (!notifier.isLoaded) {
+          await notifier.loadProfile();
+        }
 
         if (mounted && profile != null) {
-          _userProfileUrl = profile.profilePictureUrl;
-
           setState(() {
+            _userProfileUrl = profile.profilePictureUrl;
+
+            // Only auto-fill if "My Self" is currently selected.
+            // (If the user switched to a saved category during load, don't overwrite).
             if (_selectedCategoryName == "My Self") {
               _nameController.text = profile.fullName;
-              _phoneController.text =
-                  (profile.countryCode != null && profile.phoneNumber != null)
-                      ? '${profile.countryCode} ${profile.phoneNumber}'
-                      : (profile.phoneNumber ?? "");
-              _emailController.text = userEmail ?? "";
+              _phoneController.text = notifier.phoneNumber ?? "";
+              _emailController.text = _profileRepo.currentUserEmail ?? "";
 
               if (profile.dateOfBirth != null) {
                 _selectedDay = profile.dateOfBirth!.day.toString();
-                _selectedMonth = DateFormat(
-                  'MMMM',
-                ).format(profile.dateOfBirth!);
+                _selectedMonth = DateFormat('MMMM').format(profile.dateOfBirth!);
                 _selectedYear = profile.dateOfBirth!.year.toString();
               }
             }
           });
         }
       } catch (e) {
-        debugPrint("Error loading profile: $e");
+        debugPrint("Error loading profile details: $e");
       }
     }
   }
@@ -627,6 +628,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                                 ? Image.file(
                                                   File(savedImagePath),
                                                   fit: BoxFit.cover,
+                                                  gaplessPlayback: true,
+                                                  cacheWidth: 100, // PRO FIX: decode small
                                                 )
                                                 : Icon(
                                                   Icons.person_outline,
@@ -648,6 +651,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                               ? Image.file(
                                                 File(savedImagePath),
                                                 fit: BoxFit.cover,
+                                                gaplessPlayback: true,
+                                                cacheWidth: 100, // PRO FIX: decode small
                                               )
                                               : Icon(
                                                 Icons.person_outline,
@@ -666,6 +671,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                             ? Image.file(
                                               File(savedImagePath),
                                               fit: BoxFit.cover,
+                                              gaplessPlayback: true,
+                                              cacheWidth: 100, // PRO FIX: decode small
                                             )
                                             : Icon(
                                               Icons.person_outline,

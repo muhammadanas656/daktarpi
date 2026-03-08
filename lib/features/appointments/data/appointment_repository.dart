@@ -1,58 +1,177 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
 import '../../../core/errors/app_failure.dart';
+import '../../../core/network/network_notifier.dart';
 import 'appointment.dart';
 
 class AppointmentRepository {
   final SupabaseClient _client;
 
+  // Phase 2 & 3: Cache and Queue Boxes
+  static const String _cacheBoxName = 'appointment_cache';
+  static const String _queueBoxName = 'offline_actions_queue';
+  static const _cacheDuration = Duration(minutes: 60);
+
   AppointmentRepository({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
 
-  /// Returns the current user's ID, or null if not logged in.
   String? get currentUserId => _client.auth.currentUser?.id;
 
-  /// Fetches appointments for a specific user.
-  /// Returns a list of [Appointment] objects.
+  // ─── Phase 2: Hive Read Cache ──────────────────────────────────────────────
+
+  Future<Box> _getCacheBox() async {
+    if (Hive.isBoxOpen(_cacheBoxName)) return Hive.box(_cacheBoxName);
+    return await Hive.openBox(_cacheBoxName);
+  }
+
+  bool _isCacheValid(DateTime? lastFetch) {
+    if (lastFetch == null) return false;
+    return DateTime.now().difference(lastFetch) < _cacheDuration;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchWithCache({
+    required String cacheKey,
+    required Future<List<Map<String, dynamic>>> Function() fetcher,
+    bool forceRefresh = false,
+  }) async {
+    final box = await _getCacheBox();
+    final isOffline = NetworkNotifier.instance.isOffline;
+    final lastFetchKey = '${cacheKey}_time';
+
+    final cachedData = box.get(cacheKey);
+    final lastFetchStr = box.get(lastFetchKey);
+    DateTime? lastFetch =
+        lastFetchStr != null ? DateTime.tryParse(lastFetchStr) : null;
+
+    if (isOffline ||
+        (!forceRefresh && _isCacheValid(lastFetch) && cachedData != null)) {
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+      if (isOffline) return [];
+    }
+
+    try {
+      final data = await fetcher();
+      await box.put(cacheKey, jsonEncode(data));
+      await box.put(lastFetchKey, DateTime.now().toIso8601String());
+      return data;
+    } catch (e) {
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+      rethrow;
+    }
+  }
+
+  // ─── Phase 3: Offline Action Queue ─────────────────────────────────────────
+
+  Future<Box> _getQueueBox() async {
+    if (Hive.isBoxOpen(_queueBoxName)) return Hive.box(_queueBoxName);
+    return await Hive.openBox(_queueBoxName);
+  }
+
+  /// Silently queues an action for later synchronization
+  Future<void> _queueAction(
+    String actionType,
+    Map<String, dynamic> payload,
+  ) async {
+    final box = await _getQueueBox();
+    await box.add({
+      'action': actionType,
+      'payload': jsonEncode(payload),
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+    debugPrint('⚡ [Offline Queue] Action saved: $actionType');
+  }
+
+  /// Processes all pending offline actions when the internet is restored
+  Future<void> syncOfflineQueue() async {
+    if (NetworkNotifier.instance.isOffline) return;
+
+    final box = await _getQueueBox();
+    if (box.isEmpty) return;
+
+    debugPrint('🔄 [Sync] Processing ${box.length} offline actions...');
+    final keys = box.keys.toList();
+
+    for (var key in keys) {
+      final item = box.get(key);
+      if (item != null) {
+        try {
+          final action = item['action'];
+          final payload = jsonDecode(item['payload']);
+
+          switch (action) {
+            case 'create_appointment':
+              await _client.from('appointments').insert(payload);
+              break;
+            case 'cancel_appointment':
+              await _client
+                  .from('appointments')
+                  .delete()
+                  .eq('id', payload['id']);
+              break;
+            case 'complete_appointment':
+              await _client
+                  .from('appointments')
+                  .update({'status': 'completed'})
+                  .eq('id', payload['id']);
+              break;
+            case 'update_appointment':
+              await _client
+                  .from('appointments')
+                  .update(payload['data'])
+                  .eq('id', payload['id']);
+              break;
+            case 'submit_review':
+              await _client.from('reviews').insert(payload);
+              break;
+            case 'submit_complaint':
+              await _client.from('complaints').insert(payload);
+              break;
+          }
+          // Remove from queue upon success
+          await box.delete(key);
+          debugPrint('✅ [Sync] Action completed: $action');
+        } catch (e) {
+          debugPrint('❌ [Sync] Failed to process action: $e');
+          // Leave in queue for next sync attempt
+        }
+      }
+    }
+  }
+
+  // ─── Data Access & Mutations ───────────────────────────────────────────────
+
   Future<List<Appointment>> fetchAppointments(String userId) async {
     try {
-      final response = await _client
-          .from('appointments')
-          .select('''
-            id,
-            schedule_date,
-            start_time,
-            end_time,
-            status,
-            patient_name,
-            patient_phone,
-            patient_email,
-            patient_gender,
-            patient_dob,
-            doctor_id,
-            clinic_id,
-            doctors (
-              id,
-              full_name,
-              profile_picture_url,
-              specialties ( name ),
-              doctor_clinics ( clinic_id, max_wait_time )
-            ),
-            clinics (
-              id,
-              name,
-              address
-            )
-          ''')
-          .eq('user_id', userId)
-          .isFilter('deleted_at', null)
-          .inFilter('status', ['confirmed', 'waiting'])
-          .order('schedule_date', ascending: true);
+      final data = await _fetchWithCache(
+        cacheKey: 'appointments_$userId',
+        fetcher: () async {
+          final response = await _client
+              .from('appointments')
+              .select('''
+                id, schedule_date, start_time, end_time, status, patient_name,
+                patient_phone, patient_email, patient_gender, patient_dob,
+                doctor_id, clinic_id,
+                doctors ( id, full_name, profile_picture_url, specialties ( name ), doctor_clinics ( clinic_id, max_wait_time ) ),
+                clinics ( id, name, address )
+              ''')
+              .eq('user_id', userId)
+              .isFilter('deleted_at', null)
+              .inFilter('status', ['confirmed', 'waiting'])
+              .order('schedule_date', ascending: true);
+          return List<Map<String, dynamic>>.from(response);
+        },
+      );
 
-      final List<dynamic> data = response as List<dynamic>;
-      return data
-          .map((json) => Appointment.fromJson(json as Map<String, dynamic>))
-          .toList();
+      return data.map((json) => Appointment.fromJson(json)).toList();
     } catch (error) {
       throw AppFailure.fromError(
         error,
@@ -61,8 +180,12 @@ class AppointmentRepository {
     }
   }
 
-  /// Cancels an appointment by physically removing it from the active table.
   Future<void> cancelAppointment(int appointmentId) async {
+    if (NetworkNotifier.instance.isOffline) {
+      await _queueAction('cancel_appointment', {'id': appointmentId});
+      return;
+    }
+
     try {
       final response =
           await _client
@@ -70,7 +193,6 @@ class AppointmentRepository {
               .delete()
               .eq('id', appointmentId)
               .select();
-
       if (response.isEmpty) {
         throw const AppFailure(
           type: AppFailureType.backend,
@@ -82,14 +204,12 @@ class AppointmentRepository {
         );
       }
     } on PostgrestException catch (e) {
-      // Safely catch Supabase errors and provide a professional fallback.
       throw AppFailure.fromError(
         e,
         fallbackUserMessage:
             'Unable to cancel this appointment right now. Please try again.',
       );
     } catch (error) {
-      // Safely catch general errors.
       throw AppFailure.fromError(
         error,
         fallbackUserMessage:
@@ -98,8 +218,11 @@ class AppointmentRepository {
     }
   }
 
-  /// Marks an appointment as completed.
   Future<void> completeAppointment(int appointmentId) async {
+    if (NetworkNotifier.instance.isOffline) {
+      await _queueAction('complete_appointment', {'id': appointmentId});
+      return;
+    }
     try {
       await _client
           .from('appointments')
@@ -119,6 +242,14 @@ class AppointmentRepository {
     required String date,
     int? excludeAppointmentId,
   }) async {
+    if (NetworkNotifier.instance.isOffline) {
+      throw const AppFailure(
+        type: AppFailureType.network,
+        userMessage:
+            'Cannot check live slots while offline. Please connect to the internet.',
+        technicalMessage: 'offline',
+      );
+    }
     try {
       var query = _client
           .from('appointments')
@@ -134,9 +265,7 @@ class AppointmentRepository {
       }
 
       final response = await query;
-
-      final List<dynamic> data = response as List<dynamic>;
-      return data.map((record) {
+      return List<dynamic>.from(response).map((record) {
         final start = record['start_time'].toString().substring(0, 5);
         final end = record['end_time'].toString().substring(0, 5);
         return "$start - $end";
@@ -150,6 +279,12 @@ class AppointmentRepository {
   }
 
   Future<int> createAppointment(Map<String, dynamic> appointmentData) async {
+    if (NetworkNotifier.instance.isOffline) {
+      await _queueAction('create_appointment', appointmentData);
+      // Return a temporary negative ID so the UI can proceed optimistically
+      return -DateTime.now().millisecondsSinceEpoch.remainder(100000);
+    }
+
     try {
       final inserted =
           await _client
@@ -157,23 +292,19 @@ class AppointmentRepository {
               .insert(appointmentData)
               .select('id')
               .single();
-
       final idValue = inserted['id'];
-      if (idValue is int) {
-        return idValue;
-      }
+
+      if (idValue is int) return idValue;
 
       final parsed = int.tryParse(idValue.toString());
       if (parsed == null) {
         throw const AppFailure(
           type: AppFailureType.backend,
           userMessage: 'Booking created but appointment ID could not be read.',
-          technicalMessage:
-              'appointments.insert returned an invalid/non-numeric id.',
+          technicalMessage: 'appointments.insert returned an invalid id.',
           code: 'invalid_appointment_id',
         );
       }
-
       return parsed;
     } on PostgrestException catch (error) {
       final details =
@@ -184,8 +315,7 @@ class AppointmentRepository {
           type: AppFailureType.validation,
           userMessage:
               'This booking request was already submitted. Please wait for confirmation.',
-          technicalMessage:
-              'Duplicate idempotency key detected while creating appointment.',
+          technicalMessage: 'Duplicate idempotency key detected.',
           code: 'duplicate_idempotency_key',
         );
       }
@@ -205,6 +335,13 @@ class AppointmentRepository {
     int appointmentId,
     Map<String, dynamic> appointmentData,
   ) async {
+    if (NetworkNotifier.instance.isOffline) {
+      await _queueAction('update_appointment', {
+        'id': appointmentId,
+        'data': appointmentData,
+      });
+      return;
+    }
     try {
       await _client
           .from('appointments')
@@ -217,6 +354,187 @@ class AppointmentRepository {
       );
     }
   }
+
+  Future<void> submitReview({
+    required int appointmentId,
+    required int doctorId,
+    required int rating,
+    String? comment,
+  }) async {
+    final userId = currentUserId;
+    if (userId == null) throw Exception("User not logged in.");
+
+    final payload = {
+      'appointment_id': appointmentId,
+      'doctor_id': doctorId,
+      'user_id': userId,
+      'rating': rating,
+      'comment': comment,
+    };
+
+    if (NetworkNotifier.instance.isOffline) {
+      await _queueAction('submit_review', payload);
+      return;
+    }
+
+    try {
+      await _client.from('reviews').insert(payload);
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        throw AppFailure.fromError(
+          e,
+          fallbackUserMessage: 'You have already reviewed this appointment.',
+        );
+      }
+      throw AppFailure.fromError(
+        e,
+        fallbackUserMessage: 'Unable to submit review right now.',
+      );
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to submit review right now.',
+      );
+    }
+  }
+
+  Future<void> submitComplaint({
+    required int appointmentId,
+    required int doctorId,
+    required String description,
+    required String recipient,
+  }) async {
+    final userId = currentUserId;
+    if (userId == null) throw Exception("User not logged in.");
+
+    final payload = {
+      'user_id': userId,
+      'appointment_id': appointmentId,
+      'doctor_id': doctorId,
+      'description': description,
+      'recipient': recipient,
+    };
+
+    if (NetworkNotifier.instance.isOffline) {
+      await _queueAction('submit_complaint', payload);
+      return;
+    }
+
+    try {
+      await _client.from('complaints').insert(payload);
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage:
+            'Unable to submit your complaint right now. Please try again.',
+      );
+    }
+  }
+
+  // ─── Read-Only Fallbacks ───────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> fetchActivityLog(String userId) async {
+    try {
+      final historyList = await _fetchWithCache(
+        cacheKey: 'activity_log_$userId',
+        fetcher: () async {
+          final response = await _client
+              .from('appointment_history')
+              .select(
+                '*, doctors ( full_name, profile_picture_url ), clinics ( name )',
+              )
+              .eq('user_id', userId)
+              .order('archived_at', ascending: false);
+          return List<Map<String, dynamic>>.from(response);
+        },
+      );
+
+      if (NetworkNotifier.instance.isOffline) return historyList;
+
+      final reviewsResponse = await _client
+          .from('reviews')
+          .select('appointment_id')
+          .eq('user_id', userId);
+      final complaintsResponse = await _client
+          .from('complaints')
+          .select('appointment_id')
+          .eq('user_id', userId);
+
+      final reviewedIds =
+          reviewsResponse.map((r) => r['appointment_id']).toSet();
+      final complainedIds =
+          complaintsResponse.map((c) => c['appointment_id']).toSet();
+
+      for (var item in historyList) {
+        item['has_review'] = reviewedIds.contains(item['id']);
+        item['has_complaint'] = complainedIds.contains(item['id']);
+      }
+      return historyList;
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to load activity log right now.',
+      );
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPendingReviews(String userId) async {
+    try {
+      final data = await _fetchWithCache(
+        cacheKey: 'pending_reviews_$userId',
+        fetcher: () async {
+          final response = await _client
+              .from('appointments')
+              .select(
+                '*, doctors ( id, full_name, profile_picture_url, specialties ( name ) ), clinics ( id, name ), reviews ( id ) ',
+              )
+              .eq('user_id', userId)
+              .eq('status', 'completed')
+              .isFilter('deleted_at', null)
+              .order('schedule_date', ascending: false);
+          return List<Map<String, dynamic>>.from(response);
+        },
+      );
+      return data.where((appt) {
+        final reviews = appt['reviews'];
+        if (reviews is List) return reviews.isEmpty;
+        return reviews == null;
+      }).toList();
+    } catch (error) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPendingComplaints(
+    String userId,
+  ) async {
+    try {
+      final data = await _fetchWithCache(
+        cacheKey: 'pending_complaints_$userId',
+        fetcher: () async {
+          final response = await _client
+              .from('appointments')
+              .select(
+                '*, doctors ( id, full_name, profile_picture_url, specialties ( name ) ), clinics ( id, name ), complaints ( id ) ',
+              )
+              .eq('user_id', userId)
+              .eq('status', 'missed')
+              .isFilter('deleted_at', null)
+              .order('schedule_date', ascending: false);
+          return List<Map<String, dynamic>>.from(response);
+        },
+      );
+      return data.where((appt) {
+        final complaints = appt['complaints'];
+        if (complaints is List) return complaints.isEmpty;
+        return complaints == null;
+      }).toList();
+    } catch (error) {
+      return [];
+    }
+  }
+
+  // ─── Realtime ─────────────────────────────────────────────────────────────
 
   RealtimeChannel subscribeToAppointments({
     required String userId,
@@ -238,7 +556,6 @@ class AppointmentRepository {
         .subscribe();
   }
 
-  /// Removes a realtime channel subscription.
   Future<void> removeChannel(RealtimeChannel channel) async {
     try {
       await _client.removeChannel(channel);
@@ -247,184 +564,6 @@ class AppointmentRepository {
         error,
         fallbackUserMessage: 'Unable to refresh realtime updates right now.',
       );
-    }
-  }
-
-  /// Fetches the exhaustive audit log of all appointment actions and checks review status.
-  /// Fetches the exhaustive audit log of all appointment actions and checks review/complaint status.
-  Future<List<Map<String, dynamic>>> fetchActivityLog(String userId) async {
-    try {
-      // 1. Fetch the history log
-      final response = await _client
-          .from('appointment_history')
-          .select('''
-            *,
-            doctors ( full_name, profile_picture_url ),
-            clinics ( name )
-          ''')
-          .eq('user_id', userId)
-          .order('archived_at', ascending: false);
-
-      final historyList = List<Map<String, dynamic>>.from(response);
-
-      // 2. Fetch all reviews and complaints for fast lookup
-      final reviewsResponse = await _client
-          .from('reviews')
-          .select('appointment_id')
-          .eq('user_id', userId);
-
-      final complaintsResponse = await _client
-          .from('complaints')
-          .select('appointment_id')
-          .eq('user_id', userId);
-
-      final reviewedIds =
-          reviewsResponse.map((r) => r['appointment_id']).toSet();
-      final complainedIds =
-          complaintsResponse.map((c) => c['appointment_id']).toSet();
-
-      // 3. Inject flags into each history item
-      for (var item in historyList) {
-        item['has_review'] = reviewedIds.contains(item['id']);
-        item['has_complaint'] = complainedIds.contains(item['id']);
-      }
-
-      return historyList;
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load activity log right now.',
-      );
-    }
-  }
-
-  /// Submits a review for a completed appointment.
-  Future<void> submitReview({
-    required int appointmentId,
-    required int doctorId,
-    required int rating,
-    String? comment,
-  }) async {
-    try {
-      final userId = currentUserId;
-      if (userId == null) throw Exception("User not logged in.");
-
-      await _client.from('reviews').insert({
-        'appointment_id':
-            appointmentId, // This is the unique key to prevent double reviews
-        'doctor_id': doctorId,
-        'user_id': userId,
-        'rating': rating,
-        'comment': comment,
-      });
-    } on PostgrestException catch (e) {
-      if (e.code == '23505') {
-        // Postgres code for Unique Constraint Violation
-        throw AppFailure.fromError(
-          e,
-          fallbackUserMessage: 'You have already reviewed this appointment.',
-        );
-      }
-      throw AppFailure.fromError(
-        e,
-        fallbackUserMessage: 'Unable to submit review right now.',
-      );
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to submit review right now.',
-      );
-    }
-  }
-
-  /// Fetches completed appointments that have NOT been reviewed yet.
-  Future<List<Map<String, dynamic>>> fetchPendingReviews(String userId) async {
-    try {
-      // Query appointments joined with reviews
-      final response = await _client
-          .from('appointments')
-          .select('''
-            *,
-            doctors ( id, full_name, profile_picture_url, specialties ( name ) ),
-            clinics ( id, name ),
-            reviews ( id ) 
-          ''')
-          .eq('user_id', userId)
-          .eq('status', 'completed')
-          .isFilter('deleted_at', null)
-          .order('schedule_date', ascending: false);
-
-      final List<dynamic> data = response as List<dynamic>;
-
-      // Filter out any appointments where the 'reviews' array is not empty
-      return data.map((e) => e as Map<String, dynamic>).where((appt) {
-        final reviews = appt['reviews'];
-        if (reviews is List) return reviews.isEmpty;
-        return reviews == null;
-      }).toList();
-    } catch (error) {
-      debugPrint("Fetch pending reviews error: $error");
-      return []; // Return empty so the UI gracefully hides the carousel on error
-    }
-  }
-
-  /// Submits a complaint for a missed appointment.
-  /// [recipient] must be either 'support' or 'doctor'.
-  Future<void> submitComplaint({
-    required int appointmentId,
-    required int doctorId,
-    required String description,
-    required String recipient,
-  }) async {
-    try {
-      final userId = currentUserId;
-      if (userId == null) throw Exception("User not logged in.");
-
-      await _client.from('complaints').insert({
-        'user_id': userId,
-        'appointment_id': appointmentId,
-        'doctor_id': doctorId,
-        'description': description,
-        'recipient': recipient,
-      });
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage:
-            'Unable to submit your complaint right now. Please try again.',
-      );
-    }
-  }
-
-  /// Fetches missed appointments that have NOT had a complaint filed yet.
-  Future<List<Map<String, dynamic>>> fetchPendingComplaints(
-    String userId,
-  ) async {
-    try {
-      final response = await _client
-          .from('appointments')
-          .select('''
-            *,
-            doctors ( id, full_name, profile_picture_url, specialties ( name ) ),
-            clinics ( id, name ),
-            complaints ( id ) 
-          ''')
-          .eq('user_id', userId)
-          .eq('status', 'missed')
-          .isFilter('deleted_at', null)
-          .order('schedule_date', ascending: false);
-
-      final List<dynamic> data = response as List<dynamic>;
-
-      // Filter out any appointments where the 'complaints' array is not empty
-      return data.map((e) => e as Map<String, dynamic>).where((appt) {
-        final complaints = appt['complaints'];
-        if (complaints is List) return complaints.isEmpty;
-        return complaints == null;
-      }).toList();
-    } catch (error) {
-      debugPrint("Fetch pending complaints error: $error");
-      return [];
     }
   }
 }

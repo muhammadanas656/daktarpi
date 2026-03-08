@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
+import '../../core/theme/app_styles.dart';
 
 class SocialButton extends StatelessWidget {
   final String label;
@@ -29,16 +30,7 @@ class SocialButton extends StatelessWidget {
         borderRadius: AppShapes.lg,
         // PRO FIX: Subtle border in dark mode, soft shadow in light mode
         border: isDark ? Border.all(color: const Color(0xFF2A3441)) : null,
-        boxShadow:
-            isDark
-                ? []
-                : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
+        boxShadow: AppStyles.cardShadow(context),
       ),
       child: Material(
         color: Colors.transparent,

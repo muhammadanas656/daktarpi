@@ -3,10 +3,12 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 import 'core/constants/app_routes.dart';
+import 'core/network/network_notifier.dart';
 import 'core/router/app_router.dart';
 import 'core/security/device_integrity_service.dart';
 import 'core/services/appointment_notification_service.dart';
@@ -17,6 +19,7 @@ import 'features/settings/presentation/settings_notifier.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+  await Hive.initFlutter();
 
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
@@ -25,6 +28,7 @@ Future<void> main() async {
 
   await SettingsNotifier.instance.loadSettings();
   await AppointmentNotificationService.instance.initialize();
+  NetworkNotifier.instance.initialize();
   final deviceCompromised = await DeviceIntegrityService().enforceOnStartup();
 
   final telemetryService = ErrorTelemetryService();

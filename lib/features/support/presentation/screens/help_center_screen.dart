@@ -179,16 +179,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
             padding: EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              boxShadow:
-                  Theme.of(context).brightness == Brightness.dark
-                      ? []
-                      : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: Offset(0, -4),
-                        ),
-                      ],
+              boxShadow: AppStyles.cardShadow(context),
             ),
             child: SafeArea(
               child: SizedBox(

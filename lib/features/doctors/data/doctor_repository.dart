@@ -1,36 +1,83 @@
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
-import '../../../core/errors/app_failure.dart';
-import 'doctor.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+
+import '../../../core/errors/app_failure.dart';
+import '../../../core/network/network_notifier.dart';
+import 'doctor.dart';
 
 class DoctorRepository {
   final SupabaseClient _client;
+  static const String _boxName = 'doctor_cache';
+  static const _cacheDuration = Duration(minutes: 60);
 
   DoctorRepository({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
 
-  // â”€â”€â”€ Caching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Smart Hive Caching Engine ─────────────────────────────────────────────
 
-  List<Map<String, dynamic>> _cachedSpecialties = [];
-  DateTime? _lastSpecialtiesFetch;
-
-  List<Map<String, dynamic>> _cachedPopularDoctors = [];
-  DateTime? _lastPopularDoctorsFetch;
-  String? _lastPopularDoctorsCountryIso;
-
-  List<Map<String, dynamic>> _cachedFeaturedDoctors = [];
-  DateTime? _lastFeaturedDoctorsFetch;
-  String? _lastFeaturedDoctorsCountryIso;
-
-  static const _cacheDuration = Duration(minutes: 5);
+  Future<Box> _getCacheBox() async {
+    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+    return await Hive.openBox(_boxName);
+  }
 
   bool _isCacheValid(DateTime? lastFetch) {
     if (lastFetch == null) return false;
     return DateTime.now().difference(lastFetch) < _cacheDuration;
   }
 
-  // â”€â”€â”€ Single Doctor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<List<Map<String, dynamic>>> _fetchWithCache({
+    String? cacheKey,
+    required Future<List<Map<String, dynamic>>> Function() fetcher,
+    bool forceRefresh = false,
+  }) async {
+    if (cacheKey == null) {
+      if (NetworkNotifier.instance.isOffline) {
+        throw const AppFailure(
+          type: AppFailureType.network,
+          userMessage:
+              'You are offline. Please connect to the internet to search.',
+          technicalMessage: 'offline',
+        );
+      }
+      return await fetcher();
+    }
+
+    final box = await _getCacheBox();
+    final isOffline = NetworkNotifier.instance.isOffline;
+    final lastFetchKey = '${cacheKey}_time';
+
+    final cachedData = box.get(cacheKey);
+    final lastFetchStr = box.get(lastFetchKey);
+    DateTime? lastFetch =
+        lastFetchStr != null ? DateTime.tryParse(lastFetchStr) : null;
+
+    if (isOffline ||
+        (!forceRefresh && _isCacheValid(lastFetch) && cachedData != null)) {
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+      if (isOffline) return [];
+    }
+
+    try {
+      final data = await fetcher();
+      await box.put(cacheKey, jsonEncode(data));
+      await box.put(lastFetchKey, DateTime.now().toIso8601String());
+      return data;
+    } catch (e) {
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+      rethrow;
+    }
+  }
+
+  // ─── Single Doctor ─────────────────────────────────────────────────────────
 
   Future<Doctor> fetchDoctorDetails(String doctorId) async {
     try {
@@ -41,7 +88,6 @@ class DoctorRepository {
               .select('*, specialties(name)')
               .eq('id', idParam)
               .single();
-
       return Doctor.fromJson(response);
     } catch (error) {
       throw AppFailure.fromError(
@@ -51,17 +97,13 @@ class DoctorRepository {
     }
   }
 
-  // --- Analytics ---
-
-  /// Atomically increments the view count with a 24-hour cooldown via Supabase RPC.
   Future<void> incrementDoctorViewCount(String doctorId) async {
+    if (NetworkNotifier.instance.isOffline) return;
     final userId = currentUserId;
     if (userId == null) return;
-
     try {
       final idParam = int.tryParse(doctorId);
       if (idParam == null) return;
-
       await _client.rpc(
         'increment_doctor_views_smart',
         params: {'doc_id': idParam, 'v_user_id': userId},
@@ -71,9 +113,8 @@ class DoctorRepository {
     }
   }
 
-  // â”€â”€â”€ Doctor Lists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Doctor Lists ──────────────────────────────────────────────────────────
 
-  /// Fetches all doctors with optional search and sort.
   Future<List<Map<String, dynamic>>> fetchAllDoctors({
     String? query,
     String sortBy = 'rating',
@@ -83,56 +124,46 @@ class DoctorRepository {
     String? userLocation,
     String? countryIso,
   }) async {
-    try {
-      // 1. Fetch doctors AND their clinics to get location data
-      var dbQuery = _client.from('doctors').select('''
-        *, 
-        specialties(name),
-        doctor_clinics(
-          clinics(latitude, longitude)
-        )
-      ''');
+    final isSearch = query != null && query.isNotEmpty;
+    final cacheKey =
+        (isSearch || userLat != null) ? null : 'all_doctors_$countryIso';
 
-      if (query != null && query.isNotEmpty) {
-        dbQuery = dbQuery.ilike('full_name', '%$query%');
-      }
+    return _fetchWithCache(
+      cacheKey: cacheKey,
+      fetcher: () async {
+        var dbQuery = _client
+            .from('doctors')
+            .select(
+              '*, specialties(name), doctor_clinics(clinics(latitude, longitude))',
+            );
+        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-      if (countryIso != null && countryIso.isNotEmpty) {
-        dbQuery = dbQuery.eq('country_iso', countryIso);
-      } else if (userLocation != null && userLocation.isNotEmpty) {
-        dbQuery = dbQuery.eq('location', userLocation);
-      }
+        // PRO FIX: Wrapped if statement in curly braces
+        if (countryIso != null && countryIso.isNotEmpty) {
+          dbQuery = dbQuery.eq('country_iso', countryIso);
+        } else if (userLocation != null && userLocation.isNotEmpty) {
+          dbQuery = dbQuery.eq('location', userLocation);
+        }
 
-      // If sorting by distance, we fetch generic list first, then sort in Dart.
-      // Otherwise, we let Supabase sort.
-      final isSortingByDistance = userLat != null && userLng != null;
-
-      if (!isSortingByDistance) {
-        // Standard DB Sort
-        final response = await dbQuery.order(sortBy, ascending: ascending);
-        return List<Map<String, dynamic>>.from(response);
-      } else {
-        // Nearest Filter: Fetch unsorted, then sort by distance client-side
-        final response = await dbQuery;
-        var data = List<Map<String, dynamic>>.from(response);
-
-        data.sort((a, b) {
-          final distA = _getMinDistance(a, userLat, userLng);
-          final distB = _getMinDistance(b, userLat, userLng);
-          return distA.compareTo(distB);
-        });
-
-        return data;
-      }
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load doctors right now.',
-      );
-    }
+        if (userLat == null || userLng == null) {
+          final response = await dbQuery.order(sortBy, ascending: ascending);
+          return List<Map<String, dynamic>>.from(response);
+        } else {
+          final response = await dbQuery;
+          var data = List<Map<String, dynamic>>.from(response);
+          data.sort(
+            (a, b) => _getMinDistance(
+              a,
+              userLat,
+              userLng,
+            ).compareTo(_getMinDistance(b, userLat, userLng)),
+          );
+          return data;
+        }
+      },
+    );
   }
 
-  /// Helper to find the nearest clinic distance for a doctor
   double _getMinDistance(
     Map<String, dynamic> doctor,
     double userLat,
@@ -140,34 +171,24 @@ class DoctorRepository {
   ) {
     final clinicsJunction = doctor['doctor_clinics'] as List<dynamic>? ?? [];
     if (clinicsJunction.isEmpty) return double.maxFinite;
-
     double minParamsDiff = double.maxFinite;
-
     for (var junction in clinicsJunction) {
       final clinic = junction['clinics'];
       if (clinic != null &&
           clinic['latitude'] != null &&
           clinic['longitude'] != null) {
-        final double lat = (clinic['latitude'] as num).toDouble();
-        final double lng = (clinic['longitude'] as num).toDouble();
-
-        final double distanceInMeters = Geolocator.distanceBetween(
+        final dist = Geolocator.distanceBetween(
           userLat,
           userLng,
-          lat,
-          lng,
+          (clinic['latitude'] as num).toDouble(),
+          (clinic['longitude'] as num).toDouble(),
         );
-
-        if (distanceInMeters < minParamsDiff) {
-          minParamsDiff = distanceInMeters;
-        }
+        if (dist < minParamsDiff) minParamsDiff = dist;
       }
     }
     return minParamsDiff;
   }
 
-  /// Global search across doctor name and specialty name (and clinic name locally).
-  /// Results can be sorted by distance if userLat and userLng are provided.
   Future<List<Map<String, dynamic>>> fetchGlobalSearch({
     required String query,
     double? userLat,
@@ -175,41 +196,43 @@ class DoctorRepository {
     String? userLocation,
     String? countryIso,
   }) async {
+    if (NetworkNotifier.instance.isOffline)
+      throw const AppFailure(
+        type: AppFailureType.network,
+        userMessage: 'Global Search is an online-only feature.',
+        technicalMessage: 'offline',
+      );
     try {
-      // !inner on specialties allows us to search by specialty name
       var dbQuery = _client
           .from('doctors')
           .select(
             '*, specialties!inner(name), doctor_clinics(clinics(name, latitude, longitude))',
           );
-
-      if (query.isNotEmpty) {
+      if (query.isNotEmpty)
         dbQuery = dbQuery.or(
           'full_name.ilike.%$query%,specialties.name.ilike.%$query%,doctor_clinics.clinics.name.ilike.%$query%',
         );
-      }
 
+      // PRO FIX: Wrapped if statement in curly braces
       if (countryIso != null && countryIso.isNotEmpty) {
         dbQuery = dbQuery.eq('country_iso', countryIso);
       } else if (userLocation != null && userLocation.isNotEmpty) {
         dbQuery = dbQuery.eq('location', userLocation);
       }
 
-      final isSortingByDistance = userLat != null && userLng != null;
-
-      if (!isSortingByDistance) {
+      if (userLat == null || userLng == null) {
         final response = await dbQuery.order('rating', ascending: false);
         return List<Map<String, dynamic>>.from(response);
       } else {
         final response = await dbQuery;
         var data = List<Map<String, dynamic>>.from(response);
-
-        data.sort((a, b) {
-          final distA = _getMinDistance(a, userLat, userLng);
-          final distB = _getMinDistance(b, userLat, userLng);
-          return distA.compareTo(distB);
-        });
-
+        data.sort(
+          (a, b) => _getMinDistance(
+            a,
+            userLat,
+            userLng,
+          ).compareTo(_getMinDistance(b, userLat, userLng)),
+        );
         return data;
       }
     } catch (error) {
@@ -220,26 +243,23 @@ class DoctorRepository {
     }
   }
 
-  /// Fetches lightweight hints for the progressive search dropdown.
   Future<Map<String, List<Map<String, dynamic>>>> fetchSearchHints({
     required String query,
   }) async {
+    if (NetworkNotifier.instance.isOffline)
+      return {'doctors': [], 'clinics': []};
     try {
-      // Use RPC or separate queries for speed. Here we use parallel queries for clinics and doctors.
       final doctorFuture = _client
           .from('doctors')
           .select('id, full_name, profile_picture_url, specialties!inner(name)')
           .ilike('full_name', '%$query%')
           .limit(3);
-
       final clinicFuture = _client
           .from('clinics')
           .select('id, name, address')
           .ilike('name', '%$query%')
           .limit(2);
-
       final results = await Future.wait([doctorFuture, clinicFuture]);
-
       return {
         'doctors': List<Map<String, dynamic>>.from(results[0]),
         'clinics': List<Map<String, dynamic>>.from(results[1]),
@@ -249,8 +269,6 @@ class DoctorRepository {
     }
   }
 
-  /// Fetches popular doctors (is_popular = true).
-  /// Uses in-memory cache if available and [forceRefresh] is false.
   Future<List<Map<String, dynamic>>> fetchPopularDoctors({
     String? query,
     int? limit,
@@ -258,63 +276,31 @@ class DoctorRepository {
     String? userLocation,
     String? countryIso,
   }) async {
-    // Return cached if valid and no query (queries override cache for simplicity)
-    if (!forceRefresh &&
-        query == null &&
-        userLocation == null &&
-        countryIso == _lastPopularDoctorsCountryIso &&
-        _isCacheValid(_lastPopularDoctorsFetch) &&
-        _cachedPopularDoctors.isNotEmpty) {
-      if (limit != null) return _cachedPopularDoctors.take(limit).toList();
-      return _cachedPopularDoctors;
-    }
+    final isSearch = query != null && query.isNotEmpty;
+    final data = await _fetchWithCache(
+      cacheKey: isSearch ? null : 'popular_doctors_$countryIso',
+      forceRefresh: forceRefresh,
+      fetcher: () async {
+        var dbQuery = _client
+            .from('doctors')
+            .select('*, specialties(name)')
+            .eq('is_popular', true);
+        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-    try {
-      var dbQuery = _client
-          .from('doctors')
-          .select('*, specialties(name)')
-          .eq('is_popular', true);
+        // PRO FIX: Wrapped if statement in curly braces
+        if (countryIso != null && countryIso.isNotEmpty) {
+          dbQuery = dbQuery.eq('country_iso', countryIso);
+        } else if (userLocation != null && userLocation.isNotEmpty) {
+          dbQuery = dbQuery.eq('location', userLocation);
+        }
 
-      if (query != null && query.isNotEmpty) {
-        dbQuery = dbQuery.ilike('full_name', '%$query%');
-      }
-
-      if (countryIso != null && countryIso.isNotEmpty) {
-        dbQuery = dbQuery.eq('country_iso', countryIso);
-      } else if (userLocation != null && userLocation.isNotEmpty) {
-        dbQuery = dbQuery.eq('location', userLocation);
-      }
-
-      // Order by rating descending
-      var finalQuery = dbQuery.order('rating', ascending: false);
-
-      // If caching, fetch ALL popular items to cache them, then limit locally if needed.
-      // If strict limit requested without cache concern, we could limit DB query.
-      // Strategy: Fetch all popular (usually small set) to cache, then return slice.
-
-      final response = await finalQuery;
-      final data = List<Map<String, dynamic>>.from(response);
-
-      if (query == null && userLocation == null) {
-        _cachedPopularDoctors = data;
-        _lastPopularDoctorsFetch = DateTime.now();
-        _lastPopularDoctorsCountryIso = countryIso;
-      }
-
-      if (limit != null) {
-        return data.take(limit).toList();
-      }
-      return data;
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load popular doctors right now.',
-      );
-    }
+        final response = await dbQuery.order('rating', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      },
+    );
+    return limit != null ? data.take(limit).toList() : data;
   }
 
-  /// Fetches featured doctors (is_featured = true).
-  /// Uses in-memory cache if available and [forceRefresh] is false.
   Future<List<Map<String, dynamic>>> fetchFeaturedDoctors({
     String? query,
     int? limit,
@@ -322,257 +308,172 @@ class DoctorRepository {
     String? userLocation,
     String? countryIso,
   }) async {
-    if (!forceRefresh &&
-        query == null &&
-        userLocation == null &&
-        countryIso == _lastFeaturedDoctorsCountryIso &&
-        _isCacheValid(_lastFeaturedDoctorsFetch) &&
-        _cachedFeaturedDoctors.isNotEmpty) {
-      if (limit != null) return _cachedFeaturedDoctors.take(limit).toList();
-      return _cachedFeaturedDoctors;
-    }
+    final isSearch = query != null && query.isNotEmpty;
+    final data = await _fetchWithCache(
+      cacheKey: isSearch ? null : 'featured_doctors_$countryIso',
+      forceRefresh: forceRefresh,
+      fetcher: () async {
+        var dbQuery = _client
+            .from('doctors')
+            .select('*, specialties(name)')
+            .eq('is_featured', true);
+        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-    try {
-      var dbQuery = _client
-          .from('doctors')
-          .select('*, specialties(name)')
-          .eq('is_featured', true);
+        // PRO FIX: Wrapped if statement in curly braces
+        if (countryIso != null && countryIso.isNotEmpty) {
+          dbQuery = dbQuery.eq('country_iso', countryIso);
+        } else if (userLocation != null && userLocation.isNotEmpty) {
+          dbQuery = dbQuery.eq('location', userLocation);
+        }
 
-      if (query != null && query.isNotEmpty) {
-        dbQuery = dbQuery.ilike('full_name', '%$query%');
-      }
-
-      if (countryIso != null && countryIso.isNotEmpty) {
-        dbQuery = dbQuery.eq('country_iso', countryIso);
-      } else if (userLocation != null && userLocation.isNotEmpty) {
-        dbQuery = dbQuery.eq('location', userLocation);
-      }
-
-      var finalQuery = dbQuery.order('rating', ascending: false);
-
-      final response = await finalQuery;
-      final data = List<Map<String, dynamic>>.from(response);
-
-      if (query == null && userLocation == null) {
-        _cachedFeaturedDoctors = data;
-        _lastFeaturedDoctorsFetch = DateTime.now();
-        _lastFeaturedDoctorsCountryIso = countryIso;
-      }
-
-      if (limit != null) {
-        return data.take(limit).toList();
-      }
-      return data;
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load featured doctors right now.',
-      );
-    }
+        final response = await dbQuery.order('rating', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      },
+    );
+    return limit != null ? data.take(limit).toList() : data;
   }
 
-  /// Fetches doctors by specialty ID.
   Future<List<Map<String, dynamic>>> fetchDoctorsBySpecialty(
     String specialtyId, {
     String? query,
     String? userLocation,
     String? countryIso,
   }) async {
-    try {
-      var dbQuery = _client
-          .from('doctors')
-          .select('*, specialties(name)')
-          .eq('specialty_id', specialtyId);
+    final isSearch = query != null && query.isNotEmpty;
+    return _fetchWithCache(
+      cacheKey: isSearch ? null : 'specialty_${specialtyId}_$countryIso',
+      fetcher: () async {
+        var dbQuery = _client
+            .from('doctors')
+            .select('*, specialties(name)')
+            .eq('specialty_id', specialtyId);
+        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-      if (query != null && query.isNotEmpty) {
-        dbQuery = dbQuery.ilike('full_name', '%$query%');
-      }
+        // PRO FIX: Wrapped if statement in curly braces
+        if (countryIso != null && countryIso.isNotEmpty) {
+          dbQuery = dbQuery.eq('country_iso', countryIso);
+        } else if (userLocation != null && userLocation.isNotEmpty) {
+          dbQuery = dbQuery.eq('location', userLocation);
+        }
 
-      if (countryIso != null && countryIso.isNotEmpty) {
-        dbQuery = dbQuery.eq('country_iso', countryIso);
-      } else if (userLocation != null && userLocation.isNotEmpty) {
-        dbQuery = dbQuery.eq('location', userLocation);
-      }
-
-      final response = await dbQuery.order('rating', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load specialty doctors right now.',
-      );
-    }
+        final response = await dbQuery.order('rating', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      },
+    );
   }
+  // ─── Specialties ───────────────────────────────────────────────────────────
 
-  // â”€â”€â”€ Specialties â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  /// Fetches doctors by clinic ID.
   Future<List<Map<String, dynamic>>> fetchDoctorsByClinic(
     int clinicId, {
     String? query,
   }) async {
-    try {
-      var dbQuery = _client
-          .from('doctors')
-          .select('*, specialties(name), doctor_clinics!inner(*)')
-          .eq('doctor_clinics.clinic_id', clinicId);
-
-      if (query != null && query.isNotEmpty) {
-        dbQuery = dbQuery.ilike('full_name', '%$query%');
-      }
-
-      final response = await dbQuery;
-
-      return List<Map<String, dynamic>>.from(response);
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage:
-            'Unable to load doctors for this clinic right now.',
-      );
-    }
+    final isSearch = query != null && query.isNotEmpty;
+    return _fetchWithCache(
+      cacheKey: isSearch ? null : 'clinic_$clinicId',
+      fetcher: () async {
+        var dbQuery = _client
+            .from('doctors')
+            .select('*, specialties(name), doctor_clinics!inner(*)')
+            .eq('doctor_clinics.clinic_id', clinicId);
+        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
+        final response = await dbQuery;
+        return List<Map<String, dynamic>>.from(response);
+      },
+    );
   }
 
-  /// Fetches the list of specialties for the home screen.
-  /// Uses in-memory cache if available and [forceRefresh] is false.
   Future<List<Map<String, dynamic>>> fetchSpecialties({
     int limit = 10,
     bool forceRefresh = false,
   }) async {
-    if (!forceRefresh &&
-        _isCacheValid(_lastSpecialtiesFetch) &&
-        _cachedSpecialties.isNotEmpty) {
-      return _cachedSpecialties.take(limit).toList();
-    }
-
-    try {
-      // Fetch all (or reasonable max) to cache, then limit return
-      final response = await _client.from('specialties').select();
-      final data = List<Map<String, dynamic>>.from(response);
-
-      _cachedSpecialties = data;
-      _lastSpecialtiesFetch = DateTime.now();
-
-      return data.take(limit).toList();
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load specialties right now.',
-      );
-    }
+    final data = await _fetchWithCache(
+      cacheKey: 'specialties_list',
+      forceRefresh: forceRefresh,
+      fetcher: () async {
+        final response = await _client.from('specialties').select();
+        return List<Map<String, dynamic>>.from(response);
+      },
+    );
+    return data.take(limit).toList();
   }
 
-  // â”€â”€â”€ Clinics & Schedules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Clinics & Schedules ───────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchClinics(String doctorId) async {
-    try {
-      final idParam = int.tryParse(doctorId) ?? doctorId;
-      final response = await _client
-          .from('doctor_clinics')
-          .select(
-            'id, clinic_id, visit_price, min_wait_time, max_wait_time, clinics(id, name, address, latitude, longitude)',
-          )
-          .eq('doctor_id', idParam)
-          .order('visit_price', ascending: true);
-
-      final List<dynamic> data = response as List<dynamic>;
-      return data.map((e) {
-        final clinicData = e['clinics'] as Map<String, dynamic>;
-
-        final min = e['min_wait_time'] ?? 20;
-        final max = e['max_wait_time'] ?? 30;
-
-        return {
-          ...clinicData,
-          'junction_id': e['id'],
-          'visit_price': e['visit_price'],
-          'min_wait_time': min,
-          'max_wait_time': max,
-          'avg_wait_time': "$min-$max mins",
-        };
-      }).toList();
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load clinic locations right now.',
-      );
-    }
+    return _fetchWithCache(
+      cacheKey: 'doctor_clinics_$doctorId',
+      fetcher: () async {
+        final idParam = int.tryParse(doctorId) ?? doctorId;
+        final response = await _client
+            .from('doctor_clinics')
+            .select(
+              'id, clinic_id, visit_price, min_wait_time, max_wait_time, clinics(id, name, address, latitude, longitude)',
+            )
+            .eq('doctor_id', idParam)
+            .order('visit_price', ascending: true);
+        return List<dynamic>.from(response).map((e) {
+          final clinicData = e['clinics'] as Map<String, dynamic>;
+          final min = e['min_wait_time'] ?? 20;
+          final max = e['max_wait_time'] ?? 30;
+          return {
+            ...clinicData,
+            'junction_id': e['id'],
+            'visit_price': e['visit_price'],
+            'min_wait_time': min,
+            'max_wait_time': max,
+            'avg_wait_time': "$min-$max mins",
+          };
+        }).toList();
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> fetchSchedules(String doctorId) async {
-    try {
-      final idParam = int.tryParse(doctorId) ?? doctorId;
-      final response = await _client
-          .from('doctor_schedules')
-          .select('*')
-          .eq('doctor_id', idParam);
-
-      return List<Map<String, dynamic>>.from(response);
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load schedules right now.',
-      );
-    }
+    final idParam = int.tryParse(doctorId) ?? doctorId;
+    final response = await _client
+        .from('doctor_schedules')
+        .select('*')
+        .eq('doctor_id', idParam);
+    return List<Map<String, dynamic>>.from(response);
   }
 
-  // â”€â”€â”€ Hospitals & Clinics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  /// Fetches facilities from the `clinics` table filtered by [type].
-  /// Default types: 'hospital', 'clinic'.
   Future<List<Map<String, dynamic>>> fetchFacilities({
     required String type,
     String? query,
   }) async {
-    try {
-      var dbQuery = _client.from('clinics').select().eq('type', type);
-
-      if (query != null && query.isNotEmpty) {
-        dbQuery = dbQuery.ilike('name', '%$query%');
-      }
-
-      final response = await dbQuery;
-      return List<Map<String, dynamic>>.from(response);
-    } catch (error) {
-      debugPrint("Error fetching facilities (type=$type): $error");
-      return [];
-    }
+    final isSearch = query != null && query.isNotEmpty;
+    return _fetchWithCache(
+      cacheKey: isSearch ? null : 'facilities_$type',
+      fetcher: () async {
+        var dbQuery = _client.from('clinics').select().eq('type', type);
+        if (isSearch) dbQuery = dbQuery.ilike('name', '%$query%');
+        final response = await dbQuery;
+        return List<Map<String, dynamic>>.from(response);
+      },
+    );
   }
 
-  /// Fetches clinics with type 'hospital'.
-  Future<List<Map<String, dynamic>>> fetchHospitals({String? query}) async {
-    return fetchFacilities(type: 'hospital', query: query);
-  }
+  Future<List<Map<String, dynamic>>> fetchHospitals({String? query}) async =>
+      fetchFacilities(type: 'hospital', query: query);
+  Future<List<Map<String, dynamic>>> fetchClinicsList({String? query}) async =>
+      fetchFacilities(type: 'clinic', query: query);
 
-  /// Fetches clinics with type 'clinic'.
-  Future<List<Map<String, dynamic>>> fetchClinicsList({String? query}) async {
-    return fetchFacilities(type: 'clinic', query: query);
-  }
-
-  /// Fetches schedules filtered by both doctor and clinic.
   Future<List<Map<String, dynamic>>> fetchSchedulesByClinic(
     String doctorId,
     String clinicId,
   ) async {
-    try {
-      final response = await _client
-          .from('doctor_schedules')
-          .select()
-          .eq('doctor_id', doctorId)
-          .eq('clinic_id', clinicId);
-
-      return List<Map<String, dynamic>>.from(response);
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load clinic schedules right now.',
-      );
-    }
+    final response = await _client
+        .from('doctor_schedules')
+        .select()
+        .eq('doctor_id', doctorId)
+        .eq('clinic_id', clinicId);
+    return List<Map<String, dynamic>>.from(response);
   }
 
-  // â”€â”€â”€ Favorites â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Favorites ─────────────────────────────────────────────────────────────
 
   Future<bool> isFavorite(String doctorId, String userId) async {
+    if (NetworkNotifier.instance.isOffline) return false;
     try {
       final response =
           await _client
@@ -581,21 +482,19 @@ class DoctorRepository {
               .eq('user_id', userId)
               .eq('doctor_id', doctorId)
               .maybeSingle();
-
       return response != null;
     } catch (e) {
       return false;
     }
   }
 
-  /// Fetches all favorited doctor IDs for a user.
   Future<Set<int>> fetchFavoriteIds(String userId) async {
+    if (NetworkNotifier.instance.isOffline) return {};
     try {
       final response = await _client
           .from('favorite_doctors')
           .select('doctor_id')
           .eq('user_id', userId);
-
       return List<Map<String, dynamic>>.from(
         response,
       ).map((e) => e['doctor_id'] as int).toSet();
@@ -609,82 +508,68 @@ class DoctorRepository {
     String userId,
     bool isFavorite,
   ) async {
-    try {
-      if (isFavorite) {
-        await _client.from('favorite_doctors').delete().match({
-          'user_id': userId,
-          'doctor_id': doctorId,
-        });
-      } else {
-        await _client.from('favorite_doctors').insert({
-          'user_id': userId,
-          'doctor_id': doctorId,
-        });
-      }
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to update favorites right now.',
+    if (NetworkNotifier.instance.isOffline)
+      throw const AppFailure(
+        type: AppFailureType.network,
+        userMessage: 'You must be online to update favorites.',
+        technicalMessage: 'offline',
       );
+    if (isFavorite) {
+      await _client.from('favorite_doctors').delete().match({
+        'user_id': userId,
+        'doctor_id': doctorId,
+      });
+    } else {
+      await _client.from('favorite_doctors').insert({
+        'user_id': userId,
+        'doctor_id': doctorId,
+      });
     }
   }
 
-  /// Fetches full doctor details for all favorites of the current user.
   Future<List<Map<String, dynamic>>> fetchFavoriteDoctors() async {
     final userId = currentUserId;
     if (userId == null) return [];
-
-    try {
-      final response = await _client
-          .from('favorite_doctors')
-          .select('doctors(*, specialties(name))')
-          .eq('user_id', userId);
-
-      // The response is a list of { "doctors": { ... } }
-      // We need to flatten it to a list of doctors.
-      return List<Map<String, dynamic>>.from(response.map((e) => e['doctors']));
-    } catch (e) {
-      debugPrint('Error fetching favorite doctors: $e');
-      return [];
-    }
+    return _fetchWithCache(
+      cacheKey: 'favorites_$userId',
+      fetcher: () async {
+        final response = await _client
+            .from('favorite_doctors')
+            .select('doctors(*, specialties(name))')
+            .eq('user_id', userId);
+        return List<Map<String, dynamic>>.from(
+          response.map((e) => e['doctors']),
+        );
+      },
+    );
   }
 
-  /// Fetches recent doctors from completed appointments for the current user.
   Future<List<Map<String, dynamic>>> fetchRecentDoctors() async {
     final userId = currentUserId;
     if (userId == null) return [];
-
-    try {
-      // Fetch completed appointments, order by date desc
-      final response = await _client
-          .from('appointments')
-          .select('doctors(*, specialties(name))')
-          .eq('user_id', userId)
-          .eq('status', 'completed')
-          .order('schedule_date', ascending: false);
-
-      // Deduplicate by doctor ID
-      final seenIds = <int>{};
-      final uniqueDoctors = <Map<String, dynamic>>[];
-
-      for (var item in response) {
-        final doctor = item['doctors'] as Map<String, dynamic>;
-        final id = doctor['id'] as int;
-        if (!seenIds.contains(id)) {
-          seenIds.add(id);
-          uniqueDoctors.add(doctor);
+    return _fetchWithCache(
+      cacheKey: 'recent_doctors_$userId',
+      fetcher: () async {
+        final response = await _client
+            .from('appointments')
+            .select('doctors(*, specialties(name))')
+            .eq('user_id', userId)
+            .eq('status', 'completed')
+            .order('schedule_date', ascending: false);
+        final seenIds = <int>{};
+        final uniqueDoctors = <Map<String, dynamic>>[];
+        for (var item in response) {
+          final doctor = item['doctors'] as Map<String, dynamic>;
+          final id = doctor['id'] as int;
+          if (!seenIds.contains(id)) {
+            seenIds.add(id);
+            uniqueDoctors.add(doctor);
+          }
         }
-      }
-
-      return uniqueDoctors;
-    } catch (e) {
-      debugPrint('Error fetching recent doctors: $e');
-      return [];
-    }
+        return uniqueDoctors;
+      },
+    );
   }
 
-  // â”€â”€â”€ Auth Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  /// Returns the current user's ID, or null if not logged in.
   String? get currentUserId => _client.auth.currentUser?.id;
 }

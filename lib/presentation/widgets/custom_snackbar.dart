@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_shapes.dart';
+import '../../core/theme/app_styles.dart';
 
 class CustomSnackbar {
   static OverlayEntry? _overlayEntry;
@@ -103,13 +104,7 @@ class _SnackbarOverlay extends StatelessWidget {
               decoration: BoxDecoration(
                 color: color,
                 borderRadius: AppShapes.pill,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AppStyles.elevatedShadow(context),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,

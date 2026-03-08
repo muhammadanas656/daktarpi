@@ -69,39 +69,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _fetchAllData({bool forceRefresh = false}) async {
     try {
-      // Load profile + favorites via notifiers (shared across screens)
-      // Profile/Favorites handled by notifiers, so we usually just sync them if needed.
-      // Notifiers have their own internal state management.
-      if (forceRefresh) {
+      // PRO FIX: Strictly await profile load to ensure countryIso is populated
+      if (forceRefresh || !_profileNotifier.isLoaded) {
         await Future.wait([
           _profileNotifier.loadProfile(),
           _favNotifier.loadFavorites(),
         ]);
-      } else {
-        // Initial load check
-        if (!_profileNotifier.isLoaded) _profileNotifier.loadProfile();
-        if (_favNotifier.favoriteIds.isEmpty) _favNotifier.loadFavorites();
       }
 
-      // Load screen-specific data with caching
       final userLocation = _profileNotifier.profile?.location;
       final countryIso = _profileNotifier.profile?.countryIso;
 
+      // PRO FIX: Catch errors individually. If offline, banners might fail, but it won't crash the whole screen!
       final results = await Future.wait([
-        _doctorRepo.fetchSpecialties(forceRefresh: forceRefresh),
+        _doctorRepo.fetchSpecialties(forceRefresh: forceRefresh).catchError((_) => _specialties),
         _doctorRepo.fetchPopularDoctors(
           limit: 5,
           forceRefresh: forceRefresh,
           userLocation: userLocation,
           countryIso: countryIso,
-        ),
+        ).catchError((_) => _popularDoctors),
         _doctorRepo.fetchFeaturedDoctors(
           limit: 5,
           forceRefresh: forceRefresh,
           userLocation: userLocation,
           countryIso: countryIso,
-        ),
-        _homeRepo.fetchBanners(countryIso),
+        ).catchError((_) => _featuredDoctors),
+        _homeRepo.fetchBanners(countryIso).catchError((_) => _banners),
       ]);
 
       if (mounted) {

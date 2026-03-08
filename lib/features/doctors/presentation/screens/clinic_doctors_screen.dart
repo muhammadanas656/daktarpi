@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'dart:async';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
 import '../../data/doctor_repository.dart';
 import '../../presentation/favorites_notifier.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
@@ -53,7 +54,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
 
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(Duration(milliseconds: 500), () {
+    _debounce = Timer(const Duration(milliseconds: 500), () {
       _fetchDoctors();
     });
   }
@@ -74,7 +75,9 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: context.colorScaffoldBackground,
+      // PRO FIX: Extend body to let gradient flow under the AppBar
+      extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text("Doctors", style: AppTextStyles.h2(context)),
         centerTitle: true,
@@ -89,99 +92,112 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
           onPressed: () => context.pop(),
         ),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 1. Search Bar
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-            child: CustomSearchBar(
-              controller: _searchController,
-              hintText: "Search doctors...",
-              showClearIcon: true,
-              onClear: () {
-                _searchController.clear();
-                // Trigger search update
-                _fetchDoctors();
-                FocusScope.of(context).unfocus();
-              },
-            ),
-          ),
+      body: Container(
+        // PRO FIX: Unified Deep Medical Slate gradient
+        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Search Bar
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 10,
+                ),
+                child: CustomSearchBar(
+                  controller: _searchController,
+                  hintText: "Search doctors...",
+                  showClearIcon: true,
+                  onClear: () {
+                    _searchController.clear();
+                    _fetchDoctors();
+                    FocusScope.of(context).unfocus();
+                  },
+                ),
+              ),
 
-          // 2. Clinic Name Header
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-            child: Text(
-              widget.clinicName,
-              style: AppTextStyles.h2(
-                context,
-              ).copyWith(fontSize: 20), // Slightly larger/bold
-            ),
-          ),
+              // 2. Clinic Name Header
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 10,
+                ),
+                child: Text(
+                  widget.clinicName,
+                  style: AppTextStyles.h2(context).copyWith(fontSize: 20),
+                ),
+              ),
 
-          // 3. Doctor List
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _doctorsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryGreen,
-                    ),
-                  );
-                } else if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error: ${snapshot.error}',
-                      style: AppTextStyles.body(
-                        context,
-                      ).copyWith(color: AppColors.dangerRed),
-                    ),
-                  );
-                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No doctors found.',
-                      style: AppTextStyles.body(
-                        context,
-                      ).copyWith(color: context.colorTextGrey),
-                    ),
-                  );
-                }
+              // 3. Doctor List
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _doctorsFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primaryGreen,
+                        ),
+                      );
+                    } else if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Error: ${snapshot.error}',
+                          style: AppTextStyles.body(
+                            context,
+                          ).copyWith(color: AppColors.dangerRed),
+                        ),
+                      );
+                    } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Center(
+                        child: Text(
+                          'No doctors found.',
+                          style: AppTextStyles.body(
+                            context,
+                          ).copyWith(color: context.colorTextGrey),
+                        ),
+                      );
+                    }
 
-                final doctors = snapshot.data!;
+                    final doctors = snapshot.data!;
 
-                return ListView.separated(
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                  itemCount: doctors.length,
-                  separatorBuilder: (_, __) => SizedBox(height: 16),
-                  itemBuilder: (context, index) {
-                    final doctor = doctors[index];
-                    final docId = doctor['id'] as int;
-                    final specialtyName =
-                        doctor['specialties'] != null
-                            ? doctor['specialties']['name']
-                            : 'Specialist';
-                    final isFavorite = _favNotifier.isFavorite(docId);
+                    return ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
+                      itemCount: doctors.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      itemBuilder: (context, index) {
+                        final doctor = doctors[index];
+                        final docId = doctor['id'] as int;
+                        final specialtyName =
+                            doctor['specialties'] != null
+                                ? doctor['specialties']['name']
+                                : 'Specialist';
+                        final isFavorite = _favNotifier.isFavorite(docId);
 
-                    return DoctorListCard(
-                      id: docId,
-                      name: doctor['full_name'] ?? 'Unknown',
-                      specialty: specialtyName,
-                      rating: (doctor['rating'] as num?)?.toString() ?? '0.0',
-                      views: (doctor['views_count'] ?? 0).toString(),
-                      imageUrl: doctor['profile_picture_url'],
-                      isFavorite: isFavorite,
-                      onFavoriteTap: () => _favNotifier.toggle(docId),
-                      onCardTap: () => _navigateToDoctorDetails(docId),
+                        return DoctorListCard(
+                          id: docId,
+                          name: doctor['full_name'] ?? 'Unknown',
+                          specialty: specialtyName,
+                          rating:
+                              (doctor['rating'] as num?)?.toString() ?? '0.0',
+                          views: (doctor['views_count'] ?? 0).toString(),
+                          imageUrl: doctor['profile_picture_url'],
+                          isFavorite: isFavorite,
+                          onFavoriteTap: () => _favNotifier.toggle(docId),
+                          onCardTap: () => _navigateToDoctorDetails(docId),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ), // PRO FIX: Corrected closing parenthesis for FutureBuilder
+              ), // PRO FIX: Corrected closing parenthesis for Expanded
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

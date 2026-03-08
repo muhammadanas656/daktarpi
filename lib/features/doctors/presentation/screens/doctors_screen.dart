@@ -251,15 +251,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           Container(
             padding: EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              // PRO FIX: Dynamic surface color for the bell
+              color: Theme.of(context).colorScheme.surface,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
-              ],
+              boxShadow: AppStyles.cardShadow(context), // PRO FIX: Dynamic shadow
             ),
             child: Icon(
               Icons.notifications_none_rounded,
@@ -289,6 +284,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       height: 40,
       margin: EdgeInsets.only(top: 24, bottom: 16),
       child: ListView.separated(
+        clipBehavior: Clip.none, // PRO FIX: Prevent clipping of active shadow
         padding: EdgeInsets.symmetric(horizontal: 24),
         scrollDirection: Axis.horizontal,
         itemCount: _filters.length,
@@ -303,26 +299,29 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               duration: Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
               decoration: BoxDecoration(
-                color: isSelected ? AppColors.primaryGreen : Colors.white,
+                // PRO FIX: Dynamic background for unselected chips
+                color: isSelected 
+                    ? AppColors.primaryGreen 
+                    : Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(20), // Premium Radius
-                border:
-                    isSelected
-                        ? null
-                        : Border.all(
-                          color: context.colorBorder.withValues(alpha: 0.5),
+                border: isSelected
+                    ? null
+                    : Border.all(
+                        // PRO FIX: Deep slate border in Dark Mode
+                        color: Theme.of(context).brightness == Brightness.dark 
+                            ? AppColors.darkBorder 
+                            : context.colorBorder.withValues(alpha: 0.5),
+                      ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: AppColors.primaryGreen.withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          offset: Offset(0, 4),
                         ),
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                        isSelected
-                            ? AppColors.primaryGreen.withValues(alpha: 0.3)
-                            : Color(
-                              0xFF1C222E,
-                            ).withValues(alpha: 0.05), // Soft Premium Shadow
-                    blurRadius: isSelected ? 12 : 8,
-                    offset: Offset(0, 4),
-                  ),
-                ],
+                      ]
+                    // PRO FIX: Removes glowing white shadow in dark mode
+                    : AppStyles.cardShadow(context), 
               ),
               alignment: Alignment.center,
               child: Text(
@@ -346,7 +345,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off_rounded, size: 64, color: Colors.grey[300]),
+            Icon(
+              Icons.search_off_rounded, 
+              size: 64, 
+              // PRO FIX: Dimmer icon in dark mode
+              color: Theme.of(context).brightness == Brightness.dark ? Colors.white24 : Colors.grey[300],
+            ),
             SizedBox(height: 16),
             Text(
               "No doctors found",
@@ -460,17 +464,8 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       },
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
+        // PRO FIX: Perfectly adapts the facility grids to Dark Mode surface
+        decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

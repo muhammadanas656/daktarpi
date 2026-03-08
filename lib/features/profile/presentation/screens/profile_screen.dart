@@ -9,6 +9,7 @@ import 'package:country_code_picker/country_code_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -468,13 +469,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     : Colors.white, 
                                 width: 3,
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
+                              boxShadow: AppStyles.cardShadow(context),
                               color: isDark ? AppColors.darkSurface : Colors.grey[200],
                             ),
                             child: ClipOval(
@@ -486,26 +481,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         width: 120,
                                         height: 120,
                                       )
-                                      : (_avatarUrl != null &&
-                                              _avatarUrl!.isNotEmpty
-                                          ? Image.network(
-                                            _avatarUrl!,
-                                            fit: BoxFit.cover,
-                                            width: 120,
-                                            height: 120,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    Icon(
-                                                      Icons.person,
-                                                      size: 60,
-                                                      color: Colors.grey,
-                                                    ),
-                                          )
+                                      : (_avatarUrl != null && _avatarUrl!.isNotEmpty
+                                          ? AppNetworkImage(
+                                              imageUrl: _avatarUrl,
+                                              width: 120,
+                                              height: 120,
+                                              circular: true,
+                                              fallbackIconSize: 60,
+                                            )
                                           : Icon(
-                                            Icons.person,
-                                            size: 60,
-                                            color: Colors.grey,
-                                          )),
+                                              Icons.person,
+                                              size: 60,
+                                              color: Colors.grey,
+                                            )),
                             ),
                           ),
                           Positioned(

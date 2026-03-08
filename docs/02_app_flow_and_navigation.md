@@ -11,6 +11,7 @@ sequenceDiagram
 
     M->>M: init bindings/env/Supabase
     M->>M: load settings + init notifications
+    M->>M: init NetworkNotifier (connectivity observer)
     M->>M: device integrity enforcement
     M->>S: route '/'
     S->>A: resolvePostAuthRoute()
@@ -76,6 +77,15 @@ Global redirect behavior:
 - One-time appointment realtime bootstrap.
 - Initial and resume refresh (`appointments`, `profile`).
 - `resizeToAvoidBottomInset: false` to keep shell layout stable while keyboard opens in nested flows.
+- Shell-level offline UX wrapping via `OfflineModeGuard` so network state is visible across all tabs.
+
+## 5.1 Realtime + Offline Replay Flow
+
+On connection restoration:
+1. `NetworkNotifier` detects transition from offline to online.
+2. `_syncOfflineQueues()` runs and replays repository queues in sequence.
+3. Domain notifiers/screens receive fresh data from repository fetch/realtime streams.
+4. UI state converges without requiring a manual user refresh.
 
 ## 5. Core User Journeys
 
@@ -99,6 +109,16 @@ Global redirect behavior:
 ### Medical Records
 - List in `MedicalRecordsScreen`.
 - Add/edit in `AddRecordScreen`.
+
+## 6. Online-Only Route/Action Gates
+
+The app keeps read-only browsing available offline where cached data exists, while gating operations that require active network access:
+- global doctor search and live server-backed filters,
+- signed URL generation for private files,
+- binary uploads (profile image, medical documents),
+- live appointment slot validations.
+
+Offline attempts return controlled `AppFailureType.network` feedback instead of blocking the navigator or freezing the screen.
 
 ## 6. Input and Keyboard UX in Flows
 

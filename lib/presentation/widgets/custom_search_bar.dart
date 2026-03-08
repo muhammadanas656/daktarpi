@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
-import '../../core/theme/app_shapes.dart';
 import 'app_text_field.dart';
 
 class CustomSearchBar extends StatelessWidget {
@@ -27,42 +25,44 @@ class CustomSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface, // PRO FIX
-        borderRadius: AppShapes.lg,
-        border: Border.all(color: context.colorBorder),
-        boxShadow: AppStyles.cardShadow(context), // PRO FIX
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Ensure we always have a controller for AppTextField
+    final safeController = controller ?? TextEditingController();
+
+    return AppTextField(
+      controller: safeController,
+      readOnly: readOnly,
+      onTap: onTap,
+      onSubmitted: onSubmitted,
+      hintText: hintText,
+      // PRO FIX: Translucent styling destroys the "overlayed sticker" effect!
+      fillColor: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.white,
+      borderColor:
+          isDark ? Colors.white.withValues(alpha: 0.1) : context.colorBorder,
+      hasShadow: !isDark,
+      prefix: Icon(
+        Icons.search_rounded,
+        color: isDark ? Colors.white70 : context.colorTextLight,
+        size: AppDimens.iconLg,
       ),
-      child: AppTextField(
-        controller: controller,
-        readOnly: readOnly,
-        onTap: onTap,
-        onSubmitted: onSubmitted,
-        hintText: hintText,
-        prefix: Icon(
-          Icons.search_rounded,
-          color: context.colorTextLight,
-          size: AppDimens.iconLg,
-        ),
-        suffixIcon:
-            showClearIcon && onClear != null
-                ? IconButton(
-                  icon: Icon(
+      suffixIcon:
+          showClearIcon && onClear != null
+              ? IconButton(
+                icon: Icon(
+                  Icons.close_rounded,
+                  color: isDark ? Colors.white70 : context.colorTextLight,
+                  size: AppDimens.iconLg,
+                ),
+                onPressed: onClear,
+              )
+              : (readOnly
+                  ? Icon(
                     Icons.close_rounded,
-                    color: context.colorTextLight,
+                    color: isDark ? Colors.white70 : context.colorTextLight,
                     size: AppDimens.iconLg,
-                  ),
-                  onPressed: onClear,
-                )
-                : (readOnly
-                    ? Icon(
-                      Icons.close_rounded,
-                      color: context.colorTextLight,
-                      size: AppDimens.iconLg,
-                    )
-                    : null), // Keep legacy icon for Home if needed, or remove
-      ),
+                  )
+                  : null),
     );
   }
 }

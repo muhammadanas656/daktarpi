@@ -490,6 +490,8 @@ class _AppointmentConfirmationScreenState
     bool isTime,
   ) {
     return SingleChildScrollView(
+      clipBehavior: Clip.none, // PRO FIX: Prevent clipping of primary selection shadow
+      padding: EdgeInsets.only(bottom: 15), // PRO FIX: Allow scroll space for vertical shadow blur
       scrollDirection: Axis.horizontal,
       child: Row(
         children: List.generate(items.length, (index) {
@@ -506,16 +508,9 @@ class _AppointmentConfirmationScreenState
                   color: isSelected ? primaryGreen : Theme.of(context).colorScheme.surface,
                   shape: BoxShape.circle,
                   border: isSelected ? null : Border.all(color: borderColor),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          isSelected
-                              ? primaryGreen.withValues(alpha: 0.4)
-                              : Colors.black.withValues(alpha: 0.03),
-                      blurRadius: isSelected ? 8 : 5,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
+                  boxShadow: isSelected
+                      ? AppStyles.primaryShadow(context, primaryGreen)
+                      : AppStyles.cardShadow(context),
                 ),
                 child: Center(
                   child: Text(

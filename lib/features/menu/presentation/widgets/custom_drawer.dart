@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
+import '../../../../core/theme/app_styles.dart';
 
 class CustomDrawer extends StatefulWidget {
   final VoidCallback onClose;
@@ -140,27 +142,24 @@ class _CustomDrawerState extends State<CustomDrawer> {
                       color: Colors.white.withValues(alpha: 0.8),
                       width: 2,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                    boxShadow: AppStyles.cardShadow(context),
                   ),
                   child: CircleAvatar(
                     radius: 38,
                     backgroundColor: Colors.white,
-                    backgroundImage:
-                        avatar != null ? NetworkImage(avatar) : null,
-                    child:
-                        avatar == null
-                            ? const Icon(
-                              Icons.person,
-                              color: Colors.grey,
-                              size: 38,
-                            )
-                            : null,
+                    child: avatar != null && avatar.isNotEmpty
+                        ? AppNetworkImage(
+                            imageUrl: avatar,
+                            width: 76,
+                            height: 76,
+                            fit: BoxFit.cover,
+                            circular: true, // Offline-ready!
+                          )
+                        : const Icon(
+                            Icons.person,
+                            color: Colors.grey,
+                            size: 38,
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -292,7 +291,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
     return Container(
       margin: const EdgeInsets.only(
         bottom: 8,
-        right: 32,
+        right: 16,
       ), // Leave space on the right for pill effect
       decoration:
           isSelected
@@ -312,18 +311,24 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 ),
               ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        horizontalTitleGap: 8,
+        minLeadingWidth: 24,
         leading: Icon(
           icon,
           color: Colors.white.withValues(alpha: 0.9),
           size: 24,
         ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.9),
-            fontSize: 16,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 15,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            ),
           ),
         ),
         trailing:

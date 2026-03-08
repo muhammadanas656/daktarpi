@@ -8,6 +8,11 @@ DaktarPai uses:
 
 No external state framework is used.
 
+The v1.1.0 data engine adds:
+- realtime database listeners for live server-to-app refresh,
+- Hive-backed persistent caching for offline reads,
+- repository-specific offline action queues for deferred writes.
+
 ## 2. Global Notifiers
 
 ### `SettingsNotifier`
@@ -41,6 +46,14 @@ Owns:
 - loading/error state,
 - Supabase realtime channel lifecycle for appointments.
 
+### `NetworkNotifier`
+File: `lib/core/network/network_notifier.dart`
+
+Owns:
+- global connectivity status (`isOffline`),
+- connection change observation via `connectivity_plus`,
+- reconnect-triggered orchestration of repository offline queue sync methods.
+
 ## 3. Lifecycle-Oriented Data Refresh
 
 `MainWrapper` acts as lifecycle coordinator:
@@ -67,6 +80,11 @@ Key repositories in active flows:
 - `BookingDraftRepository`
 - `AppointmentSecureCacheRepository`
 
+Offline-first responsibilities now live in repositories:
+- cache snapshots in Hive boxes (`*_cache`),
+- enqueue offline writes in dedicated queue boxes (`*_offline_queue`),
+- replay queued mutations when orchestrated by `NetworkNotifier`.
+
 ## 5. Appointment Data Flows
 
 ### Booking flow
@@ -90,6 +108,20 @@ Key repositories in active flows:
 - Appointment cache is stored via `AppointmentSecureCacheRepository`.
 - Notifier loads cache first for perceived responsiveness, then overlays fresh network data.
 - Manual refresh controls still force live fetch behavior in relevant feature screens.
+- Additional Hive caches are used in profile/medical/doctors flows for resilient offline read behavior.
+- Cache validity is time-bound (target: 60-minute freshness window) to reduce stale long-lived state.
+
+## 6.1 Offline Queue Replay Semantics
+
+```text
+User action (offline) -> Repository queue write (Hive) -> Connectivity restored
+-> NetworkNotifier._syncOfflineQueues() -> Repository syncOfflineQueue() -> Supabase mutation
+```
+
+Queue design principles:
+- repository-isolated queues to avoid cross-feature action collision,
+- best-effort replay with per-item failure isolation,
+- optimistic local state updates where safe so UI remains responsive offline.
 
 ## 7. Local UI State Patterns
 

@@ -134,13 +134,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                               : Colors.white, 
                           width: 3,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 15,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                        boxShadow: AppStyles.cardShadow(context),
                         color: isDark ? AppColors.darkSurface : Colors.white,
                       ),
                       child: ClipOval(
