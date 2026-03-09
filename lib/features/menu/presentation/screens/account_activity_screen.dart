@@ -5,7 +5,8 @@ import '../../../../presentation/widgets/complaint_dialog.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../appointments/data/appointment_repository.dart';
-import '../widgets/review_dialog.dart';
+import '../../presentation/widgets/review_dialog.dart';
+import '../../../../core/network/network_notifier.dart';
 
 class AccountActivityScreen extends StatefulWidget {
   const AccountActivityScreen({super.key});
@@ -23,6 +24,28 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
   void initState() {
     super.initState();
     _fetchActivity();
+    
+    // PRO FIX: Actively listen for internet connection changes
+    NetworkNotifier.instance.addListener(_onNetworkChanged);
+  }
+
+  // PRO FIX: Clean up the network listener
+  @override
+  void dispose() {
+    NetworkNotifier.instance.removeListener(_onNetworkChanged);
+    super.dispose();
+  }
+
+  // PRO FIX: Triggers a UI rebuild and an automatic silent data refresh!
+  void _onNetworkChanged() {
+    if (mounted) {
+      setState(() {}); // Instantly hides the offline banner
+      
+      if (!NetworkNotifier.instance.isOffline) {
+        // The second the internet returns, silently fetch the live history!
+        _fetchActivity();
+      }
+    }
   }
 
   Future<void> _fetchActivity() async {
@@ -132,7 +155,8 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
         ),
       ),
       body:
-          _isLoading
+          // PRO FIX: Allows the history list to update silently in the background
+          (_isLoading && _activities.isEmpty)
               ? Center(
                 child: CircularProgressIndicator(color: AppColors.primaryGreen),
               )
@@ -140,9 +164,21 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
               ? _buildEmptyState()
               : ListView.builder(
                 padding: EdgeInsets.all(24),
-                itemCount: _activities.length,
+                // Increase item count by 1 to make room for the banner
+                itemCount:
+                    _activities.length +
+                    (NetworkNotifier.instance.isOffline ? 1 : 0),
                 itemBuilder: (context, index) {
-                  final item = _activities[index];
+                  // PRO FIX: Show the offline warning at the top of the history list
+                  if (NetworkNotifier.instance.isOffline && index == 0) {
+                    return _buildOfflineWarningBanner();
+                  }
+
+                  // Adjust the index if the banner is showing
+                  final actualIndex =
+                      NetworkNotifier.instance.isOffline ? index - 1 : index;
+                  final item = _activities[actualIndex];
+
                   final action =
                       item['action_type']?.toString().toUpperCase() ??
                       'UNKNOWN';
@@ -157,7 +193,10 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                   return Container(
                     margin: EdgeInsets.only(bottom: 16),
                     padding: EdgeInsets.all(16),
-                    decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
+                    decoration: AppStyles.surfaceCard(
+                      context,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -372,6 +411,35 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
           Text(
             "Your booking history will appear here.",
             style: TextStyle(color: context.colorTextLight),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineWarningBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: Colors.orange, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "You are currently offline. Live wait times and appointment statuses will update automatically when you reconnect.",
+              style: TextStyle(
+                color: Colors.orange[800], // Darker orange for readability
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
         ],
       ),

@@ -22,6 +22,8 @@ class RecordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     // Format date: "27 Feb"
     final day = DateFormat('d').format(record.recordDate);
     final month = DateFormat('MMM').format(record.recordDate);
@@ -31,10 +33,13 @@ class RecordCard extends StatelessWidget {
       child: Container(
         margin: EdgeInsets.only(bottom: 16),
         padding: EdgeInsets.all(16),
-        decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
+        decoration: AppStyles.surfaceCard(
+          context,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Row(
           children: [
-            // Date Box
+            // --- Date Box ---
             Container(
               width: 60,
               height: 60,
@@ -66,7 +71,7 @@ class RecordCard extends StatelessWidget {
             ),
             SizedBox(width: 16),
 
-            // Content
+            // --- Content ---
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,21 +184,61 @@ class RecordCard extends StatelessWidget {
                         ),
                       ),
                       Spacer(),
-                      // File View Icon
+
+                      // --- Premium File View Pill ---
                       if (record.fileUrls.isNotEmpty)
                         GestureDetector(
                           onTap: onFileTap,
                           child: Container(
-                            padding: EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkSurface : Colors.grey[50],
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
                             ),
-                            child: Icon(
-                              Icons.insert_drive_file_rounded, // PRO FIX: Premium document icon
-                              size: 18,
-                              color: AppColors.primaryGreen,
+                            decoration: BoxDecoration(
+                              // Soft white in light mode, translucent green in dark mode
+                              color:
+                                  isDark
+                                      ? AppColors.primaryGreen.withValues(
+                                        alpha: 0.1,
+                                      )
+                                      : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.primaryGreen.withValues(
+                                  alpha: 0.4,
+                                ),
+                                width: 1.5, // Thicker, crisper outline
+                              ),
+                              boxShadow: [
+                                // Subtle glowing shadow for 3D depth
+                                BoxShadow(
+                                  color: AppColors.primaryGreen.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  blurRadius: 8,
+                                  offset: Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons
+                                      .file_present_rounded, // Sleeker, modern document icon
+                                  size: 16,
+                                  color: AppColors.primaryGreen,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  "View",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryGreen,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

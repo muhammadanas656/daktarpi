@@ -138,7 +138,6 @@ class DoctorRepository {
             );
         if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-        // PRO FIX: Wrapped if statement in curly braces
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
         } else if (userLocation != null && userLocation.isNotEmpty) {
@@ -196,24 +195,25 @@ class DoctorRepository {
     String? userLocation,
     String? countryIso,
   }) async {
-    if (NetworkNotifier.instance.isOffline)
+    if (NetworkNotifier.instance.isOffline) {
       throw const AppFailure(
         type: AppFailureType.network,
         userMessage: 'Global Search is an online-only feature.',
         technicalMessage: 'offline',
       );
+    }
     try {
       var dbQuery = _client
           .from('doctors')
           .select(
             '*, specialties!inner(name), doctor_clinics(clinics(name, latitude, longitude))',
           );
-      if (query.isNotEmpty)
+      if (query.isNotEmpty) {
         dbQuery = dbQuery.or(
           'full_name.ilike.%$query%,specialties.name.ilike.%$query%,doctor_clinics.clinics.name.ilike.%$query%',
         );
+      }
 
-      // PRO FIX: Wrapped if statement in curly braces
       if (countryIso != null && countryIso.isNotEmpty) {
         dbQuery = dbQuery.eq('country_iso', countryIso);
       } else if (userLocation != null && userLocation.isNotEmpty) {
@@ -246,8 +246,9 @@ class DoctorRepository {
   Future<Map<String, List<Map<String, dynamic>>>> fetchSearchHints({
     required String query,
   }) async {
-    if (NetworkNotifier.instance.isOffline)
+    if (NetworkNotifier.instance.isOffline) {
       return {'doctors': [], 'clinics': []};
+    }
     try {
       final doctorFuture = _client
           .from('doctors')
@@ -287,7 +288,6 @@ class DoctorRepository {
             .eq('is_popular', true);
         if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-        // PRO FIX: Wrapped if statement in curly braces
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
         } else if (userLocation != null && userLocation.isNotEmpty) {
@@ -319,7 +319,6 @@ class DoctorRepository {
             .eq('is_featured', true);
         if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-        // PRO FIX: Wrapped if statement in curly braces
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
         } else if (userLocation != null && userLocation.isNotEmpty) {
@@ -349,7 +348,6 @@ class DoctorRepository {
             .eq('specialty_id', specialtyId);
         if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
 
-        // PRO FIX: Wrapped if statement in curly braces
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
         } else if (userLocation != null && userLocation.isNotEmpty) {
@@ -361,6 +359,7 @@ class DoctorRepository {
       },
     );
   }
+
   // ─── Specialties ───────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchDoctorsByClinic(
@@ -508,12 +507,13 @@ class DoctorRepository {
     String userId,
     bool isFavorite,
   ) async {
-    if (NetworkNotifier.instance.isOffline)
+    if (NetworkNotifier.instance.isOffline) {
       throw const AppFailure(
         type: AppFailureType.network,
         userMessage: 'You must be online to update favorites.',
         technicalMessage: 'offline',
       );
+    }
     if (isFavorite) {
       await _client.from('favorite_doctors').delete().match({
         'user_id': userId,
@@ -525,6 +525,10 @@ class DoctorRepository {
         'doctor_id': doctorId,
       });
     }
+
+    // PRO FIX: Instantly invalidate the favorites cache so the UI fetches fresh data!
+    final box = await _getCacheBox();
+    await box.delete('favorites_$userId');
   }
 
   Future<List<Map<String, dynamic>>> fetchFavoriteDoctors() async {
@@ -532,6 +536,8 @@ class DoctorRepository {
     if (userId == null) return [];
     return _fetchWithCache(
       cacheKey: 'favorites_$userId',
+      // PRO FIX: Forces the network layer to fetch fresh profiles so the cache stays perfectly synced!
+      forceRefresh: true,
       fetcher: () async {
         final response = await _client
             .from('favorite_doctors')
@@ -549,6 +555,8 @@ class DoctorRepository {
     if (userId == null) return [];
     return _fetchWithCache(
       cacheKey: 'recent_doctors_$userId',
+      // PRO FIX: Enables Network-First, Offline-Fallback for Recent Visits too
+      forceRefresh: true,
       fetcher: () async {
         final response = await _client
             .from('appointments')

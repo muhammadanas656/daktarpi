@@ -5,7 +5,7 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../data/faq_data.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../../../presentation/widgets/complaint_dialog.dart';
 
 class HelpCenterScreen extends StatefulWidget {
   const HelpCenterScreen({super.key});
@@ -44,33 +44,6 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
             }).toList();
       }
     });
-  }
-
-  Future<void> _contactSupport() async {
-    final Uri emailLaunchUri = Uri(
-      scheme: 'mailto',
-      path: 'support@daktarpai.com',
-      query: 'subject=Support Request: [Your Subject Here]',
-    );
-
-    try {
-      if (await canLaunchUrl(emailLaunchUri)) {
-        await launchUrl(emailLaunchUri);
-      } else {
-        // Fallback or error handling
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Could not launch email app.")),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
-    }
   }
 
   @override
@@ -174,34 +147,72 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                     ),
           ),
 
-          // --- CONTACT US BUTTON ---
+          // --- PREMIUM SUPPORT ACTION CARD ---
           Container(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24), // Slightly more breathing room
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              boxShadow: AppStyles.cardShadow(context),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
+              boxShadow: AppStyles.elevatedShadow(context), // Premium depth
             ),
             child: SafeArea(
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _contactSupport,
-                  icon: Icon(Icons.email_outlined),
-                  label: Text("Contact Support"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryGreen,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                    textStyle: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    "Still need help?",
+                    style: AppTextStyles.bodyBold(context).copyWith(
+                      color: context.colorTextLight,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    height: 58, // Professional reachability sizing
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      // PRO FIX: Beautiful brand-colored glow
+                      boxShadow: AppStyles.primaryShadow(
+                        context,
+                        AppColors.primaryGreen,
+                        alpha: 0.3,
+                      ),
+                    ),
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder:
+                              (ctx) => ComplaintDialog(
+                                isSupportMode:
+                                    true, // Triggers the Blue Support UI
+                                onComplaintSubmitted: () {},
+                              ),
+                        );
+                      },
+                      icon: const Icon(Icons.support_agent_rounded, size: 24),
+                      label: const Text("Submit Complaint to Support"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            AppColors
+                                .primaryGreen, // Restored your beautiful Green
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

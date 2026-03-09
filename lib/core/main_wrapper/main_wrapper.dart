@@ -10,7 +10,7 @@ import '../../features/appointments/presentation/appointment_notifier.dart';
 import '../../features/profile/presentation/profile_notifier.dart';
 import '../../features/settings/presentation/settings_notifier.dart';
 import '../theme/app_motion.dart';
-import '../theme/app_colors.dart'; // PRO FIX: Utilizing centralized tokens
+import '../theme/app_colors.dart';
 import '../theme/app_styles.dart';
 
 class MainWrapper extends StatefulWidget {
@@ -27,7 +27,6 @@ class _MainWrapperState extends State<MainWrapper>
   static const Curve _openCurve = Curves.easeOutQuint;
   static const Curve _closeCurve = Curves.easeOutCirc;
 
-  // PRO FIX: Removed hardcoded color variables to rely on AppColors tokens
   late AnimationController _drawerController;
   final double _maxSlide = 290.0;
 
@@ -42,7 +41,6 @@ class _MainWrapperState extends State<MainWrapper>
       duration: AppMotion.defaultDuration,
     );
 
-    // Global Notifier Initialization
     AppointmentNotifier.instance.initializeRealtime();
     unawaited(AppointmentNotifier.instance.fetchAppointments());
     unawaited(ProfileNotifier.instance.loadProfile());
@@ -69,12 +67,18 @@ class _MainWrapperState extends State<MainWrapper>
 
   Future<void> _runIntroTutorial() async {
     await SettingsNotifier.instance.loadSettings();
-    if (!SettingsNotifier.instance.showDrawerHint) return;
+    if (!SettingsNotifier.instance.showDrawerHint) {
+      return;
+    }
 
-    if (widget.navigationShell.currentIndex != 0) return;
+    if (widget.navigationShell.currentIndex != 0) {
+      return;
+    }
 
     await Future.delayed(const Duration(milliseconds: 3500));
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     try {
       await _drawerController.animateTo(
@@ -84,7 +88,9 @@ class _MainWrapperState extends State<MainWrapper>
       );
 
       await Future.delayed(const Duration(milliseconds: 600));
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _drawerController.animateTo(
         0.0,
@@ -96,7 +102,6 @@ class _MainWrapperState extends State<MainWrapper>
     }
   }
 
-  // --- NAVIGATION ---
   void _goToBranch(int index) {
     widget.navigationShell.goBranch(
       index,
@@ -109,19 +114,22 @@ class _MainWrapperState extends State<MainWrapper>
 
   void _toggleDrawer() {
     if (_drawerController.isDismissed) {
+      FocusManager.instance.primaryFocus?.unfocus();
       _drawerController.forward();
     } else {
       _drawerController.reverse();
     }
   }
 
-  // --- GESTURES ---
   void _onDragStart(DragStartDetails details) {
     _isDraggingDrawer = false;
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    if (widget.navigationShell.currentIndex != 0) return;
+    if (widget.navigationShell.currentIndex != 0) {
+      return;
+    }
 
     double delta = details.primaryDelta! / _maxSlide;
     if (_drawerController.value > 0 || delta > 0) {
@@ -152,7 +160,9 @@ class _MainWrapperState extends State<MainWrapper>
 
     if (_drawerController.isDismissed && velocity.abs() > 300) {
       if (velocity < 0) {
-        if (currentIndex < 3) _goToBranch(currentIndex + 1);
+        if (currentIndex < 3) {
+          _goToBranch(currentIndex + 1);
+        }
       } else {
         currentIndex > 0
             ? _goToBranch(currentIndex - 1)
@@ -163,17 +173,17 @@ class _MainWrapperState extends State<MainWrapper>
 
   @override
   Widget build(BuildContext context) {
-    // PRO FIX: Soft Ocean Slate Aura for premium dark mode blending
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dynamicDrawerBg =
         isDark ? const Color(0xFF162236) : const Color(0xFF626F8D);
-
     final size = MediaQuery.sizeOf(context);
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop) {
+          return;
+        }
         if (_drawerController.value > 0) {
           _drawerController.reverse();
           return;
@@ -202,13 +212,12 @@ class _MainWrapperState extends State<MainWrapper>
           onHorizontalDragEnd: _onDragEnd,
           child: Stack(
             children: [
-              // LAYER 1: BACK CARD (Doctors Screen visual)
+              // LAYER 1: BACK CARD
               AnimatedBuilder(
                 animation: _drawerController,
                 builder: (context, child) {
                   double slide = 265 * _drawerController.value;
                   double scale = 1 - (_drawerController.value * 0.45);
-                  double fade = (_drawerController.value * 6).clamp(0.0, 1.0);
 
                   return Transform(
                     transform:
@@ -216,37 +225,38 @@ class _MainWrapperState extends State<MainWrapper>
                           ..translate(slide)
                           ..scale(scale),
                     alignment: Alignment.centerLeft,
-                    child: Opacity(
-                      opacity: fade,
-                      child: AbsorbPointer(
-                        absorbing: true,
-                        child: Container(
-                          width: size.width,
-                          height: size.height,
-                          decoration: BoxDecoration(
-                            // PRO FIX: Context-aware back card background
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                            borderRadius: BorderRadius.circular(30),
-                            // Using innerShadow or elevatedShadow here for the back card. Actually cardShadow works well.
-                            // However, back card had: offset(-15, 15), blur 10, alpha 0.1. Let's just use drawerShadow with a slightly lower intensity.
-                            boxShadow: AppStyles.cardShadow(context),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(30),
-                            child: Stack(
-                              children: [
-                                // REVERTED: The premium background screen is back!
-                                // Wrapped in IgnorePointer so you don't accidentally scroll it while the drawer is open
-                                const IgnorePointer(child: DoctorsScreen()),
-                                // The dynamic shading overlay
-                                Container(
-                                  color: dynamicDrawerBg.withValues(
-                                    alpha: (0.8 * _drawerController.value)
-                                        .clamp(0.0, 1.0),
+                    child: AbsorbPointer(
+                      absorbing: true,
+                      child: Container(
+                        width: size.width,
+                        height: size.height,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: AppStyles.cardShadow(context),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(30),
+                          child: Stack(
+                            children: [
+                              Container(
+                                color:
+                                    Theme.of(context).scaffoldBackgroundColor,
+                              ),
+                              const RepaintBoundary(
+                                child: IgnorePointer(
+                                  child: DoctorsScreen(isBackgroundLayer: true),
+                                ),
+                              ),
+                              Container(
+                                color: dynamicDrawerBg.withValues(
+                                  alpha: (0.8 * _drawerController.value).clamp(
+                                    0.0,
+                                    1.0,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -284,15 +294,17 @@ class _MainWrapperState extends State<MainWrapper>
                           ..translate(slide)
                           ..scale(scale),
                     alignment: Alignment.centerLeft,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(cornerRadius),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          boxShadow: AppStyles.drawerShadow(context),
-                        ),
-                        child: AbsorbPointer(
-                          absorbing: isDrawerOpen,
-                          child: child,
+                    child: RepaintBoundary(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(cornerRadius),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            boxShadow: AppStyles.drawerShadow(context),
+                          ),
+                          child: AbsorbPointer(
+                            absorbing: isDrawerOpen,
+                            child: child,
+                          ),
                         ),
                       ),
                     ),
@@ -308,7 +320,6 @@ class _MainWrapperState extends State<MainWrapper>
                   bottomNavigationBar: NavigationBar(
                     selectedIndex: widget.navigationShell.currentIndex,
                     onDestinationSelected: _goToBranch,
-                    // PRO FIX: Surface cards now respect the active theme palette
                     backgroundColor: Theme.of(context).colorScheme.surface,
                     indicatorColor: AppColors.primaryGreen.withValues(
                       alpha: 0.15,
@@ -356,9 +367,11 @@ class _MainWrapperState extends State<MainWrapper>
               AnimatedBuilder(
                 animation: _drawerController,
                 builder: (context, child) {
+                  // PRO FIX: Added curly braces to satisfy dart linting rules
                   if (_drawerController.value < 0.2) {
                     return const SizedBox.shrink();
                   }
+
                   return Positioned(
                     top: 60,
                     right: 30,

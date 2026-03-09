@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/primary_button.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 
 class ProfileViewScreen extends StatefulWidget {
   const ProfileViewScreen({super.key});
@@ -138,26 +139,19 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                         color: isDark ? AppColors.darkSurface : Colors.white,
                       ),
                       child: ClipOval(
-                        child:
-                            avatarUrl != null && avatarUrl.isNotEmpty
-                                ? Image.network(
-                                  avatarUrl,
-                                  fit: BoxFit.cover,
-                                  width: 110,
-                                  height: 110,
-                                  key: ValueKey(avatarUrl),
-                                  errorBuilder:
-                                      (_, __, ___) => Icon(
-                                        Icons.person,
-                                        size: 60,
-                                        color: Colors.grey,
-                                      ),
-                                )
-                                : Icon(
-                                  Icons.person,
-                                  size: 60,
-                                  color: Colors.grey,
-                                ),
+                        child: avatarUrl != null && avatarUrl.isNotEmpty
+                            ? AppNetworkImage(
+                                imageUrl: avatarUrl,
+                                width: 110,
+                                height: 110,
+                                circular: true,
+                                fallbackIconSize: 60,
+                              )
+                            : const Icon(
+                                Icons.person,
+                                size: 60,
+                                color: Colors.grey,
+                              ),
                       ),
                     ),
                     SizedBox(height: 16),

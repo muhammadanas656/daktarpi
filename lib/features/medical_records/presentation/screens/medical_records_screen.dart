@@ -19,6 +19,7 @@ import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../settings/presentation/settings_notifier.dart'; // IMPORTED
 import '../widgets/record_card.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -234,29 +235,98 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           }
           await showDialog(
             context: context,
-            builder:
-                (_) => Dialog(
-                  backgroundColor: Colors.transparent,
-                  child: Stack(
-                    alignment: Alignment.topRight,
-                    children: [
-                      InteractiveViewer(
-                        child: Image.network(
-                          url,
-                          loadingBuilder: (_, child, progress) {
-                            return progress == null
-                                ? child
-                                : Center(child: CircularProgressIndicator());
-                          },
+            builder: (_) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+
+              return Dialog(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 40,
+                ),
+                child: Stack(
+                  clipBehavior:
+                      Clip.none, // Allows the close button to overlap the edge
+                  alignment: Alignment.topRight,
+                  children: [
+                    // --- The Well-Defined Image Box ---
+                    Container(
+                      width: double.infinity,
+                      constraints: BoxConstraints(
+                        maxHeight:
+                            MediaQuery.of(context).size.height *
+                            0.7, // Keeps it from stretching too tall
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color:
+                              isDark ? AppColors.darkBorder : Colors.grey[300]!,
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      // ClipRRect ensures the image doesn't bleed over the rounded corners of the box
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: InteractiveViewer(
+                          child: AppNetworkImage(
+                            imageUrl: url,
+                            cacheKey: path, // Keeps your offline caching!
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                    ),
+
+                    // --- Premium Overlapping Close Button ---
+                    Positioned(
+                      top: -12,
+                      right: -12,
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.dangerRed,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color:
+                                  isDark
+                                      ? const Color(0xFF1E1E1E)
+                                      : Colors.white,
+                              width: 3,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.dangerRed.withValues(
+                                  alpha: 0.4,
+                                ),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              );
+            },
           );
           return;
         }
@@ -308,6 +378,8 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                   Text("Attached Files", style: AppTextStyles.h3(context)),
                   SizedBox(height: 16),
                   ...record.fileUrls.asMap().entries.map((entry) {
+                    final index =
+                        entry.key; // PRO FIX: Used to number the files
                     final path = entry.value;
                     final isImage = [
                       'jpg',
@@ -315,17 +387,56 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                       'png',
                     ].contains(path.split('.').last.toLowerCase());
 
-                    return ListTile(
-                      leading: Icon(
-                        isImage ? Icons.image : Icons.description,
-                        color: AppColors.primaryGreen,
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color:
+                            Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.darkSurface
+                                : Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primaryGreen.withValues(alpha: 0.2),
+                        ),
                       ),
-                      title: Text(_getCleanFileName(path)),
-                      trailing: Icon(Icons.open_in_new, size: 18),
-                      onTap: () {
-                        Navigator.pop(context);
-                        openPath(path);
-                      },
+                      child: ListTile(
+                        leading: Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryGreen.withValues(
+                              alpha: 0.1,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            isImage
+                                ? Icons.image_rounded
+                                : Icons.description_rounded,
+                            color: AppColors.primaryGreen,
+                          ),
+                        ),
+                        // PRO FIX: Clean, professional naming convention
+                        title: Text(
+                          "Document ${index + 1}",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        // Keep the actual filename small underneath just for reference
+                        subtitle: Text(
+                          _getCleanFileName(path),
+                          style: TextStyle(fontSize: 10, color: Colors.grey),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Icon(
+                          Icons.open_in_new_rounded,
+                          size: 20,
+                          color: AppColors.primaryGreen,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          openPath(path);
+                        },
+                      ),
                     );
                   }),
                 ],

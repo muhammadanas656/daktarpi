@@ -16,6 +16,7 @@ import 'package:uuid/uuid.dart';
 import '../models/booking_route_args.dart';
 import '../../../../presentation/widgets/complaint_dialog.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
+import '../../../../core/network/network_notifier.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
   const MyAppointmentsScreen({super.key});
@@ -35,12 +36,30 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     _appointmentNotifier.initializeRealtime();
     _appointmentNotifier.fetchAppointments();
     _appointmentNotifier.addListener(_onNotifierChanged);
+    
+    // PRO FIX: Actively listen for internet connection changes
+    NetworkNotifier.instance.addListener(_onNetworkChanged);
   }
 
   @override
   void dispose() {
     _appointmentNotifier.removeListener(_onNotifierChanged);
+    
+    // PRO FIX: Clean up the network listener to prevent memory leaks
+    NetworkNotifier.instance.removeListener(_onNetworkChanged);
     super.dispose();
+  }
+
+  // PRO FIX: Triggers a UI rebuild and an automatic silent data refresh!
+  void _onNetworkChanged() {
+    if (mounted) {
+      setState(() {}); // This instantly hides the offline banner
+      
+      if (!NetworkNotifier.instance.isOffline) {
+        // The second the internet returns, silently fetch the live waiting times!
+        _appointmentNotifier.fetchAppointments();
+      }
+    }
   }
 
   void _onNotifierChanged() {
@@ -873,7 +892,9 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               // REMOVED the rigid banner and spacing from here!
               Expanded(
                 child:
-                    _appointmentNotifier.isLoading
+                    // PRO FIX: Only show spinner if we have NO cached data to display.
+                    // This allows real-time updates (like the 'waiting' countdown) to appear seamlessly without screen flashing!
+                    (_appointmentNotifier.isLoading && _appointmentNotifier.appointments.isEmpty)
                         ? Center(
                           child: CircularProgressIndicator(
                             color: AppColors.primaryGreen,
@@ -1002,9 +1023,16 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
                   // 2. Render the Banner smoothly underneath the hint
                   if (index == 1) {
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: 8.0),
-                      child: _buildUpcomingBanner(),
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.only(bottom: 8.0),
+                          child: _buildUpcomingBanner(),
+                        ),
+                        // PRO FIX: Shows the warning only when offline
+                        if (NetworkNotifier.instance.isOffline)
+                          _buildOfflineWarningBanner(),
+                      ],
                     );
                   }
 
@@ -1100,5 +1128,34 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     } catch (_) {
       return t;
     }
+  }
+
+  Widget _buildOfflineWarningBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: Colors.orange, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "You are currently offline. Live wait times and appointment statuses will update automatically when you reconnect.",
+              style: TextStyle(
+                color: Colors.orange[800], // Darker orange for readability
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

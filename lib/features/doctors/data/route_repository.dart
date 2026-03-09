@@ -22,31 +22,46 @@ class RouteRepository {
         'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson&overview=full',
       );
 
-      try {
-        final httpResp = await http
-            .get(uri)
-            .timeout(const Duration(seconds: 10));
-        if (httpResp.statusCode == 200) {
-          final data = jsonDecode(httpResp.body);
-          final routes = data['routes'] as List<dynamic>? ?? [];
-          if (routes.isNotEmpty) {
-            final geometry = (routes.first as Map<String, dynamic>)['geometry'];
-            final coordinates =
-                (geometry as Map<String, dynamic>)['coordinates']
-                    as List<dynamic>;
-            return coordinates.map((coord) {
-              final pair = coord as List<dynamic>;
-              return LatLng(
-                (pair[1] as num).toDouble(),
-                (pair[0] as num).toDouble(),
-              );
-            }).toList();
+      // PRO FIX: Automatic 2-attempt Retry Loop for waking up sleeping OSRM servers
+      const int maxAttempts = 2;
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final httpResp = await http
+              .get(uri)
+              .timeout(const Duration(seconds: 10));
+
+          if (httpResp.statusCode == 200) {
+            final data = jsonDecode(httpResp.body);
+            final routes = data['routes'] as List<dynamic>? ?? [];
+            if (routes.isNotEmpty) {
+              final geometry =
+                  (routes.first as Map<String, dynamic>)['geometry'];
+              final coordinates =
+                  (geometry as Map<String, dynamic>)['coordinates']
+                      as List<dynamic>;
+              return coordinates.map((coord) {
+                final pair = coord as List<dynamic>;
+                return LatLng(
+                  (pair[1] as num).toDouble(),
+                  (pair[0] as num).toDouble(),
+                );
+              }).toList();
+            }
+          } else {
+            // Throw exception to trigger the retry block if the server is waking up
+            throw Exception('OSRM Server returned non-200 status');
           }
+        } catch (_) {
+          // If this was the last attempt, break the loop and fall back to edge function
+          if (attempt == maxAttempts) {
+            break;
+          }
+          // Otherwise, wait 500ms for the server to wake up and try again!
+          await Future.delayed(const Duration(milliseconds: 500));
         }
-      } catch (_) {
-        // Fallback to proxy on failure
       }
 
+      // Fallback to proxy on absolute failure
       final response = await _client.functions.invoke(
         'route-proxy',
         body: {

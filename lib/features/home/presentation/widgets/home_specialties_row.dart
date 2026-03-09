@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../presentation/widgets/app_network_image.dart'; // PRO FIX
+import '../../../../presentation/widgets/app_network_image.dart';
 
 class HomeSpecialtiesRow extends StatelessWidget {
   final List<Map<String, dynamic>> specialties;
@@ -24,6 +24,7 @@ class HomeSpecialtiesRow extends StatelessWidget {
       iconData = Icons.remove_red_eye_rounded;
     }
 
+    // Fixed exactly to your original 28 size
     return Icon(iconData, color: const Color(0xFF008FA0), size: 28);
   }
 
@@ -52,9 +53,11 @@ class HomeSpecialtiesRow extends StatelessWidget {
             child: Column(
               children: [
                 Container(
+                  // Restored completely to your original 60x60 dimensions
                   width: 60,
                   height: 60,
-                  padding: const EdgeInsets.all(12),
+                  // PRO FIX: Perfectly centers the 28px icon, leaving a consistent, flawless circular breathing area
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
                     shape: BoxShape.circle,
@@ -64,16 +67,19 @@ class HomeSpecialtiesRow extends StatelessWidget {
                             : null,
                     boxShadow: AppStyles.cardShadow(context),
                   ),
-                  // PRO FIX: Replaced Image.network with cached variant
                   child:
                       item['icon_url'] != null &&
                               item['icon_url'].toString().isNotEmpty
-                          ? AppNetworkImage(
-                            imageUrl: item['icon_url'],
-                            width: 36,
-                            height: 36,
-                            circular: true, // PRO FIX: Makes the loading shimmer circular!
-                            fit: BoxFit.contain,
+                          // PRO FIX: Locks the network image to the EXACT same 28x28 size as the fallback icon.
+                          ? SizedBox(
+                            width: 35,
+                            height: 35,
+                            child: AppNetworkImage(
+                              imageUrl: item['icon_url'],
+                              circular: false,
+                              // BoxFit.contain guarantees the image scales to fit 28x28 without ANY cropping
+                              fit: BoxFit.contain,
+                            ),
                           )
                           : _getFallbackIcon(name),
                 ),

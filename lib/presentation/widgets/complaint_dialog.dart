@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_styles.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../features/appointments/data/appointment_repository.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 
 class ComplaintDialog extends StatefulWidget {
-  final Map<String, dynamic> appointment;
+  final Map<String, dynamic>? appointment;
   final VoidCallback onComplaintSubmitted;
+  final bool isSupportMode;
 
   const ComplaintDialog({
     super.key,
-    required this.appointment,
+    this.appointment,
     required this.onComplaintSubmitted,
+    this.isSupportMode = false,
   });
 
   @override
@@ -21,9 +25,7 @@ class ComplaintDialog extends StatefulWidget {
 class _ComplaintDialogState extends State<ComplaintDialog> {
   final _repository = AppointmentRepository();
   final _commentController = TextEditingController();
-
   bool _isSubmitting = false;
-  String _selectedRecipient = 'doctor'; // Default selection
 
   @override
   void dispose() {
@@ -31,221 +33,150 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (_commentController.text.trim().isEmpty) {
-      CustomSnackbar.showError(context, "Please provide some details.");
-      return;
-    }
-
-    setState(() => _isSubmitting = true);
-
-    try {
-      await _repository.submitComplaint(
-        appointmentId: widget.appointment['id'],
-        doctorId:
-            widget.appointment['doctor_id'] ??
-            widget.appointment['doctors']['id'],
-        description: _commentController.text.trim(),
-        recipient: _selectedRecipient,
-      );
-
-      if (mounted) {
-        Navigator.pop(context);
-        CustomSnackbar.showSuccess(
-          context,
-          "Your complaint has been sent securely.",
-        );
-        widget.onComplaintSubmitted();
-      }
-    } catch (e) {
-      if (mounted) {
-        CustomSnackbar.showError(context, e.toString());
-        setState(() => _isSubmitting = false);
-      }
-    }
-  }
-
-  Widget _buildSelectionCard(
-    String title,
-    String subtitle,
-    IconData icon,
-    String value,
-  ) {
-    final isSelected = _selectedRecipient == value;
-    final activeColor = value == 'support' ? Colors.blue : Colors.deepOrange;
-
-    return GestureDetector(
-      onTap: () => setState(() => _selectedRecipient = value),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 200),
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected 
-              ? activeColor.withValues(alpha: 0.1) 
-              : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? activeColor : context.colorBorder,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: isSelected ? activeColor : Colors.grey, size: 28),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? activeColor : context.colorTextDark,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: context.colorTextLight,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isSelected)
-              Icon(Icons.check_circle, color: activeColor, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final doctorName = widget.appointment['doctors']?['full_name'] ?? 'Doctor';
+    final brandColor =
+        widget.isSupportMode ? AppColors.infoBlue : Colors.deepOrange;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       backgroundColor: Theme.of(context).colorScheme.surface,
-      insetPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.all(24),
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: 24,
+        vertical: 24,
+      ), // Prevents it from stretching too wide
+      elevation: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          // PRO FIX: Much softer, more premium border that looks great in Dark Mode
+          border: Border.all(
+            color: brandColor.withValues(alpha: isDark ? 0.2 : 0.1),
+            width: 1.5,
+          ),
+          boxShadow: AppStyles.elevatedShadow(context),
+        ),
+        // PRO FIX: Added scrolling so the keyboard doesn't break the slick UI
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28), // Slightly more breathing room
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.deepOrange.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
+              // --- PREMIUM GLOWING HEADER ---
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: brandColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                  // PRO FIX: A beautiful "Halo" bloom effect behind the icon
+                  boxShadow: [
+                    BoxShadow(
+                      color: brandColor.withValues(alpha: 0.25),
+                      blurRadius: 24,
+                      spreadRadius: -4,
                     ),
-                    child: Icon(
-                      Icons.report_problem_outlined,
-                      color: Colors.deepOrange,
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      "File a Complaint",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: context.colorTextDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-
-              Text(
-                "Who would you like to contact?",
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: context.colorTextDark,
+                  ],
+                ),
+                child: Icon(
+                  widget.isSupportMode
+                      ? Icons.support_agent_rounded
+                      : Icons.report_problem_rounded,
+                  color: brandColor,
+                  size: 34,
                 ),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 24),
 
-              _buildSelectionCard(
-                "Directly to $doctorName",
-                "Message the doctor or clinic directly regarding this visit.",
-                Icons.person_outline,
-                'doctor',
-              ),
-              SizedBox(height: 12),
-              _buildSelectionCard(
-                "DaktarPai Support",
-                "Report app issues, payment errors, or platform disputes.",
-                Icons.support_agent,
-                'support',
-              ),
-
-              SizedBox(height: 24),
               Text(
-                "Details",
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: context.colorTextDark,
+                widget.isSupportMode ? "Contact Support" : "File a Complaint",
+                style: AppTextStyles.h2(context).copyWith(letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 12),
+
+              Text(
+                widget.isSupportMode
+                    ? "Describe the issue you're facing with the platform or payment."
+                    : "Message the clinic directly regarding your visit.",
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(context).copyWith(
+                  color: context.colorTextLight,
+                  height: 1.4, // Better line height for readability
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 28),
 
+              // --- INPUT FIELD ---
               AppTextField(
                 controller: _commentController,
                 maxLines: 4,
-                hintText: "Please explain what went wrong...",
+                hintText: "Enter details here...",
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 32),
 
+              // --- ACTION BUTTONS ---
               Row(
                 children: [
                   Expanded(
                     child: TextButton(
                       onPressed:
                           _isSubmitting ? null : () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
                       child: Text(
                         "Cancel",
-                        style: TextStyle(color: context.colorTextLight),
+                        style: TextStyle(
+                          color: context.colorTextLight,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 16),
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepOrange,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: AppStyles.primaryShadow(
+                          context,
+                          brandColor,
+                          alpha: 0.35,
                         ),
-                        padding: EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child:
-                          _isSubmitting
-                              ? SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: brandColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child:
+                            _isSubmitting
+                                ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                                : const Text(
+                                  "Submit",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
-                              )
-                              : Text(
-                                "Submit",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
+                      ),
                     ),
                   ),
                 ],
@@ -255,5 +186,31 @@ class _ComplaintDialogState extends State<ComplaintDialog> {
         ),
       ),
     );
+  }
+
+  Future<void> _submit() async {
+    if (_commentController.text.trim().isEmpty) {
+      CustomSnackbar.showError(context, "Please provide details.");
+      return;
+    }
+    setState(() => _isSubmitting = true);
+    try {
+      await _repository.submitComplaint(
+        appointmentId: widget.appointment?['id'],
+        doctorId: widget.appointment?['doctor_id'],
+        description: _commentController.text.trim(),
+        recipient: widget.isSupportMode ? 'support' : 'doctor',
+      );
+      if (mounted) {
+        Navigator.pop(context);
+        CustomSnackbar.showSuccess(context, "Submitted successfully.");
+        widget.onComplaintSubmitted();
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showError(context, e.toString());
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 }

@@ -144,22 +144,23 @@ class _CustomDrawerState extends State<CustomDrawer> {
                     ),
                     boxShadow: AppStyles.cardShadow(context),
                   ),
+                  // PRO FIX: Removed NetworkImage, using AppNetworkImage for offline support
                   child: CircleAvatar(
                     radius: 38,
                     backgroundColor: Colors.white,
-                    child: avatar != null && avatar.isNotEmpty
-                        ? AppNetworkImage(
-                            imageUrl: avatar,
-                            width: 76,
-                            height: 76,
-                            fit: BoxFit.cover,
-                            circular: true, // Offline-ready!
-                          )
-                        : const Icon(
-                            Icons.person,
-                            color: Colors.grey,
-                            size: 38,
-                          ),
+                    child:
+                        avatar != null && avatar.isNotEmpty
+                            ? AppNetworkImage(
+                              imageUrl: avatar,
+                              width: 76,
+                              height: 76,
+                              circular: true,
+                            )
+                            : const Icon(
+                              Icons.person,
+                              color: Colors.grey,
+                              size: 38,
+                            ),
                   ),
                 ),
                 const SizedBox(height: 16),

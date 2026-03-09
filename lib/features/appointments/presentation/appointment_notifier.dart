@@ -21,17 +21,14 @@ class AppointmentNotifier extends ChangeNotifier {
 
   List<Appointment> _appointments = [];
 
-  // --- UPDATED: Track both reviews and complaints ---
   List<Map<String, dynamic>> _pendingReviews = [];
   List<Map<String, dynamic>> _pendingComplaints = [];
 
-  // Combine them for the UI carousel, sorted by newest first
   List<Map<String, dynamic>> get actionRequiredItems {
     final combined = [..._pendingReviews, ..._pendingComplaints];
     combined.sort((a, b) => b['schedule_date'].compareTo(a['schedule_date']));
     return combined;
   }
-  // --------------------------------------------------
 
   bool _isLoading = false;
   String? _error;
@@ -81,7 +78,8 @@ class AppointmentNotifier extends ChangeNotifier {
     _appointmentsSubscription = _appointmentRepo.subscribeToAppointments(
       userId: userId,
       onChange: (_) {
-        unawaited(fetchAppointments());
+        // PRO FIX: Trigger a silent background fetch so the UI doesn't show a loading spinner!
+        unawaited(fetchAppointments(isBackground: true));
       },
     );
   }
@@ -100,7 +98,8 @@ class AppointmentNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchAppointments() async {
+  // PRO FIX: Added `isBackground` parameter to prevent UI flashes
+  Future<void> fetchAppointments({bool isBackground = false}) async {
     initializeRealtime();
     await _ensureRealtimeSubscription();
 
@@ -117,9 +116,12 @@ class AppointmentNotifier extends ChangeNotifier {
       return;
     }
 
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    // PRO FIX: Only show loading spinner if it's a manual/initial fetch
+    if (!isBackground) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
 
     try {
       final cached = await _cacheRepo.loadAppointments();
@@ -134,7 +136,6 @@ class AppointmentNotifier extends ChangeNotifier {
     try {
       final previousIds = _appointments.map((a) => a.id).toSet();
 
-      // --- CHANGED: Fetch active appointments, reviews, AND complaints ---
       final results = await Future.wait([
         _appointmentRepo.fetchAppointments(userId),
         _appointmentRepo.fetchPendingReviews(userId),
@@ -144,7 +145,6 @@ class AppointmentNotifier extends ChangeNotifier {
       final freshAppointments = results[0] as List<Appointment>;
       _pendingReviews = results[1] as List<Map<String, dynamic>>;
       _pendingComplaints = results[2] as List<Map<String, dynamic>>;
-      // -------------------------------------------------------------------
 
       final nextIds = freshAppointments.map((a) => a.id).toSet();
 
@@ -155,9 +155,10 @@ class AppointmentNotifier extends ChangeNotifier {
       _appointments = freshAppointments;
       await _cacheRepo.saveAppointments(_appointments);
     } catch (e) {
-      _error = e.toString();
+      if (!isBackground) _error = e.toString();
       debugPrint("AppointmentNotifier Error: $e");
     } finally {
+      // PRO FIX: Ensure loading flag is turned off, and notify the UI to update with fresh data
       _isLoading = false;
       notifyListeners();
     }

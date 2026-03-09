@@ -13,6 +13,7 @@ import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../data/medical_record.dart';
 import '../../data/medical_record_repository.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 
 class AddRecordScreen extends StatefulWidget {
   final MedicalRecord? recordToEdit;
@@ -131,46 +132,117 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
     }
   }
 
+  // --- PRO FIX: Premium Bottom Sheet Design ---
   void _showImageOptions() {
-    // FIXED: Removed unused 'isDark' variable
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder:
           (context) => SafeArea(
-            child: Wrap(
-              children: [
-                ListTile(
-                  leading: Icon(Icons.camera_alt, color: context.colorTextDark),
-                  title: Text(
-                    'Take a photo',
-                    style: TextStyle(color: context.colorTextDark),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Drag Handle
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[700] : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _takePhoto();
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.photo_library,
-                    color: context.colorTextDark,
+                  const SizedBox(height: 24),
+                  Text(
+                    "Upload Photo",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
-                  title: Text(
-                    'Choose from gallery',
-                    style: TextStyle(color: context.colorTextDark),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Choose an option to attach a medical document",
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickImages();
-                  },
-                ),
-              ],
+                  const SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildBottomSheetOption(
+                        context: context,
+                        icon: Icons.camera_alt_rounded,
+                        label: "Camera",
+                        onTap: () {
+                          Navigator.pop(context);
+                          _takePhoto();
+                        },
+                      ),
+                      _buildBottomSheetOption(
+                        context: context,
+                        icon: Icons.photo_library_rounded,
+                        label: "Gallery",
+                        onTap: () {
+                          Navigator.pop(context);
+                          _pickImages();
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
             ),
           ),
+    );
+  }
+
+  Widget _buildBottomSheetOption({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color:
+                  isDark
+                      ? AppColors.darkSurface
+                      : AppColors.primaryGreen.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color:
+                    isDark
+                        ? AppColors.darkBorder
+                        : AppColors.primaryGreen.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Icon(icon, size: 32, color: AppColors.primaryGreen),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -288,6 +360,8 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool hasImages =
+        _selectedImages.isNotEmpty || _existingImageUrls.isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
@@ -334,27 +408,19 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                   height: 120,
                   child: Row(
                     children: [
-                      if (_selectedImages.isNotEmpty ||
-                          _existingImageUrls.isNotEmpty)
+                      // --- The Image List (Expands to take remaining space) ---
+                      if (hasImages)
                         Expanded(
                           child: ListView(
                             scrollDirection: Axis.horizontal,
                             children: [
-                              ..._existingImageUrls.asMap().entries.map((
-                                entry,
-                              ) {
+                              ..._existingImageUrls.asMap().entries.map((entry) {
                                 final index = entry.key;
                                 final path = entry.value;
                                 return _buildThumbnail(
                                   path: path,
-                                  onTap:
-                                      (url) =>
-                                          _showFullImage(NetworkImage(url)),
-                                  onDelete:
-                                      () => setState(
-                                        () =>
-                                            _existingImageUrls.removeAt(index),
-                                      ),
+                                  onTap: (url) => _showFullImage(NetworkImage(url)),
+                                  onDelete: () => setState(() => _existingImageUrls.removeAt(index)),
                                   isNetwork: true,
                                 );
                               }),
@@ -364,10 +430,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                                 return _buildThumbnail(
                                   file: file,
                                   onTap: (_) => _showFullImage(FileImage(file)),
-                                  onDelete:
-                                      () => setState(
-                                        () => _selectedImages.removeAt(index),
-                                      ),
+                                  onDelete: () => setState(() => _selectedImages.removeAt(index)),
                                   isNetwork: false,
                                 );
                               }),
@@ -375,51 +438,48 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                           ),
                         ),
 
-                      if (_selectedImages.isNotEmpty ||
-                          _existingImageUrls.isNotEmpty)
-                        const SizedBox(width: 12),
+                      if (hasImages) const SizedBox(width: 12),
 
+                      // --- The Add Button (Fixed width, turns dull when inactive) ---
                       GestureDetector(
-                        onTap: _showImageOptions,
-                        child: Container(
-                          width: 100,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color:
-                                isDark
-                                    ? AppColors.primaryGreen.withValues(
-                                      alpha: 0.15,
-                                    )
-                                    : const Color(0xFFE0F2F1),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color:
-                                  isDark
-                                      ? AppColors.primaryGreen.withValues(
-                                        alpha: 0.3,
-                                      )
-                                      : Colors.transparent,
+                        onTap: hasImages ? null : _showImageOptions, // Disables tap when an image is present
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 300),
+                          opacity: hasImages ? 0.4 : 1.0, // Fades out to look inactive
+                          child: Container(
+                            width: 100, // Fixed width prevents horizontal stretching
+                            height: 120,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.primaryGreen.withValues(alpha: 0.15)
+                                  : const Color(0xFFE0F2F1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.primaryGreen.withValues(alpha: 0.3)
+                                    : Colors.transparent,
+                              ),
                             ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(
-                                Icons.add_a_photo,
-                                color: AppColors.primaryGreen,
-                                size: 32,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                "Add user\nimage",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(
+                                  Icons.add_a_photo,
                                   color: AppColors.primaryGreen,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                                  size: 32,
                                 ),
-                              ),
-                            ],
+                                SizedBox(height: 8),
+                                Text(
+                                  "Add user\nimage",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AppColors.primaryGreen,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -677,7 +737,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
             child: GestureDetector(
               onTap: () {
                 if (isNetwork && path != null) {
-                  // Wait handled inside future builder
+                  // Handled by FutureBuilder inside
                 } else if (file != null) {
                   onTap('');
                 }
@@ -700,21 +760,23 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                           }
                           return GestureDetector(
                             onTap: () => onTap(snapshot.data!),
-                            child: Image.network(
-                              snapshot.data!,
-                              width: 100,
-                              height: 120,
-                              fit: BoxFit.cover,
-                            ),
-                          );
-                        },
-                      )
-                      : Image.file(
-                        file!,
-                        width: 100,
-                        height: 120,
-                        fit: BoxFit.cover,
-                      ),
+                            // PRO FIX: Now caches the signed URL thumbnail instantly
+                          child: AppNetworkImage(
+                            imageUrl: snapshot.data!,
+                            cacheKey: path, // The raw path never changes!
+                            width: 100,
+                            height: 120,
+                            fit: BoxFit.cover,
+                          ),
+                        );
+                      },
+                    )
+                  : Image.file(
+                      file!,
+                      width: 100,
+                      height: 120,
+                      fit: BoxFit.cover,
+                    ),
             ),
           ),
           Positioned(

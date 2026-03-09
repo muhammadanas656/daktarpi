@@ -472,28 +472,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               boxShadow: AppStyles.cardShadow(context),
                               color: isDark ? AppColors.darkSurface : Colors.grey[200],
                             ),
+                            // PRO FIX: Replaced Image.network with offline-ready AppNetworkImage
                             child: ClipOval(
-                              child:
-                                  _imageFile != null
-                                      ? Image.file(
-                                        _imageFile!,
-                                        fit: BoxFit.cover,
-                                        width: 120,
-                                        height: 120,
-                                      )
-                                      : (_avatarUrl != null && _avatarUrl!.isNotEmpty
-                                          ? AppNetworkImage(
-                                              imageUrl: _avatarUrl,
-                                              width: 120,
-                                              height: 120,
-                                              circular: true,
-                                              fallbackIconSize: 60,
-                                            )
-                                          : Icon(
-                                              Icons.person,
-                                              size: 60,
-                                              color: Colors.grey,
-                                            )),
+                              child: _imageFile != null
+                                  ? Image.file(
+                                      _imageFile!,
+                                      fit: BoxFit.cover,
+                                      width: 120,
+                                      height: 120,
+                                    )
+                                  : (_avatarUrl != null && _avatarUrl!.isNotEmpty
+                                      ? AppNetworkImage(
+                                          imageUrl: _avatarUrl,
+                                          width: 120,
+                                          height: 120,
+                                          circular: true,
+                                          fallbackIconSize: 60,
+                                        )
+                                      : const Icon(
+                                          Icons.person,
+                                          size: 60,
+                                          color: Colors.grey,
+                                        )),
                             ),
                           ),
                           Positioned(

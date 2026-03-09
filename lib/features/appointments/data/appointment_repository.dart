@@ -35,7 +35,7 @@ class AppointmentRepository {
   Future<List<Map<String, dynamic>>> _fetchWithCache({
     required String cacheKey,
     required Future<List<Map<String, dynamic>>> Function() fetcher,
-    bool forceRefresh = false,
+    bool forceRefresh = true, // PRO FIX: Changed to true! This enables Network-First, Offline-Fallback behavior!
   }) async {
     final box = await _getCacheBox();
     final isOffline = NetworkNotifier.instance.isOffline;
@@ -193,6 +193,14 @@ class AppointmentRepository {
               .delete()
               .eq('id', appointmentId)
               .select();
+
+      // PRO FIX: Instantly clear the local cache so the app is forced to fetch the new state!
+      final userId = currentUserId;
+      if (userId != null) {
+        final box = await _getCacheBox();
+        await box.delete('appointments_$userId');
+      }
+
       if (response.isEmpty) {
         throw const AppFailure(
           type: AppFailureType.backend,
@@ -228,6 +236,13 @@ class AppointmentRepository {
           .from('appointments')
           .update({'status': 'completed'})
           .eq('id', appointmentId);
+
+      // PRO FIX: Instantly clear the local cache so the app is forced to fetch the new state!
+      final userId = currentUserId;
+      if (userId != null) {
+        final box = await _getCacheBox();
+        await box.delete('appointments_$userId');
+      }
     } catch (error) {
       throw AppFailure.fromError(
         error,
@@ -293,6 +308,13 @@ class AppointmentRepository {
               .select('id')
               .single();
       final idValue = inserted['id'];
+
+      // PRO FIX: Instantly clear the local cache so the app is forced to fetch the new booking!
+      final userId = currentUserId;
+      if (userId != null) {
+        final box = await _getCacheBox();
+        await box.delete('appointments_$userId');
+      }
 
       if (idValue is int) return idValue;
 
@@ -372,6 +394,21 @@ class AppointmentRepository {
       'comment': comment,
     };
 
+    // --- PRO FIX: Optimistic Cache Update ---
+    // Instantly update the local Hive cache so the UI shows "Submitted" immediately, even offline!
+    final box = await _getCacheBox();
+    final cacheKey = 'activity_log_complete_$userId';
+    final cachedData = box.get(cacheKey);
+    if (cachedData != null) {
+      final List<dynamic> decoded = jsonDecode(cachedData);
+      for (var item in decoded) {
+        if (item['id'] == appointmentId) {
+          item['has_review'] = true; // Flip the flag locally
+        }
+      }
+      await box.put(cacheKey, jsonEncode(decoded));
+    }
+
     if (NetworkNotifier.instance.isOffline) {
       await _queueAction('submit_review', payload);
       return;
@@ -399,8 +436,9 @@ class AppointmentRepository {
   }
 
   Future<void> submitComplaint({
-    required int appointmentId,
-    required int doctorId,
+    int?
+    appointmentId, // PRO FIX: Made nullable to support general Help Center tickets
+    int? doctorId, // PRO FIX: Made nullable
     required String description,
     required String recipient,
   }) async {
@@ -409,11 +447,27 @@ class AppointmentRepository {
 
     final payload = {
       'user_id': userId,
-      'appointment_id': appointmentId,
-      'doctor_id': doctorId,
+      if (appointmentId != null) 'appointment_id': appointmentId,
+      if (doctorId != null) 'doctor_id': doctorId,
       'description': description,
       'recipient': recipient,
     };
+
+    // --- Optimistic Cache Update (Only if it's tied to an appointment) ---
+    if (appointmentId != null) {
+      final box = await _getCacheBox();
+      final cacheKey = 'activity_log_complete_$userId';
+      final cachedData = box.get(cacheKey);
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        for (var item in decoded) {
+          if (item['id'] == appointmentId) {
+            item['has_complaint'] = true;
+          }
+        }
+        await box.put(cacheKey, jsonEncode(decoded));
+      }
+    }
 
     if (NetworkNotifier.instance.isOffline) {
       await _queueAction('submit_complaint', payload);
@@ -430,14 +484,15 @@ class AppointmentRepository {
       );
     }
   }
-
   // ─── Read-Only Fallbacks ───────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchActivityLog(String userId) async {
     try {
-      final historyList = await _fetchWithCache(
-        cacheKey: 'activity_log_$userId',
+      // PRO FIX: We use a new cache key and augment the data BEFORE saving to Hive
+      return await _fetchWithCache(
+        cacheKey: 'activity_log_complete_$userId',
         fetcher: () async {
+          // 1. Fetch the raw history
           final response = await _client
               .from('appointment_history')
               .select(
@@ -445,31 +500,33 @@ class AppointmentRepository {
               )
               .eq('user_id', userId)
               .order('archived_at', ascending: false);
-          return List<Map<String, dynamic>>.from(response);
+
+          final historyList = List<Map<String, dynamic>>.from(response);
+
+          // 2. Fetch the reviews and complaints
+          final reviewsResponse = await _client
+              .from('reviews')
+              .select('appointment_id')
+              .eq('user_id', userId);
+          final complaintsResponse = await _client
+              .from('complaints')
+              .select('appointment_id')
+              .eq('user_id', userId);
+
+          final reviewedIds =
+              reviewsResponse.map((r) => r['appointment_id']).toSet();
+          final complainedIds =
+              complaintsResponse.map((c) => c['appointment_id']).toSet();
+
+          // 3. Attach the flags so they get permanently saved into the offline cache!
+          for (var item in historyList) {
+            item['has_review'] = reviewedIds.contains(item['id']);
+            item['has_complaint'] = complainedIds.contains(item['id']);
+          }
+
+          return historyList;
         },
       );
-
-      if (NetworkNotifier.instance.isOffline) return historyList;
-
-      final reviewsResponse = await _client
-          .from('reviews')
-          .select('appointment_id')
-          .eq('user_id', userId);
-      final complaintsResponse = await _client
-          .from('complaints')
-          .select('appointment_id')
-          .eq('user_id', userId);
-
-      final reviewedIds =
-          reviewsResponse.map((r) => r['appointment_id']).toSet();
-      final complainedIds =
-          complaintsResponse.map((c) => c['appointment_id']).toSet();
-
-      for (var item in historyList) {
-        item['has_review'] = reviewedIds.contains(item['id']);
-        item['has_complaint'] = complainedIds.contains(item['id']);
-      }
-      return historyList;
     } catch (error) {
       throw AppFailure.fromError(
         error,
