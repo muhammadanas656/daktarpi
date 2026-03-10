@@ -12,6 +12,7 @@ import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../profile/presentation/profile_notifier.dart';
+import '../../../notifications/presentation/notification_notifier.dart';
 
 class DoctorsScreen extends StatefulWidget {
   final bool isBackgroundLayer; // PRO FIX: Flag for 3D Drawer background mode
@@ -187,25 +188,68 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-  // --- Header, Search, and Lists (Existing Logic) ---
+  // --- PRO FIX: Signature Surface Header for Doctors ---
+  // --- PRO FIX: Premium Editorial Glass Header ---
+  // --- PRO FIX: Clean Typographic Header ---
+  // --- PRO FIX: Clean Typographic Header with Reactive Inbox Badge ---
   Widget _buildHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text("Doctors", style: AppTextStyles.h1(context)),
+          Text(
+            "Find a Doctor", 
+            style: AppTextStyles.h1(context).copyWith(
+              fontSize: 26, 
+              letterSpacing: -0.5,
+            ),
+          ),
           Container(
-            padding: const EdgeInsets.all(10),
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark ? AppColors.darkBorder : context.colorBorder,
+              ),
               boxShadow: AppStyles.cardShadow(context),
             ),
-            child: Icon(
-              Icons.notifications_none_rounded,
-              color: context.colorTextDark,
-              size: 24,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.notifications_none_rounded, color: context.colorTextDark, size: 22),
+                  onPressed: () => context.push(AppRoutes.notifications),
+                ),
+                
+                // Reactive Unread Badge!
+                AnimatedBuilder(
+                  animation: NotificationNotifier.instance,
+                  builder: (context, child) {
+                    if (NotificationNotifier.instance.unreadCount == 0) {
+                      return const SizedBox.shrink();
+                    }
+                    return Positioned(
+                      right: 10,
+                      top: 10,
+                      child: Container(
+                        width: 10, 
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: AppColors.dangerRed, 
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Theme.of(context).colorScheme.surface, width: 1.5), // Cutout effect
+                        ),
+                      ),
+                    );
+                  }
+                ),
+              ],
             ),
           ),
         ],
@@ -329,8 +373,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           isFavorite: _favNotifier.isFavorite(doctor['id']),
           onFavoriteTap: () => _favNotifier.toggle(doctor['id']),
           onCardTap:
-              () =>
-                  context.push(AppRoutes.doctorDetailsById('${doctor['id']}')),
+              () => context.push(
+                AppRoutes.doctorDetailsById('${doctor['id']}'),
+                extra: doctor,
+              ),
         );
       },
     );
@@ -412,18 +458,16 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Dummy Header
+              // 1. Dummy Clean Header
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 10,
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
-                      width: 140,
-                      height: 32,
+                      width: 160,
+                      height: 30,
                       decoration: BoxDecoration(
                         color: skeletonColor,
                         borderRadius: BorderRadius.circular(8),
@@ -440,7 +484,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                   ],
                 ),
               ),
-
               // 2. Dummy Search Bar (Eliminates the "random white text" bug!)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),

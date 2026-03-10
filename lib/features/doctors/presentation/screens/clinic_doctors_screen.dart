@@ -68,8 +68,8 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
     });
   }
 
-  void _navigateToDoctorDetails(int doctorId) {
-    context.push(AppRoutes.doctorDetailsById('$doctorId'));
+  void _navigateToDoctorDetails(int doctorId, Map<String, dynamic> doctorData) {
+    context.push(AppRoutes.doctorDetailsById('$doctorId'), extra: doctorData);
   }
 
   @override
@@ -188,7 +188,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
                           imageUrl: doctor['profile_picture_url'],
                           isFavorite: isFavorite,
                           onFavoriteTap: () => _favNotifier.toggle(docId),
-                          onCardTap: () => _navigateToDoctorDetails(docId),
+                          onCardTap: () => _navigateToDoctorDetails(docId, doctor),
                         );
                       },
                     );

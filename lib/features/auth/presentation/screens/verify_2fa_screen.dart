@@ -142,44 +142,88 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                 "Verified successfully, but this device could not be remembered.",
               );
             }
+            // --- PRO FIX: Adaptive Glass Success Dialog ---
             await showDialog(
               context: context,
               barrierDismissible: false,
-              builder:
-                  (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    title: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: AppColors.primaryGreen),
-                        SizedBox(width: 10),
-                        Text("Access Recovered"),
+              builder: (ctx) {
+                final isDark = Theme.of(ctx).brightness == Brightness.dark;
+                return Dialog(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color:
+                            isDark
+                                ? AppColors.darkBorder
+                                : Colors.grey.withValues(alpha: 0.2),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryGreen.withValues(alpha: 0.15),
+                          blurRadius: 50,
+                          offset: const Offset(0, 15),
+                        ),
                       ],
                     ),
-                    content: Text(
-                      "Your backup code was accepted.\n\nFor your security, your account is currently unprotected. We highly recommend re-enabling 2FA in your settings soon.",
-                      style: TextStyle(
-                        height: 1.5,
-                        color: context.colorTextDark,
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await _handleVerificationSuccess();
-                        },
-                        child: Text(
-                          "Continue",
-                          style: TextStyle(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryGreen.withValues(
+                              alpha: 0.1,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_circle_outline_rounded,
                             color: AppColors.primaryGreen,
-                            fontWeight: FontWeight.bold,
+                            size: 36,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 20),
+                        const Text(
+                          "Access Recovered",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "Your backup code was accepted.\n\nFor your security, your account is currently unprotected. We highly recommend re-enabling 2FA in your settings soon.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          child: PrimaryButton(
+                            label: "Continue",
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              await _handleVerificationSuccess();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                );
+              },
             );
           }
         } else {
@@ -425,11 +469,16 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
                             ),
                             autofocus: true,
                             keyboardType: TextInputType.number,
-                            autofillHints: const [AutofillHints.oneTimeCode],
+
+                            // PRO FIX: Empty array forcefully disables the OS OTP autofill banner
+                            autofillHints: const [],
+
                             showCursor: true,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
-                            ], // Only numbers allowed
+                            ],
+
+                            // PRO FIX: Automatically triggers verification when full
                             onCompleted: (pin) => _verify(),
                           );
                         },

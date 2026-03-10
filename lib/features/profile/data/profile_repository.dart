@@ -123,6 +123,9 @@ class ProfileRepository {
       }
     }
 
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       final response =
           await _client
@@ -160,6 +163,9 @@ class ProfileRepository {
       await box.put('profile_${profile.id}', jsonEncode(data));
       return;
     }
+
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
 
     try {
       await _client.from('profiles').upsert(data);
@@ -234,7 +240,6 @@ class ProfileRepository {
           return;
         }
       } catch (e) {
-        // PRO FIX: Added comment to satisfy empty_catches rule
         // Silently ignore parsing errors and fallback to directory listing
       }
     }
@@ -248,7 +253,6 @@ class ProfileRepository {
         await _client.storage.from('profile_pictures').remove(paths);
       }
     } catch (_) {
-      // PRO FIX: Added comment to satisfy empty_catches rule
       // Silently ignore cleanup errors to prevent blocking the user flow
     }
   }
@@ -278,6 +282,9 @@ class ProfileRepository {
         return [];
       }
     }
+
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
 
     try {
       final response = await _client
@@ -312,6 +319,9 @@ class ProfileRepository {
       return;
     }
 
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       await _client
           .from('saved_patients')
@@ -334,6 +344,9 @@ class ProfileRepository {
       });
       return;
     }
+
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
 
     try {
       await _client

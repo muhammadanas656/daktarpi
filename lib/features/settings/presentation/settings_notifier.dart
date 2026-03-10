@@ -8,49 +8,55 @@ class SettingsNotifier extends ChangeNotifier {
   static const String keyShowDrawerHint = 'show_drawer_hint';
   static const String keyThemeMode = 'theme_mode';
   static const String keyInactivityTimeout = 'inactivity_timeout';
-  static const String keyNotificationsEnabled = 'notifications_enabled';
   static const String keyMedicalRecordsLocked = 'medical_records_locked';
-
   static const String keyHasBiometricHardware = 'has_biometric_hardware';
   static const String keyIsBiometricEnabled = 'is_biometric_enabled';
-
-  // NEW: Persistence keys for security status caching
   static const String key2FAEnabled = 'is_2fa_enabled';
+
+  // Master Notification Toggle
+  static const String keyNotificationsEnabled = 'notifications_enabled';
+
+  // NEW: Granular Notification Toggles
+  static const String keyBookingAlertsEnabled = 'booking_alerts_enabled';
+  static const String keyReminderAlertsEnabled = 'reminder_alerts_enabled';
+  static const String keyAppUpdatesEnabled = 'app_updates_enabled';
+  static const String keyGlobalReminderMinutes = 'global_reminder_minutes';
 
   bool _isLoaded = false;
   bool _showDrawerHint = true;
   ThemeMode _themeMode = ThemeMode.system;
 
   int _inactivityTimeoutMs = 300000; // default 5 minutes
-  bool _notificationsEnabled = true;
-  // Internal state for medical records lock
   bool _medicalRecordsLocked = false;
-
-  // Cached biometric state for instant UI rendering
   bool _hasBiometricHardware = false;
   bool _isBiometricEnabled = false;
-
-  // NEW: Internal state for instantaneous UI rendering
   bool _is2FAEnabled = false;
+
+  // Notification State
+  bool _notificationsEnabled = true;
+  bool _bookingAlertsEnabled = true;
+  bool _reminderAlertsEnabled = true;
+  bool _appUpdatesEnabled = true;
+  int _globalReminderMinutes = 60; // Default: 1 hour before
 
   bool get isLoaded => _isLoaded;
   bool get showDrawerHint => _showDrawerHint;
   ThemeMode get themeMode => _themeMode;
   int get inactivityTimeoutMs => _inactivityTimeoutMs;
-  bool get notificationsEnabled => _notificationsEnabled;
-  // Getter for the medical records lock state
   bool get medicalRecordsLocked => _medicalRecordsLocked;
-
   bool get hasBiometricHardware => _hasBiometricHardware;
   bool get isBiometricEnabled => _isBiometricEnabled;
-
-  // NEW: Getters for the UI to read immediately from memory
   bool get is2FAEnabled => _is2FAEnabled;
 
+  // Notification Getters
+  bool get notificationsEnabled => _notificationsEnabled;
+  bool get bookingAlertsEnabled => _bookingAlertsEnabled;
+  bool get reminderAlertsEnabled => _reminderAlertsEnabled;
+  bool get appUpdatesEnabled => _appUpdatesEnabled;
+  int get globalReminderMinutes => _globalReminderMinutes;
+
   Future<void> loadSettings() async {
-    if (_isLoaded) {
-      return;
-    }
+    if (_isLoaded) return;
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -60,17 +66,18 @@ class SettingsNotifier extends ChangeNotifier {
       _themeMode = _parseThemeMode(themeString);
 
       _inactivityTimeoutMs = prefs.getInt(keyInactivityTimeout) ?? 300000;
-      _notificationsEnabled = prefs.getBool(keyNotificationsEnabled) ?? true;
-      // Load the saved medical records lock state
       _medicalRecordsLocked = prefs.getBool(keyMedicalRecordsLocked) ?? false;
-
       _hasBiometricHardware = prefs.getBool(keyHasBiometricHardware) ?? false;
       _isBiometricEnabled = prefs.getBool(keyIsBiometricEnabled) ?? false;
-
-      // NEW: Load cached security statuses from disk
       _is2FAEnabled = prefs.getBool(key2FAEnabled) ?? false;
 
-      // Enforce security dependency on medical records lock
+      // Load Notification States
+      _notificationsEnabled = prefs.getBool(keyNotificationsEnabled) ?? true;
+      _bookingAlertsEnabled = prefs.getBool(keyBookingAlertsEnabled) ?? true;
+      _reminderAlertsEnabled = prefs.getBool(keyReminderAlertsEnabled) ?? true;
+      _appUpdatesEnabled = prefs.getBool(keyAppUpdatesEnabled) ?? true;
+      _globalReminderMinutes = prefs.getInt(keyGlobalReminderMinutes) ?? 60;
+
       final hasSecurityConfigured = _is2FAEnabled || _isBiometricEnabled;
       if (!hasSecurityConfigured) {
         _medicalRecordsLocked = false;
@@ -84,7 +91,7 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
-  // NEW: Method to update and persist 2FA status
+  // Security Updaters
   Future<void> update2FAEnabled(bool value) async {
     if (_is2FAEnabled == value) return;
     _is2FAEnabled = value;
@@ -92,8 +99,6 @@ class SettingsNotifier extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(key2FAEnabled, value);
-
-      // If turning off 2FA and biometrics is also off, unlock records
       if (!value && !_isBiometricEnabled) {
         await updateMedicalRecordsLock(false);
       }
@@ -102,7 +107,6 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
-  // NEW: Method to update and persist Biometric status
   Future<void> updateBiometricState(bool hasHardware, bool isEnabled) async {
     _hasBiometricHardware = hasHardware;
     _isBiometricEnabled = isEnabled;
@@ -111,8 +115,6 @@ class SettingsNotifier extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyHasBiometricHardware, hasHardware);
       await prefs.setBool(keyIsBiometricEnabled, isEnabled);
-
-      // If turning off biometrics and 2FA is also off, unlock records
       if (!isEnabled && !_is2FAEnabled) {
         await updateMedicalRecordsLock(false);
       }
@@ -121,7 +123,6 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
-  // Method to update and persist the medical records lock state
   Future<void> updateMedicalRecordsLock(bool value) async {
     _medicalRecordsLocked = value;
     notifyListeners();
@@ -133,6 +134,7 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
+  // App Preference Updaters
   Future<void> updateShowDrawerHint(bool value) async {
     _showDrawerHint = value;
     notifyListeners();
@@ -166,6 +168,7 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
+  // --- Notification Updaters ---
   Future<void> updateNotificationsEnabled(bool enabled) async {
     _notificationsEnabled = enabled;
     notifyListeners();
@@ -174,6 +177,50 @@ class SettingsNotifier extends ChangeNotifier {
       await prefs.setBool(keyNotificationsEnabled, enabled);
     } catch (e) {
       debugPrint("SettingsNotifier: Failed to save notifications: $e");
+    }
+  }
+
+  Future<void> updateBookingAlertsEnabled(bool enabled) async {
+    _bookingAlertsEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyBookingAlertsEnabled, enabled);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save booking alerts: $e");
+    }
+  }
+
+  Future<void> updateReminderAlertsEnabled(bool enabled) async {
+    _reminderAlertsEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyReminderAlertsEnabled, enabled);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save reminder alerts: $e");
+    }
+  }
+
+  Future<void> updateAppUpdatesEnabled(bool enabled) async {
+    _appUpdatesEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyAppUpdatesEnabled, enabled);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save app updates alerts: $e");
+    }
+  }
+
+  Future<void> updateGlobalReminderMinutes(int mins) async {
+    _globalReminderMinutes = mins;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(keyGlobalReminderMinutes, mins);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save reminder time: $e");
     }
   }
 
@@ -194,11 +241,16 @@ class SettingsNotifier extends ChangeNotifier {
     _showDrawerHint = true;
     _themeMode = ThemeMode.system;
     _inactivityTimeoutMs = 300000;
-    _notificationsEnabled = true;
-    _medicalRecordsLocked = false; // Reset lock on logout
+    _medicalRecordsLocked = false;
     _hasBiometricHardware = false;
     _isBiometricEnabled = false;
     _is2FAEnabled = false;
+
+    _notificationsEnabled = true;
+    _bookingAlertsEnabled = true;
+    _reminderAlertsEnabled = true;
+    _appUpdatesEnabled = true;
+    _globalReminderMinutes = 60;
 
     notifyListeners();
   }

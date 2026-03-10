@@ -3,10 +3,18 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'doctor.freezed.dart';
 part 'doctor.g.dart';
 
+// REPLACE YOUR EXISTING FUNCTION WITH THIS:
 Object? _readDoctorSpecialty(Map<dynamic, dynamic> json, String key) {
   final nested = json['specialties'];
   if (nested is Map && nested['name'] != null) {
     return nested['name'];
+  }
+  // PRO FIX: Properly catch List data from Supabase joins
+  if (nested is List &&
+      nested.isNotEmpty &&
+      nested.first is Map &&
+      nested.first['name'] != null) {
+    return nested.first['name'];
   }
   return json['specialty'] ?? json[key];
 }

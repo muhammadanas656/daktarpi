@@ -257,8 +257,9 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
               textColor: AppColors.primaryGreen,
               onPressed: () {
                 HapticFeedback.lightImpact();
-                if (mounted)
+                if (mounted) {
                   setState(() => _pendingRemovalIds.remove(doctorId));
+                }
               },
             ),
           ),

@@ -38,7 +38,17 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: AppShapes.xl,
         child: InkWell(
-          onTap: () => context.push(AppRoutes.doctorDetailsById('$id')),
+          onTap:
+              () => context.push(
+                AppRoutes.doctorDetailsById('$id'),
+                extra: {
+                  'id': id,
+                  'full_name': name,
+                  'hourly_rate': price,
+                  'rating': rating,
+                  'profile_picture_url': imageUrl,
+                },
+              ),
           borderRadius: AppShapes.xl,
           child: Padding(
             padding: const EdgeInsets.all(AppDimens.spaceMd),
@@ -72,7 +82,10 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                   height: AppDimens.avatarSm,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkBorder : Colors.grey[200],
+                    color:
+                        Theme.of(context).brightness == Brightness.dark
+                            ? AppColors.darkBorder
+                            : Colors.grey[200],
                   ),
                   child: Hero(
                     tag: 'doctor-hero-$id',

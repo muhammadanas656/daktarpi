@@ -10,6 +10,7 @@ import '../../data/appointment_repository.dart';
 import '../../../../core/services/appointment_notification_service.dart';
 import '../../../settings/presentation/settings_notifier.dart';
 import '../models/booking_route_args.dart';
+import '../../../notifications/presentation/notification_notifier.dart';
 
 class DummyPaymentScreen extends StatefulWidget {
   final DummyPaymentRouteArgs args;
@@ -29,7 +30,7 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
     setState(() => _isProcessing = true);
 
     // 1. Simulate Network Delay for Payment Gateway (Escrow transaction)
-    await Future.delayed(Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 2));
 
     try {
       // 2. Payment Success! Now lock it into the Database
@@ -46,59 +47,64 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
         );
       }
 
-      // --- NEW: Trigger Immediate Confirmation Notification ---
-      if (SettingsNotifier.instance.notificationsEnabled) {
+      // --- PRO FIX: Granular Notification Logic ---
+
+      // 1. Handle Booking Confirmations (Native + In-App Inbox)
+      if (SettingsNotifier.instance.notificationsEnabled &&
+          SettingsNotifier.instance.bookingAlertsEnabled) {
         await _notificationService.showBookingConfirmation(
           appointmentId: persistedAppointmentId,
           doctorName: widget.args.doctorName,
           appointmentTime:
               "${widget.args.displayDate} at ${widget.args.displayTime}",
         );
-      }
-      // --------------------------------------------------------
 
-      // 3. Schedule Local Notification Alarm
-      bool reminderFailed = false;
+        await NotificationNotifier.instance.addNotification(
+          title: "Booking Confirmed! ✅",
+          body:
+              "Your appointment with ${widget.args.doctorName} is set for ${widget.args.displayDate} at ${widget.args.displayTime}.",
+        );
+      }
+
+      // 2. Handle Reminder Scheduling (Background Alarms) - 100% GLOBAL NOW
       try {
         if (SettingsNotifier.instance.notificationsEnabled &&
-            widget.args.reminderMinutes > 0) {
-          // --- NEW: Calculate precise timeout based on DB max_wait_time ---
+            SettingsNotifier.instance.reminderAlertsEnabled &&
+            SettingsNotifier.instance.globalReminderMinutes > 0) {
+          // <-- Only checking Global Time now
+
           final maxWaitTime = widget.args.clinic['max_wait_time'] ?? 30;
           final maxWaitInt =
               maxWaitTime is int
                   ? maxWaitTime
                   : int.tryParse(maxWaitTime.toString()) ?? 30;
 
-          // Timeout = Appointment Time + Doctor's Max Wait + 15 Min Grace Period
+          // Calculate timeout: Appointment Time + Max Wait + 15 Min Grace Period
           final timeoutDateTime = widget.args.appointmentDateTime.add(
             Duration(minutes: maxWaitInt + 15),
           );
-          // -----------------------------------------------------------------
 
           await _notificationService.scheduleReminder(
             appointmentId: persistedAppointmentId,
             appointmentLocalDateTime: widget.args.appointmentDateTime,
-            appointmentEndDateTime:
-                timeoutDateTime, // <--- Passes dynamic timeout!
-            reminderMinutes: widget.args.reminderMinutes,
+            appointmentEndDateTime: timeoutDateTime,
+            reminderMinutes:
+                SettingsNotifier
+                    .instance
+                    .globalReminderMinutes, // <-- Only passing Global Time now
             doctorName: widget.args.doctorName,
           );
         } else {
+          // Ensure any old/stale reminders for this ID are cleared if disabled
           await _notificationService.cancelReminder(persistedAppointmentId);
         }
       } catch (error) {
         debugPrint('Reminder scheduling failed: $error');
-        reminderFailed = true;
       }
+      // --------------------------------------------------------
 
       if (mounted) {
         setState(() => _isProcessing = false);
-        if (reminderFailed) {
-          CustomSnackbar.showInfo(
-            context,
-            "Appointment confirmed, but reminder could not be scheduled.",
-          );
-        }
         _showSuccessDialog();
       }
     } catch (e) {

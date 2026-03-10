@@ -110,9 +110,9 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   }
 
   // --- NAVIGATION LOGIC ---
-  Future<void> _navigateToDoctorDetails(int doctorId) async {
+  Future<void> _navigateToDoctorDetails(int doctorId, Map<String, dynamic> doctorData) async {
     // 1. Wait for user to return from details screen
-    await context.push(AppRoutes.doctorDetailsById('$doctorId'));
+    await context.push(AppRoutes.doctorDetailsById('$doctorId'), extra: doctorData);
 
     // 2. Refresh list to update favorites if changed on details screen
     if (mounted) {
@@ -241,7 +241,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                                 heroTagPrefix: 'specialty-',
                                 onFavoriteTap: () => _toggleFavorite(docId),
                                 onCardTap:
-                                    () => _navigateToDoctorDetails(docId),
+                                    () => _navigateToDoctorDetails(docId, doctor),
                               );
                             },
                           ),

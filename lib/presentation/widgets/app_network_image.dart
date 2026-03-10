@@ -4,7 +4,7 @@ import 'package:shimmer/shimmer.dart';
 
 class AppNetworkImage extends StatelessWidget {
   final String? imageUrl;
-  final String? cacheKey; // PRO FIX: Added cacheKey for Signed URLs
+  final String? cacheKey;
   final double? width;
   final double? height;
   final BoxFit fit;
@@ -28,7 +28,7 @@ class AppNetworkImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = _buildShimmer();
+    // PRO FIX: We define the assets inside build to pass the context to the shimmer
     final fallback = _buildFallback();
     final url = imageUrl?.trim();
 
@@ -38,13 +38,13 @@ class AppNetworkImage extends StatelessWidget {
     } else {
       imageChild = CachedNetworkImage(
         imageUrl: url,
-        cacheKey:
-            cacheKey, // PRO FIX: Binds the image to the phone's disk permanently
+        cacheKey: cacheKey,
         width: width,
         height: height,
         fit: fit,
-        placeholder: (_, __) => placeholder,
-        errorWidget: (_, __, ___) => fallback,
+        // PRO FIX: Passing context here to ensure the shimmer knows the theme mode
+        placeholder: (context, url) => _buildShimmer(context),
+        errorWidget: (context, url, error) => fallback,
       );
     }
 
@@ -57,17 +57,34 @@ class AppNetworkImage extends StatelessWidget {
     return imageChild;
   }
 
-  Widget _buildShimmer() {
-    return RepaintBoundary( // PRO FIX: Isolates the shader so it doesn't corrupt the GPU during 3D scaling
+  Widget _buildShimmer(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // PROFESSIONAL TOKENS: Slate-based palette for a high-end medical-tech feel
+    final Color baseColor =
+        isDark
+            ? const Color(0xFF1E293B) // Dark Slate
+            : const Color(0xFFF1F5F9); // Light Slate
+
+    final Color highlightColor =
+        isDark
+            ? const Color(0xFF334155) // Lighter Slate
+            : const Color(0xFFFFFFFF); // Pure White
+
+    return RepaintBoundary(
       child: Shimmer.fromColors(
-        baseColor: const Color(0xFFE2E8F0),
-        highlightColor: const Color(0xFFF8FAFC),
+        baseColor: baseColor,
+        highlightColor: highlightColor,
+        period: const Duration(milliseconds: 1500),
+        direction: ShimmerDirection.ltr,
         child: Container(
           width: width,
           height: height,
           decoration: BoxDecoration(
-            color: const Color(0xFFE2E8F0),
+            color: baseColor,
             shape: circular ? BoxShape.circle : BoxShape.rectangle,
+            // Only apply borderRadius if we are not in circular mode
+            borderRadius: !circular ? borderRadius : null,
           ),
         ),
       ),
@@ -75,7 +92,7 @@ class AppNetworkImage extends StatelessWidget {
   }
 
   Widget _buildFallback() {
-    return RepaintBoundary( // PRO FIX: Stops offline font glyphs from crashing the text atlas
+    return RepaintBoundary(
       child: Container(
         width: width,
         height: height,

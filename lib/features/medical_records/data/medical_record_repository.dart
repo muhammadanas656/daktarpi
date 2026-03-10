@@ -119,6 +119,10 @@ class MedicalRecordRepository {
       }
     }
 
+    // --- PRO FIX: SYNC GUARD ---
+    // Forces the fetch to wait until any pending deleted/added records are synced!
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       final response = await _client
           .from('medical_records')
@@ -236,6 +240,9 @@ class MedicalRecordRepository {
       return;
     }
 
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       await _client.from('medical_records').insert(payload);
     } catch (error) {
@@ -257,6 +264,10 @@ class MedicalRecordRepository {
       });
       return;
     }
+
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       if (filePaths.isNotEmpty) {
         await _client.storage.from('medical_docs').remove(filePaths);
@@ -298,6 +309,10 @@ class MedicalRecordRepository {
       });
       return;
     }
+
+    // --- PRO FIX: SYNC GUARD ---
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       await _client
           .from('medical_records')

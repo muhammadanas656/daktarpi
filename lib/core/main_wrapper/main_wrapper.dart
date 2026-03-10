@@ -53,7 +53,8 @@ class _MainWrapperState extends State<MainWrapper>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(AppointmentNotifier.instance.fetchAppointments());
+      // PRO FIX: Silent refresh on resume!
+      unawaited(AppointmentNotifier.instance.fetchAppointments(isBackground: true));
       unawaited(ProfileNotifier.instance.loadProfile());
     }
   }

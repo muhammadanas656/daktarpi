@@ -1,110 +1,80 @@
-# DaktarPai - Security Architecture
+# DaktarPai - Security
 
-## 1. Security Model
+## 1. Security Layers in the Current App
 
-DaktarPai applies layered controls from startup through runtime interaction.
+The implemented security model combines:
+- device integrity checks at startup
+- authenticated route protection
+- TOTP-based MFA step-up
+- trusted-device bypass for remembered devices
+- biometric unlock for local step-up and inactivity lock
+- online-only gates for file and signed-URL operations
 
-```mermaid
-graph TD
-    A[Device Integrity Check] --> B[Auth Session]
-    B --> C[MFA and AAL2 Gate]
-    C --> D[Trusted Device Decision]
-    D --> E[Biometric Step-Up]
-    E --> F[Inactivity Lock]
-    F --> G[Offline Guard]
-    G --> H[Online-Only Feature Gates]
-```
+## 2. Startup Device Integrity
 
-## 2. Startup Security
+`DeviceIntegrityService.enforceOnStartup()` runs before the main app renders.
 
-`DeviceIntegrityService.enforceOnStartup()` runs before app render.
+If the device is reported as compromised:
+1. secure local storage is wiped
+2. the Supabase session is signed out
+3. the app shows a blocked compromised-device screen instead of the normal app shell
 
-If compromised state is detected, startup flow enforces:
-1. clear sensitive local data,
-2. sign out,
-3. render a blocked compromised-device UI.
+This wipe is best-effort and currently targets `FlutterSecureStorage`.
 
 ## 3. Auth and Route Protection
 
-- `AuthRepository` wraps auth operations.
-- Router refresh listens to Supabase auth state.
-- Protected routes redirect unauthenticated users to login with intended-route query.
+`AuthRepository` centralizes Supabase auth access.
 
-Post-auth entry routing (`AuthEntryRouteService`):
-- no session -> `/login`
-- step-up route required -> `/verify-2fa`
-- valid session -> `/home`
+Current route protection rules:
+- unauthenticated users are redirected to `/login?from=...` when they try to open protected routes
+- signed-in users may still be routed to `/verify-2fa` if AAL2 step-up is required
+- signed-in users without DOB metadata are routed to `/profile/edit`
 
-## 4. MFA, AAL2, and Step-Up
+`SecurityGateService` wraps the current MFA gate logic for TOTP and backup-code verification.
 
-Implemented controls include:
-- TOTP enrollment/verification.
-- Recovery code fallback.
-- AAL2 checks via `SecurityGateService`.
-- Sensitive operation gating in settings/account flows.
+## 4. MFA, Backup Codes, and Trusted Devices
 
-Security dialogs in these flows use standardized `AppTextField` for backup code/password input.
+Current MFA behavior:
+- AAL2 step-up is required when 2FA is enabled but the current session is still `aal1`.
+- `Verify2FAScreen` supports TOTP codes and recovery codes.
+- The screen can optionally remember the current device.
 
-## 5. Trusted Device and Biometric Controls
+Trusted-device implementation:
+- raw device token is stored locally in `FlutterSecureStorage`
+- Supabase stores only the SHA-256 token hash plus expiry in `trusted_devices`
+- default device trust TTL is 30 days
+- a valid trusted device can bypass `/verify-2fa`
 
-Main components:
-- `TrustedDeviceRepository`
-- `BiometricAuthService`
-- `SensitiveActionStepUpService`
+## 5. Biometrics and Session Locking
 
-Responsibilities:
-- trusted-device lifecycle,
-- biometric capability checks,
-- biometric prompt orchestration,
-- fall back to MFA challenge when needed.
+`BiometricAuthService` only enables biometric flows when:
+- the device supports biometrics
+- at least one biometric method is available
 
-## 6. Session Controls
+`InactivityLockGuard` only auto-locks the app when:
+- a user session exists
+- biometric unlock is available for the current trusted device
+- the inactivity timeout in `SettingsNotifier` is greater than `0`
 
-`InactivityLockGuard` enforces:
-- inactivity timeout lock,
-- unlock flow,
-- absolute timeout sign-out.
+Current lock behavior:
+- lock state is shown as an overlay on top of the routed app
+- unlocking uses biometric authentication
+- locking also sets `SettingsNotifier.medicalRecordsLocked = true`
+- an absolute session timeout signs the user out and sends them to `/login`
 
-`MainWrapper` triggers resume-time data refresh for critical state (`appointments`, `profile`).
+## 6. Medical Records Protection
 
-## 7. Data Access Integrity
+Medical records have an additional local protection toggle:
+- the lock toggle is available only when 2FA or device biometrics are configured
+- toggling the lock requires biometric confirmation
+- when locked, `MedicalRecordsScreen` hides record content and shows a protected state
 
-- Appointment realtime ownership is centralized in `AppointmentNotifier`.
-- Auth-state changes trigger realtime subscription refresh/cleanup.
-- Repository operations map backend/network failures through `AppFailure` where implemented.
-- Complaint flow relies on user-bound records and server-side access controls.
-- Offline write actions are captured in repository queues and replayed only when a live network is available.
+## 7. Sensitive and Online-Only Operations
 
-## 8. Online-Only Guardrails
+Several security-relevant operations intentionally require a live backend:
+- profile picture upload
+- medical file upload
+- medical file signed URL generation
+- live appointment slot checks
 
-Connectivity-aware gating is enforced for operations that cannot be safely executed offline:
-- storage uploads of binary files,
-- signed URL generation for private assets,
-- live server-dependent search/availability checks.
-
-If these actions are attempted while offline, repositories return `AppFailureType.network` with user-safe messaging.
-
-## 9. Local Data Storage Constraints
-
-To reduce memory and privacy risk:
-- Hive stores lightweight JSON payloads and storage path/URL references only.
-- Heavy binaries (images, PDFs, map data) are excluded from local persistence.
-- Cache entries are bounded by a 60-minute validity window to avoid stale long-lived snapshots.
-
-## 10. Error Containment and Telemetry
-
-Global capture paths in `main.dart`:
-- `FlutterError.onError`
-- `PlatformDispatcher.instance.onError`
-- `runZonedGuarded`
-
-`ErrorTelemetryService` logs these paths, and `AppErrorFallback` provides controlled recovery UI.
-
-## 11. Platform Privacy/Permission Notes
-
-Android:
-- calendar intent visibility declarations in manifest.
-- predictive back compatibility flag enabled.
-
-iOS:
-- calendar/contact usage descriptions in `Info.plist`.
+`SensitiveActionStepUpService` is also available for trusted-device biometric verification before sensitive actions, although it is separate from the route-level MFA flow.

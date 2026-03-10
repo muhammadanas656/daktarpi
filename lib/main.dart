@@ -15,6 +15,7 @@ import 'core/services/appointment_notification_service.dart';
 import 'core/services/error_telemetry_service.dart';
 import 'core/widgets/app_error_fallback.dart';
 import 'features/settings/presentation/settings_notifier.dart';
+import 'features/notifications/presentation/notification_notifier.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ Future<void> main() async {
   );
 
   await SettingsNotifier.instance.loadSettings();
+  await NotificationNotifier.instance.load();
   await AppointmentNotificationService.instance.initialize();
   NetworkNotifier.instance.initialize();
   final deviceCompromised = await DeviceIntegrityService().enforceOnStartup();

@@ -82,19 +82,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // PRO FIX: Catch errors individually. If offline, banners might fail, but it won't crash the whole screen!
       final results = await Future.wait([
-        _doctorRepo.fetchSpecialties(forceRefresh: forceRefresh).catchError((_) => _specialties),
-        _doctorRepo.fetchPopularDoctors(
-          limit: 5,
-          forceRefresh: forceRefresh,
-          userLocation: userLocation,
-          countryIso: countryIso,
-        ).catchError((_) => _popularDoctors),
-        _doctorRepo.fetchFeaturedDoctors(
-          limit: 5,
-          forceRefresh: forceRefresh,
-          userLocation: userLocation,
-          countryIso: countryIso,
-        ).catchError((_) => _featuredDoctors),
+        _doctorRepo
+            .fetchSpecialties(forceRefresh: forceRefresh)
+            .catchError((_) => _specialties),
+        _doctorRepo
+            .fetchPopularDoctors(
+              limit: 5,
+              forceRefresh: forceRefresh,
+              userLocation: userLocation,
+              countryIso: countryIso,
+            )
+            .catchError((_) => _popularDoctors),
+        _doctorRepo
+            .fetchFeaturedDoctors(
+              limit: 5,
+              forceRefresh: forceRefresh,
+              userLocation: userLocation,
+              countryIso: countryIso,
+            )
+            .catchError((_) => _featuredDoctors),
         _homeRepo.fetchBanners(countryIso).catchError((_) => _banners),
       ]);
 

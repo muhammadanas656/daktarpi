@@ -1,74 +1,67 @@
 # DaktarPai - Design System and Animations
 
-## 1. Design System Foundation
+## 1. Theme Foundation
 
-Design tokens are centralized in `lib/core/theme/`:
-- `app_colors.dart`
-- `app_text_styles.dart`
-- `app_dimens.dart`
-- `app_shapes.dart`
-- `app_motion.dart`
-- `app_styles.dart`
+The current UI system is built on:
+- Material 3
+- `GoogleFonts.poppinsTextTheme()`
+- app-specific tokens under `lib/core/theme/`
 
-Shared UI components are in `lib/presentation/widgets/`.
+`AppTheme` provides:
+- light and dark themes
+- a `ColorScheme` seeded from `AppColors.primaryGreen`
+- shared button and input decoration themes
 
-## 2. Theming and Visual Direction
+## 2. Shared Styling Primitives
 
-Current visual system uses dynamic light/dark theming with context-based color accessors (for example `context.colorTextDark`, `context.colorBorder`).
+The most reused styling helpers are in `AppStyles`:
+- `pageGradient(context)` for page backgrounds
+- `surfaceCard(context)` for bordered cards and panels
+- `cardShadow(context)` for standard light-mode elevation
+- `elevatedShadow(context)` for dialogs and floating surfaces
+- `primaryShadow(context, color)` for emphasized controls
+- `drawerShadow(context)` for the drawer transform in `MainWrapper`
 
-Core style traits:
-- green brand emphasis (`AppColors.primaryGreen`),
-- surface-card composition via `AppStyles.surfaceCard(...)`,
-- context-aware typography via `AppTextStyles`.
+These helpers already adapt to light and dark mode, so screens generally compose from them instead of hardcoding colors.
 
-## 3. Input System Standardization
+## 3. Input and Control Pattern
 
-Input architecture is standardized on `AppTextField` (`lib/presentation/widgets/app_text_field.dart`).
+`AppTextField` is the shared text-input primitive.
 
-Current implementation characteristics:
-- consistent border radius, padding, and focus styles,
-- optional label rendering,
-- optional password visibility handling,
-- optional prefix/suffix content,
-- single-line fixed-height rule and multi-line expansion support.
+Current capabilities include:
+- optional labels
+- password visibility toggle
+- prefix and suffix widgets
+- single-line and multiline layouts
+- adaptive fill, border, and text colors
 
-`CustomTextField` and `AuthTextField` now delegate to `AppTextField`, preserving compatibility while keeping one core implementation.
+`AuthTextField` and `CustomTextField` delegate to this shared implementation.
 
-## 4. Keyboard and Constraint Safety Patterns
+The app also uses `PessimisticSwitch` for settings that should update UI state only after async work succeeds.
 
-Input dialogs/sheets use scroll/inset-safe composition where needed:
-- `SingleChildScrollView` in dialog content,
-- bottom inset handling in bottom sheets/dialogs for keyboard overlap,
-- app-level tap-to-unfocus (`app.dart`) to reduce stuck keyboard state during transitions.
+## 4. Current Motion Patterns
 
-This pattern is used in auth recovery, review/complaint dialogs, settings/account dialogs, and support/search flows.
+The implemented motion system is concentrated in a few places:
 
-## 5. Major Interaction Patterns
+- `MainWrapper`
+  Drawer open/close uses translation, scaling, rounded-corner growth, and an optional startup hint animation.
+- `OfflineModeGuard`
+  Shows and hides an offline banner with `AnimatedPositioned`.
+- `SettingsPreferencesSection`
+  Uses `AnimatedSize` for expanding notification controls and inline reminder-time controls.
+- `Verify2FAScreen`
+  Uses `AnimatedSwitcher` and `AnimatedCrossFade` between TOTP and recovery-code modes.
+- `NotificationsScreen`
+  Uses `Dismissible` for swipe-to-delete notification cards.
+- `LiveCountdownBadge`
+  Updates once per second for waiting appointments and flashes when close to expiry.
 
-### Shell and Drawer Motion
-- Drawer + layered card transforms in `MainWrapper`.
-- Animated shell content switching and menu reveal interactions.
+## 5. Practical Layout Rules in the Current Code
 
-### Appointment UX Motion
-- Action Required cards and dialog interactions.
-- Realtime countdown visuals (`LiveCountdownBadge`) for waiting-state awareness.
+Across the app, most screens follow the same layout approach:
+- gradient or scaffold-backed page surfaces
+- `surfaceCard` containers for major content groups
+- bottom action bars for primary actions in booking, records, and settings flows
+- `SingleChildScrollView` plus safe-area padding for forms, dialogs, and sheets
 
-### Doctors/Map Motion
-- `ClinicLocationMapSection` isolates map interaction and animated section behavior.
-- Guarded map actions reduce timing-related map errors.
-
-### Offline Indicator Motion
-- `OfflineModeGuard` renders a non-blocking floating glassmorphism pill at shell level.
-- Connectivity loss triggers a top-down animated entrance; reconnection hides it above the viewport.
-- `IgnorePointer` keeps underlying screens interactive while the indicator is visible.
-- Visual treatment uses blur, translucent deep-slate background, subtle border/shadow, and compact warning iconography.
-
-## 6. Shared Components Frequently Used
-
-- `AppTextField`
-- `PrimaryButton`
-- `CustomSnackbar`
-- `AppointmentCard`
-- `PessimisticSwitch`
-- `AppStyles` helpers for cards, gradients, and shadows
-- `OfflineModeGuard` for global connectivity feedback
+This keeps the app visually consistent without a separate design-system package.

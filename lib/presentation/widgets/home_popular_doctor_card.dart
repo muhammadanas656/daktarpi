@@ -34,7 +34,17 @@ class HomePopularDoctorCard extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: AppShapes.xl,
         child: InkWell(
-          onTap: () => context.push(AppRoutes.doctorDetailsById('$id')),
+          onTap:
+              () => context.push(
+                AppRoutes.doctorDetailsById('$id'),
+                extra: {
+                  'id': id,
+                  'full_name': name,
+                  'specialties': {'name': specialty},
+                  'rating': rating,
+                  'profile_picture_url': imageUrl,
+                },
+              ),
           borderRadius: AppShapes.xl,
           child: Column(
             children: [

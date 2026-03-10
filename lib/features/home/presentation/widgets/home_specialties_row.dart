@@ -56,7 +56,6 @@ class HomeSpecialtiesRow extends StatelessWidget {
                   // Restored completely to your original 60x60 dimensions
                   width: 60,
                   height: 60,
-                  // PRO FIX: Perfectly centers the 28px icon, leaving a consistent, flawless circular breathing area
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
@@ -70,15 +69,26 @@ class HomeSpecialtiesRow extends StatelessWidget {
                   child:
                       item['icon_url'] != null &&
                               item['icon_url'].toString().isNotEmpty
-                          // PRO FIX: Locks the network image to the EXACT same 28x28 size as the fallback icon.
-                          ? SizedBox(
-                            width: 35,
-                            height: 35,
-                            child: AppNetworkImage(
-                              imageUrl: item['icon_url'],
-                              circular: false,
-                              // BoxFit.contain guarantees the image scales to fit 28x28 without ANY cropping
-                              fit: BoxFit.contain,
+                          // YOUR FIX: The invisible container turned into a circle
+                          // with diameter 50 (equal to the diagonal of the 35px square)
+                          ? Container(
+                            width: 80,
+                            height: 50,
+                            alignment: Alignment.center,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                            ),
+                            clipBehavior:
+                                Clip.hardEdge, // Forces the circular mask
+                            child: SizedBox(
+                              width: 85,
+                              height: 35,
+                              child: AppNetworkImage(
+                                imageUrl: item['icon_url'],
+                                circular:
+                                    true, // Switched to true to match the circle requirement
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           )
                           : _getFallbackIcon(name),

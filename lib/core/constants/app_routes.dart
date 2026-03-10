@@ -41,6 +41,8 @@ class AppRoutes {
   static const String helpCenter = '/help-center';
   static const String linkedAccounts = '/linked-accounts';
   static const termsOfService = '/terms_of_service';
+  static const accountActivity = '/account_activity';
+  static const notifications = '/notifications';
 
   /// Helper for parameterised doctor details route.
   static String doctorDetailsById(String id) => '/doctor_details/$id';

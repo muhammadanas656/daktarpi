@@ -10,11 +10,16 @@ import 'doctor.dart';
 
 class DoctorRepository {
   final SupabaseClient _client;
+
+  // Phase 2 & 3: Cache and Queue Boxes
   static const String _boxName = 'doctor_cache';
+  static const String _queueBoxName = 'doctor_offline_queue';
   static const _cacheDuration = Duration(minutes: 60);
 
   DoctorRepository({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
+
+  String? get currentUserId => _client.auth.currentUser?.id;
 
   // ─── Smart Hive Caching Engine ─────────────────────────────────────────────
 
@@ -63,6 +68,11 @@ class DoctorRepository {
       if (isOffline) return [];
     }
 
+    // --- PRO FIX: The Sync Guard ---
+    // This stops fetchRecentDoctors() and fetchFavoriteDoctors() from blinking!
+    // It forces them to wait until the background offline queue finishes uploading.
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       final data = await fetcher();
       await box.put(cacheKey, jsonEncode(data));
@@ -74,6 +84,67 @@ class DoctorRepository {
         return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
       }
       rethrow;
+    }
+  }
+
+  // ─── PRO FIX: Offline Action Queue ─────────────────────────────────────────
+
+  Future<Box> _getQueueBox() async {
+    if (Hive.isBoxOpen(_queueBoxName)) return Hive.box(_queueBoxName);
+    return await Hive.openBox(_queueBoxName);
+  }
+
+  Future<void> _queueAction(
+    String actionType,
+    Map<String, dynamic> payload,
+  ) async {
+    final box = await _getQueueBox();
+    await box.add({
+      'action': actionType,
+      'payload': jsonEncode(payload),
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+    debugPrint('⚡ [Doctor Offline Queue] Action saved: $actionType');
+  }
+
+  /// Processes all pending offline actions when the internet is restored
+  Future<void> syncOfflineQueue() async {
+    if (NetworkNotifier.instance.isOffline) return;
+
+    final box = await _getQueueBox();
+    if (box.isEmpty) return;
+
+    debugPrint('🔄 [Doctor Sync] Processing ${box.length} offline actions...');
+    final keys = box.keys.toList();
+
+    for (var key in keys) {
+      final item = box.get(key);
+      if (item != null) {
+        try {
+          final action = item['action'];
+          final payload = jsonDecode(item['payload']);
+
+          if (action == 'toggle_favorite') {
+            final isFavorite = payload['isFavorite'];
+            if (isFavorite) {
+              await _client.from('favorite_doctors').delete().match({
+                'user_id': payload['user_id'],
+                'doctor_id': payload['doctor_id'],
+              });
+            } else {
+              // Upsert prevents crashing if the user tapped like twice while offline
+              await _client.from('favorite_doctors').upsert({
+                'user_id': payload['user_id'],
+                'doctor_id': payload['doctor_id'],
+              });
+            }
+          }
+          await box.delete(key);
+          debugPrint('✅ [Doctor Sync] Action completed: $action');
+        } catch (e) {
+          debugPrint('❌ [Doctor Sync] Failed to process action: $e');
+        }
+      }
     }
   }
 
@@ -286,7 +357,9 @@ class DoctorRepository {
             .from('doctors')
             .select('*, specialties(name)')
             .eq('is_popular', true);
-        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
+        if (isSearch) {
+          dbQuery = dbQuery.ilike('full_name', '%$query%');
+        }
 
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
@@ -317,7 +390,9 @@ class DoctorRepository {
             .from('doctors')
             .select('*, specialties(name)')
             .eq('is_featured', true);
-        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
+        if (isSearch) {
+          dbQuery = dbQuery.ilike('full_name', '%$query%');
+        }
 
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
@@ -346,7 +421,9 @@ class DoctorRepository {
             .from('doctors')
             .select('*, specialties(name)')
             .eq('specialty_id', specialtyId);
-        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
+        if (isSearch) {
+          dbQuery = dbQuery.ilike('full_name', '%$query%');
+        }
 
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
@@ -359,8 +436,6 @@ class DoctorRepository {
       },
     );
   }
-
-  // ─── Specialties ───────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchDoctorsByClinic(
     int clinicId, {
@@ -473,6 +548,10 @@ class DoctorRepository {
 
   Future<bool> isFavorite(String doctorId, String userId) async {
     if (NetworkNotifier.instance.isOffline) return false;
+
+    // PRO FIX: Added Sync Guard to individual queries too
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       final response =
           await _client
@@ -489,6 +568,10 @@ class DoctorRepository {
 
   Future<Set<int>> fetchFavoriteIds(String userId) async {
     if (NetworkNotifier.instance.isOffline) return {};
+
+    // PRO FIX: Sync Guard
+    await NetworkNotifier.instance.waitForSync();
+
     try {
       final response = await _client
           .from('favorite_doctors')
@@ -508,12 +591,18 @@ class DoctorRepository {
     bool isFavorite,
   ) async {
     if (NetworkNotifier.instance.isOffline) {
-      throw const AppFailure(
-        type: AppFailureType.network,
-        userMessage: 'You must be online to update favorites.',
-        technicalMessage: 'offline',
-      );
+      await _queueAction('toggle_favorite', {
+        'doctor_id': doctorId,
+        'user_id': userId,
+        'isFavorite': isFavorite,
+      });
+      return;
     }
+
+    // PRO FIX: Added Sync Guard here as well. If the user hits "like" the moment
+    // internet returns, this pauses the action so it doesn't conflict with the queue!
+    await NetworkNotifier.instance.waitForSync();
+
     if (isFavorite) {
       await _client.from('favorite_doctors').delete().match({
         'user_id': userId,
@@ -526,7 +615,6 @@ class DoctorRepository {
       });
     }
 
-    // PRO FIX: Instantly invalidate the favorites cache so the UI fetches fresh data!
     final box = await _getCacheBox();
     await box.delete('favorites_$userId');
   }
@@ -536,7 +624,6 @@ class DoctorRepository {
     if (userId == null) return [];
     return _fetchWithCache(
       cacheKey: 'favorites_$userId',
-      // PRO FIX: Forces the network layer to fetch fresh profiles so the cache stays perfectly synced!
       forceRefresh: true,
       fetcher: () async {
         final response = await _client
@@ -555,7 +642,6 @@ class DoctorRepository {
     if (userId == null) return [];
     return _fetchWithCache(
       cacheKey: 'recent_doctors_$userId',
-      // PRO FIX: Enables Network-First, Offline-Fallback for Recent Visits too
       forceRefresh: true,
       fetcher: () async {
         final response = await _client
@@ -578,6 +664,4 @@ class DoctorRepository {
       },
     );
   }
-
-  String? get currentUserId => _client.auth.currentUser?.id;
 }

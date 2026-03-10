@@ -83,7 +83,6 @@ class AppointmentsRouteArgs {
 class DummyPaymentRouteArgs {
   final Map<String, dynamic> appointmentData;
   final DateTime appointmentDateTime;
-  final int reminderMinutes;
   final String doctorName;
   final int? appointmentId;
   final String displayDate;
@@ -93,7 +92,6 @@ class DummyPaymentRouteArgs {
   const DummyPaymentRouteArgs({
     required this.appointmentData,
     required this.appointmentDateTime,
-    required this.reminderMinutes,
     required this.doctorName,
     required this.displayDate,
     required this.displayTime,

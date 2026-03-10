@@ -1,155 +1,108 @@
 # DaktarPai - Features Reference
 
-This document maps active feature modules to current behavior in source.
+This document reflects the current source code, not planned behavior.
 
-## 1. Splash
+## 1. Splash and Auth
 
-Key file:
-- `features/splash/presentation/screens/splash_screen.dart`
+Current auth-related behavior:
+- `SplashScreen` resolves the first route after a short delay.
+- Login supports email/password and Google sign-in.
+- Forgot-password is handled inside a bottom sheet and uses an 8-digit recovery OTP flow.
+- `Verify2FAScreen` supports TOTP verification, backup-code recovery, and optional device trust.
+- Post-auth routing can lead to `/home`, `/verify-2fa`, or `/profile/edit`.
 
-Behavior:
-- resolves initial route via auth entry logic.
+## 2. Home
 
-## 2. Auth
+`HomeScreen` currently loads:
+- specialties
+- popular doctors
+- featured doctors
+- banners
 
-Key files:
-- `features/auth/data/auth_repository.dart`
-- `features/auth/data/auth_entry_route_service.dart`
-- `features/auth/data/security_gate_service.dart`
-- `features/auth/presentation/screens/login_screen.dart`
-- `features/auth/presentation/screens/signup_screen.dart`
-- `features/auth/presentation/screens/verify_2fa_screen.dart`
+The doctor and banner queries are filtered by the profile's `location` or `countryIso` when available.
 
-Behavior:
-- email/password and Google sign-in,
-- MFA verify and backup-code recovery,
-- post-auth route resolution,
-- forgot-password modal flow.
+## 3. Doctors and Search
 
-## 3. Home
+Current doctor discovery features:
+- all-doctors browsing in the doctors tab
+- doctor details
+- specialty doctor lists
+- clinic doctor lists
+- popular and featured doctor screens
+- favorite doctors in `MyDoctorsScreen`
+- global search with recent searches stored in `SharedPreferences`
 
-Key files:
-- `features/home/presentation/screens/home_screen.dart`
-- `features/home/data/home_repository.dart`
-- `features/home/presentation/widgets/*`
+`GlobalSearchScreen` behavior:
+- local specialty hinting
+- remote doctor and clinic hints
+- full remote search after submit
+- specialty exact-match redirect when the search text matches a specialty name
 
-Behavior:
-- doctor discovery sections and quick navigation,
-- refreshable home data composition.
+Favorites use optimistic UI through `FavoritesNotifier`.
 
-## 4. Doctors
+## 4. Appointments
 
-Screens:
-- `doctors_screen.dart`
-- `global_search_screen.dart`
-- `doctor_details_screen.dart`
-- `popular_doctors_screen.dart`
-- `featured_doctors_screen.dart`
-- `specialty_doctors_screen.dart`
-- `clinic_doctors_screen.dart`
-- `my_doctors_screen.dart`
+The current appointments feature set includes:
+- appointment list in `MyAppointmentsScreen`
+- appointment realtime refresh through `AppointmentNotifier`
+- pending review and complaint tracking
+- account activity history
+- cancel and complete actions
 
-Data layer:
-- `doctor_repository.dart`
-- `route_repository.dart`
+Current booking flow:
+1. `PatientDetailsScreen`
+   Loads the signed-in profile, saved patients, and a secure booking draft tied to doctor and clinic context.
+2. `AppointmentConfirmationScreen`
+   Loads doctor schedules and live booked slots for the selected clinic and date.
+3. `DummyPaymentScreen`
+   Creates or updates the appointment, shows booking confirmation, writes a local inbox notification when enabled, and schedules device reminders from `SettingsNotifier`.
 
-Behavior highlights:
-- categorized global search,
-- doctor detail analytics increment flow,
-- modular clinic/map/navigation section,
-- route fetch with OSRM + edge-function fallback,
-- nearest-first sorting when coordinates are available (`get_nearby_doctors` RPC with client-side Haversine fallback),
-- global search/live server-dependent fetches gated behind active network checks.
+`DummyPaymentScreen` is still a simulated checkout screen. It writes the appointment after a delayed success path.
 
-## 5. Appointments
+## 5. Medical Records
 
-Data layer:
-- `appointment_repository.dart`
-- `appointment_secure_cache_repository.dart`
-- `booking_draft_repository.dart`
+Current medical-record behavior:
+- list, add, edit, and soft-delete records
+- upload one or more files before saving a record
+- open image and non-image attachments from signed URLs
+- queue metadata changes offline through `MedicalRecordRepository`
 
-Presentation/state:
-- `patient_details_screen.dart`
-- `appointment_confirmation_screen.dart`
-- `dummy_payment_screen.dart`
-- `my_appointments_screen.dart`
-- `appointment_notifier.dart`
+Important limitation:
+- physical file upload and signed URL access remain online-only
 
-Behavior highlights:
-- booking is a multi-step flow,
-- realtime appointment sync is owned by `AppointmentNotifier`,
-- pull-to-refresh + action sheet controls,
-- Action Required carousel combines pending review and complaint items,
-- review submission dialogs now use `AppTextField` and keyboard-safe layout composition,
-- offline write actions are queued in local storage and replayed automatically on reconnect via `NetworkNotifier`.
+`MedicalRecordsScreen` also supports a persistent local lock state controlled through biometrics and `SettingsNotifier`.
 
-## 6. Medical Records
+## 6. Profile
 
-Key files:
-- `medical_records_screen.dart`
-- `add_record_screen.dart`
-- `medical_record_repository.dart`
+Current profile-related behavior:
+- profile view and edit screens
+- secure profile cache through `ProfileSecureCacheRepository`
+- profile picture upload to Supabase Storage
+- saved-patient management used by the booking flow
 
-Behavior:
-- record list and add/edit flows,
-- attachment upload support,
-- record-for input now standardized on `AppTextField`,
-- Hive-backed record caching and dedicated offline queue (`medical_offline_queue`),
-- signed URL and physical upload operations are online-only with `AppFailureType.network` fallback.
+`ProfileRepository` also queues profile updates and saved-patient mutations when offline.
 
-## 7. Profile
+## 7. Settings, Menu, and Account
 
-Key files:
-- `profile_screen.dart`
-- `profileview_screen.dart`
-- `profile_repository.dart`
-- `profile_notifier.dart`
+Current settings and account surfaces include:
+- theme mode
+- notification preferences
+- global reminder lead time
+- inactivity lock timeout
+- medical records protection toggle
+- linked accounts
+- account activity
+- privacy policy
+- terms of service
+- help center
 
-Behavior:
-- profile display/edit,
-- saved patient relations,
-- location/timezone-related profile persistence,
-- Hive-backed profile/saved-patient caching and dedicated offline queue (`profile_offline_queue`),
-- profile image upload is online-only and safely blocked while offline.
+Currency is display-only and inferred from the loaded profile location data.
 
-## 8. Menu and Settings
+## 8. Notifications
 
-Screens:
-- `settings_screen.dart`
-- `linked_accounts_screen.dart`
-- `account_activity_screen.dart`
-- `privacy_policy_screen.dart`
+The notification inbox is local to the device:
+- stored in Hive through `NotificationRepository`
+- loaded on startup through `NotificationNotifier`
+- supports mark-as-read, mark-all-read, and delete
 
-Widgets:
-- `review_dialog.dart`
-- `complaint_dialog.dart`
-- settings section widgets
-
-Behavior:
-- account/security operations with step-up checks,
-- linked account management (Google/email),
-- account activity timeline with review/complaint actions.
-
-## 9. Support and Legal
-
-Support:
-- `help_center_screen.dart`
-
-Legal:
-- `terms_of_service_screen.dart`
-- legal constants/text modules
-
-Behavior:
-- help center FAQ search now uses standardized `AppTextField`.
-
-## 10. Common/Infrastructure-Adjacent Feature
-
-- `enable_location_screen.dart` for location permission onboarding.
-
-## 11. Shared Cross-Feature Services
-
-- `appointment_notification_service.dart`
-- `error_telemetry_service.dart`
-- security services under `core/security/`
-- offline/inactivity guards applied at app builder level (`app.dart`),
-- `NetworkNotifier` global connectivity observer and offline-queue replay coordinator
+At the moment, the most direct write path is the appointment booking confirmation flow in `DummyPaymentScreen`.

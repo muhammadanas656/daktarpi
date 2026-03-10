@@ -57,8 +57,6 @@ class _AppointmentConfirmationScreenState
   bool _isLoading = true;
 
   int _selectedTimeSlotIndex = -1;
-  int _selectedReminderIndex = 1;
-  final List<int> _reminderOptions = [0, 15, 30, 60, 1440]; // 0 = No reminder
 
   @override
   void initState() {
@@ -204,7 +202,6 @@ class _AppointmentConfirmationScreenState
       'patient_email': widget.patientDetails['email'],
       'patient_gender': widget.patientDetails['gender'],
       'patient_dob': widget.patientDetails['dob'],
-      'reminder_minutes': _reminderOptions[_selectedReminderIndex],
       'idempotency_key': widget.idempotencyKey,
     };
 
@@ -219,7 +216,6 @@ class _AppointmentConfirmationScreenState
       extra: DummyPaymentRouteArgs(
         appointmentData: data,
         appointmentDateTime: appointmentDateTime,
-        reminderMinutes: _reminderOptions[_selectedReminderIndex],
         doctorName: widget.doctor['full_name']?.toString() ?? 'Doctor',
         displayDate: dateStr,
         displayTime: timeStr,
@@ -296,15 +292,6 @@ class _AppointmentConfirmationScreenState
                           (i) => setState(() => _selectedTimeSlotIndex = i),
                           true,
                         ),
-                      SizedBox(height: 24),
-                      Text("Reminder Me Before", style: _sectionHeaderStyle),
-                      SizedBox(height: 16),
-                      _buildOptionChips(
-                        _reminderOptions.map((e) => "$e").toList(),
-                        _selectedReminderIndex,
-                        (i) => setState(() => _selectedReminderIndex = i),
-                        false,
-                      ),
                       SizedBox(height: 40),
                     ],
                   ),

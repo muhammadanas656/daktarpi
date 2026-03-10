@@ -103,8 +103,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   }
 
   // --- NAVIGATION LOGIC ---
-  Future<void> _navigateToDoctorDetails(int doctorId) async {
-    await context.push(AppRoutes.doctorDetailsById('$doctorId'));
+  Future<void> _navigateToDoctorDetails(int doctorId, Map<String, dynamic> doctorData) async {
+    await context.push(AppRoutes.doctorDetailsById('$doctorId'), extra: doctorData);
   }
 
   @override
@@ -206,7 +206,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                                 heroTagPrefix: 'popular-',
                                 onFavoriteTap: () => _favNotifier.toggle(docId),
                                 onCardTap:
-                                    () => _navigateToDoctorDetails(docId),
+                                    () => _navigateToDoctorDetails(docId, doctor),
                               );
                             },
                           ),

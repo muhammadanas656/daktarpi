@@ -305,7 +305,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   void _handleDoctorTap(Map<String, dynamic> doc) {
     FocusScope.of(context).unfocus(); // Force close keyboard
     _saveRecentSearch(doc['full_name']);
-    context.push(AppRoutes.doctorDetailsById('${doc['id']}'));
+    context.push(AppRoutes.doctorDetailsById('${doc['id']}'), extra: doc);
   }
 
   void _handleClinicTap(Map<String, dynamic> clinic) {
@@ -497,6 +497,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                               onCardTap:
                                   () => context.push(
                                     AppRoutes.doctorDetailsById('$docId'),
+                                    extra: doctor,
                                   ),
                             );
                           },

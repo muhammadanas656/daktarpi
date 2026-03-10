@@ -157,14 +157,25 @@ class AppointmentNotificationService {
     final payloadString = 'appointment:$safeId';
 
     // 1. Standard Reminder (e.g., 30 or 60 minutes before)
+    final nowUtc = DateTime.now().toUtc();
+    final desiredReminderUtc = appointmentLocalDateTime
+        .subtract(Duration(minutes: reminderMinutes))
+        .toUtc();
+    final appointmentTimeUtc = appointmentLocalDateTime.toUtc();
+
+    // PRO FIX: If the global reminder (say 60 mins) implies a time that ALREADY HAPPENED, 
+    // but the actual appointment is still in the future (say, starts in 5 mins),
+    // we fire the reminder IMMEDIATELY.
+    DateTime finalReminderTimeUtc = desiredReminderUtc;
+    if (desiredReminderUtc.isBefore(nowUtc) && appointmentTimeUtc.isAfter(nowUtc)) {
+      finalReminderTimeUtc = nowUtc.add(const Duration(seconds: 5));
+    }
+
     await _scheduleWithFallback(
       id: safeId,
       title: 'Appointment reminder',
       body: 'You have an appointment with Dr. $doctorName at $appointmentTime.',
-      triggerUtc:
-          appointmentLocalDateTime
-              .subtract(Duration(minutes: reminderMinutes))
-              .toUtc(),
+      triggerUtc: finalReminderTimeUtc,
       payload: payloadString,
     );
 

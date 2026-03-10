@@ -28,6 +28,8 @@ import '../../features/appointments/presentation/screens/patient_details_screen.
 import '../../features/appointments/presentation/screens/dummy_payment_screen.dart';
 import '../../features/appointments/presentation/models/booking_route_args.dart';
 import '../../features/menu/presentation/screens/linked_accounts_screen.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
+import '../../features/menu/presentation/screens/account_activity_screen.dart';
 
 // --- DOCTOR SCREENS ---
 import '../../features/doctors/presentation/screens/global_search_screen.dart';
@@ -144,6 +146,18 @@ final appRouter = GoRouter(
     ),
 
     GoRoute(
+      path: AppRoutes.accountActivity,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const AccountActivityScreen(),
+    ),
+
+    GoRoute(
+      path: AppRoutes.notifications,
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const NotificationsScreen(),
+    ),
+
+    GoRoute(
       path: AppRoutes.globalSearch,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const GlobalSearchScreen(),
@@ -165,7 +179,8 @@ final appRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
         final doctorId = state.pathParameters['id']!;
-        return DoctorDetailsScreen(doctorId: doctorId);
+        final extra = state.extra as Map<String, dynamic>?;
+        return DoctorDetailsScreen(doctorId: doctorId, doctorData: extra);
       },
     ),
 

@@ -167,75 +167,103 @@ class _SettingsScreenState extends State<SettingsScreen>
   void _showSecurityOnboardingPrompt() {
     showDialog(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            backgroundColor: Theme.of(ctx).colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).colorScheme.surface,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color:
+                    isDark
+                        ? AppColors.darkBorder
+                        : Colors.grey.withValues(alpha: 0.2),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  blurRadius: 50,
+                  offset: const Offset(0, 15),
+                ),
+              ],
             ),
-            title: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.shield_outlined, color: AppColors.primaryGreen),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "Protect Your Account",
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.privacy_tip_rounded,
+                    color: Colors.orange,
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "Protect Your Account",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "You currently have no security measures enabled. We recommend Two-Factor Authentication to secure your medical records.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                PrimaryButton(
+                  label: "Set Up Security",
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _start2FASetupWizard();
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    "Maybe Later",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
-            content: SingleChildScrollView(
-              child: Text(
-                "You currently have no security measures enabled. We strongly recommend setting up Two-Factor Authentication to secure your medical records.",
-                style: TextStyle(color: context.colorTextLight, height: 1.4),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(
-                  "Maybe Later",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _start2FASetupWizard();
-                },
-                child: Text(
-                  "Set Up Security",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
           ),
+        );
+      },
     );
   }
 
+  // --- PRO FIX: Adaptive Glass Security Gate ---
   Future<bool> _enforceSecurityGate(String actionReason) async {
     final gateDecision = _securityGateService.evaluateAal2Gate();
-    if (gateDecision.isAllowed) {
-      return true;
-    }
-    if (gateDecision.isUnauthenticated) {
-      return false;
-    }
+    if (gateDecision.isAllowed) return true;
+    if (gateDecision.isUnauthenticated) return false;
 
     final biometricSuccess = await _stepUpService.authenticateIfTrusted(
       localizedReason: actionReason,
     );
-    if (biometricSuccess) {
-      return true;
-    }
+    if (biometricSuccess) return true;
 
     bool success = false;
     final otpController = TextEditingController();
@@ -243,9 +271,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     bool isDialogLoading = false;
     bool isRecoveryMode = false;
 
-    if (!mounted) {
-      return false;
-    }
+    if (!mounted) return false;
 
     await showDialog(
       context: context,
@@ -254,18 +280,19 @@ class _SettingsScreenState extends State<SettingsScreen>
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            final themeColor =
+                isRecoveryMode ? Colors.orange : AppColors.primaryGreen;
+
             final defaultPinTheme = PinTheme(
-              width: 36,
-              height: 46,
-              textStyle: TextStyle(
-                fontSize: 18,
-                color: context.colorTextDark,
-                fontWeight: FontWeight.bold,
-              ),
+              width: 38,
+              height: 48,
+              textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkScaffold : Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isDark ? AppColors.darkBorder : context.colorBorder),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : Colors.grey[300]!,
+                ),
               ),
             );
 
@@ -276,16 +303,12 @@ class _SettingsScreenState extends State<SettingsScreen>
                   final rpcSuccess = await _authRepository.useRecoveryCode(
                     code,
                   );
-                  if (rpcSuccess != true) {
-                    throw "Invalid backup code.";
-                  }
+                  if (rpcSuccess != true) throw "Invalid backup code.";
                 } else {
                   await _authRepository.verifyTotpCode(code);
                 }
                 success = true;
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
+                if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
                 setDialogState(() => isDialogLoading = false);
                 otpController.clear();
@@ -301,57 +324,90 @@ class _SettingsScreenState extends State<SettingsScreen>
               }
             }
 
-            return AlertDialog(
-              backgroundColor: Theme.of(ctx).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: Row(
-                children: [
-                  Icon(
-                    isRecoveryMode ? Icons.lock_open : Icons.security,
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                padding: EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
                     color:
-                        isRecoveryMode ? Colors.orange : AppColors.primaryGreen,
+                        isDark
+                            ? AppColors.darkBorder
+                            : Colors.grey.withValues(alpha: 0.2),
+                    width: 1.5,
                   ),
-                  SizedBox(width: 10),
-                  Text(isRecoveryMode ? "Account Recovery" : "Security Check"),
-                ],
-              ),
-              content: SingleChildScrollView(
+                  boxShadow: [
+                    BoxShadow(
+                      color: themeColor.withValues(alpha: 0.15),
+                      blurRadius: 50,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: themeColor.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isRecoveryMode
+                            ? Icons.lock_open_rounded
+                            : Icons.security_rounded,
+                        color: themeColor,
+                        size: 36,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      isRecoveryMode ? "Account Recovery" : "Security Check",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    SizedBox(height: 12),
                     Text(
                       isRecoveryMode
                           ? "Enter an 8-character backup code to verify your identity."
                           : "Please verify your identity with your 6-digit authenticator code.",
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: context.colorTextLight,
+                        color: Colors.grey,
                         height: 1.4,
                       ),
                     ),
-                    SizedBox(height: 24),
+                    SizedBox(height: 28),
                     AnimatedCrossFade(
                       firstChild: Pinput(
                         length: 6,
                         controller: otpController,
                         autofocus: true,
                         defaultPinTheme: defaultPinTheme,
-                        onClipboardFound: null,
-                        autofillHints: null,
-                        enableInteractiveSelection: false,
                         focusedPinTheme: defaultPinTheme.copyWith(
                           decoration: defaultPinTheme.decoration!.copyWith(
-                            border: Border.all(
-                              color: AppColors.primaryGreen,
-                              width: 2,
-                            ),
+                            border: Border.all(color: themeColor, width: 2),
                           ),
                         ),
+
+                        // PRO FIX: Force disable OS autofill
+                        autofillHints: const [],
+                        keyboardType: TextInputType.number,
+
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                         ],
+
+                        // PRO FIX: Triggers submission on the 6th digit
                         onCompleted: submitCode,
                       ),
                       secondChild: AppTextField(
@@ -362,9 +418,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         textAlign: TextAlign.center,
                         hintText: "XXXX-XXXX",
                         onChanged: (val) {
-                          if (val.length == 9) {
-                            submitCode(val);
-                          }
+                          if (val.length == 9) submitCode(val);
                         },
                         onSubmitted: submitCode,
                       ),
@@ -376,41 +430,54 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                     if (isDialogLoading)
                       Padding(
-                        padding: EdgeInsets.only(top: 16),
+                        padding: EdgeInsets.only(top: 20),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: AppColors.primaryGreen,
+                          color: themeColor,
                         ),
                       ),
+                    SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed:
+                                isDialogLoading
+                                    ? null
+                                    : () => Navigator.pop(ctx),
+                            child: Text(
+                              "Cancel",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: TextButton(
+                            onPressed:
+                                isDialogLoading
+                                    ? null
+                                    : () => setDialogState(() {
+                                      isRecoveryMode = !isRecoveryMode;
+                                      otpController.clear();
+                                      recoveryController.clear();
+                                    }),
+                            child: Text(
+                              isRecoveryMode ? "Use App" : "Use Backup",
+                              style: TextStyle(
+                                color: themeColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
-                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed:
-                      isDialogLoading
-                          ? null
-                          : () => setDialogState(() {
-                            isRecoveryMode = !isRecoveryMode;
-                            otpController.clear();
-                            recoveryController.clear();
-                          }),
-                  child: Text(
-                    isRecoveryMode ? "Use Authenticator" : "Use Backup Code",
-                    style: TextStyle(
-                      color:
-                          isRecoveryMode
-                              ? AppColors.primaryGreen
-                              : Colors.orange,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
             );
           },
         );
@@ -521,6 +588,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
+  // --- PRO FIX: Fully Upgraded Adaptive Glass 2FA Wizard ---
   Future<void> _start2FASetupWizard() async {
     int currentStep = 0;
     bool isDialogLoading = false;
@@ -548,6 +616,8 @@ class _SettingsScreenState extends State<SettingsScreen>
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
             _activePinSubmit = () async {
               setDialogState(() => isDialogLoading = true);
               try {
@@ -581,31 +651,39 @@ class _SettingsScreenState extends State<SettingsScreen>
               }
             };
 
+            // 1. INFO STEP
             Widget buildInfoStep() {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.security, size: 50, color: AppColors.primaryGreen),
-                  SizedBox(height: 16),
-                  Text(
-                    "Protect your account",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: context.colorTextDark,
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.security_rounded,
+                      size: 36,
+                      color: AppColors.primaryGreen,
                     ),
                   ),
-                  SizedBox(height: 12),
-                  Text(
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Protect your account",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
                     "Add an extra layer of security using an authenticator app.\n\nYou'll need:\n• Google Authenticator or Authy\n• 30 seconds to setup",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: context.colorTextLight,
+                      color: Colors.grey,
                       height: 1.5,
                     ),
                   ),
-                  SizedBox(height: 32),
+                  const SizedBox(height: 32),
                   PrimaryButton(
                     isLoading: isDialogLoading,
                     label: "Set Up 2FA",
@@ -645,84 +723,96 @@ class _SettingsScreenState extends State<SettingsScreen>
                       }
                     },
                   ),
+                  const SizedBox(height: 8),
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
-                    child: Text("Close", style: TextStyle(color: Colors.grey)),
+                    child: const Text(
+                      "Close",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               );
             }
 
+            // 2. QR STEP
             Widget buildQRStep() {
-              // FIX: Defined explicit pin dimensions to prevent stretching
-              final isDark = Theme.of(ctx).brightness == Brightness.dark;
               final defaultPinTheme = PinTheme(
                 width: 44,
                 height: 54,
-                textStyle: TextStyle(
+                textStyle: const TextStyle(
                   fontSize: 22,
-                  color: context.colorTextDark,
                   fontWeight: FontWeight.bold,
                 ),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkScaffold : Colors.grey[50],
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: isDark ? AppColors.darkBorder : context.colorBorder),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkBorder : Colors.grey[300]!,
+                  ),
                 ),
               );
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  const Text(
                     "Scan QR Code",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: 8),
+                  const Text(
                     "Scan this with your authenticator app:",
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: context.colorTextLight,
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   if (qrCodeSvg != null)
-                    SizedBox(
-                      height: 130,
-                      width: 130,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.grey.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      height: 140,
+                      width: 140,
                       child: SvgPicture.string(qrCodeSvg!),
                     ),
-                  SizedBox(height: 12),
-                  Text(
+                  const SizedBox(height: 16),
+                  const Text(
                     "Or enter this key manually:",
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
+                  const SizedBox(height: 4),
                   SelectableText(
                     secretKey ?? "",
-                    style: TextStyle(
-                      fontSize: 13,
+                    style: const TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.2,
                     ),
                   ),
-                  SizedBox(height: 24),
-                  Text(
+                  const SizedBox(height: 24),
+                  const Text(
                     "Enter the 6-digit code:",
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(height: 12),
-                  // FIX: Wrapped in Center to maintain proper proportions
+                  const SizedBox(height: 12),
                   Center(
                     child: Pinput(
                       length: 6,
                       controller: codeController,
                       autofocus: true,
                       defaultPinTheme: defaultPinTheme,
-                      onClipboardFound: null,
-                      autofillHints: null,
                       enableInteractiveSelection: false,
+                      autofillHints: const [], // Force disable autofill
+                      keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       focusedPinTheme: defaultPinTheme.copyWith(
                         decoration: defaultPinTheme.decoration!.copyWith(
@@ -733,85 +823,110 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ),
                       ),
                       onCompleted: (code) {
-                        if (_activePinSubmit != null) {
-                          _activePinSubmit!();
-                        }
+                        if (_activePinSubmit != null) _activePinSubmit!();
                       },
                     ),
                   ),
                   if (isDialogLoading)
-                    Padding(
+                    const Padding(
                       padding: EdgeInsets.only(top: 16),
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: AppColors.primaryGreen,
                       ),
                     ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
-                    child: Text(
+                    child: const Text(
                       "Cancel 2FA Setup",
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
               );
             }
 
+            // 3. BACKUP CODES STEP
             Widget buildBackupStep() {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.vpn_key_outlined, size: 40, color: Colors.orange),
-                  SizedBox(height: 12),
-                  Text(
-                    "Save Backup Codes",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.vpn_key_rounded,
+                      size: 36,
+                      color: Colors.orange,
+                    ),
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    "If you lose your device, these codes are the ONLY way to log in.",
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Save Backup Codes",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "If you lose your device, these codes are the ONLY way to log in. Please save them.",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 13,
-                      color: context.colorTextLight,
+                      fontSize: 14,
+                      color: Colors.grey,
                       height: 1.4,
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   Container(
-                    padding: EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Theme.of(ctx).brightness == Brightness.dark ? AppColors.darkScaffold : Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(ctx).brightness == Brightness.dark ? AppColors.darkBorder : Colors.grey[200]!),
+                      color: isDark ? AppColors.darkScaffold : Colors.grey[50],
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color:
+                            isDark ? AppColors.darkBorder : Colors.grey[200]!,
+                      ),
                     ),
                     child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 12,
+                      runSpacing: 12,
                       alignment: WrapAlignment.center,
                       children:
                           generatedCodes
                               .map(
                                 (c) => Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color:
+                                        isDark
+                                            ? Colors.black.withValues(
+                                              alpha: 0.3,
+                                            )
+                                            : Colors.white,
                                     border: Border.all(
-                                      color: Colors.grey[300]!,
+                                      color:
+                                          isDark
+                                              ? AppColors.darkBorder
+                                              : Colors.grey[300]!,
                                     ),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     c,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontFamily: 'monospace',
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 12,
+                                      fontSize: 13,
+                                      letterSpacing: 1,
                                     ),
                                   ),
                                 ),
@@ -819,7 +934,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               .toList(),
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   OutlinedButton.icon(
                     onPressed: () {
                       Clipboard.setData(
@@ -832,29 +947,41 @@ class _SettingsScreenState extends State<SettingsScreen>
                         );
                       }
                     },
-                    icon: Icon(Icons.copy, size: 16),
-                    label: Text("Copy Codes"),
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text(
+                      "Copy Codes",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: context.colorTextDark,
+                      foregroundColor:
+                          isDark ? Colors.white : AppColors.darkTextPrimary,
+                      side: BorderSide(
+                        color:
+                            isDark ? AppColors.darkBorder : Colors.grey[300]!,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   CheckboxListTile(
                     value: hasSavedCodes,
                     onChanged:
                         (val) =>
                             setDialogState(() => hasSavedCodes = val == true),
-                    title: Text(
+                    title: const Text(
                       "I have safely stored these codes",
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     activeColor: AppColors.primaryGreen,
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
                   ),
+                  const SizedBox(height: 12),
                   PrimaryButton(
                     label: "Finish 2FA Setup",
                     onTap:
@@ -868,37 +995,46 @@ class _SettingsScreenState extends State<SettingsScreen>
               );
             }
 
+            // 4. BIOMETRIC PROMPT STEP
             Widget buildBiometricPrompt() {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.fingerprint_rounded,
-                    size: 60,
-                    color: AppColors.primaryGreen,
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.fingerprint_rounded,
+                      size: 36,
+                      color: AppColors.primaryGreen,
+                    ),
                   ),
-                  SizedBox(height: 16),
-                  Text(
+                  const SizedBox(height: 20),
+                  const Text(
                     "Enable Biometrics",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                   ),
-                  SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: 12),
+                  const Text(
                     "Would you like to enable Biometric Login for faster access on this device?",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: context.colorTextLight,
+                      color: Colors.grey,
+                      height: 1.4,
                     ),
                   ),
-                  SizedBox(height: 32),
+                  const SizedBox(height: 32),
                   PrimaryButton(
                     label: "Enable Biometric Login",
                     isLoading: isDialogLoading,
                     onTap: () async {
                       setDialogState(() => isDialogLoading = true);
                       try {
-                        await Future.delayed(Duration(milliseconds: 400));
+                        await Future.delayed(const Duration(milliseconds: 400));
                         final authenticated = await _biometricAuthService
                             .authenticate(localizedReason: "Verify to link");
                         if (authenticated) {
@@ -920,42 +1056,55 @@ class _SettingsScreenState extends State<SettingsScreen>
                       }
                     },
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: Text(
+                    onPressed:
+                        () => setDialogState(() => currentStep = stepSuccess),
+                    child: const Text(
                       "Skip Biometrics",
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
               );
             }
 
+            // 5. SUCCESS STEP
             Widget buildSuccessStep() {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.check_circle,
-                    size: 60,
-                    color: AppColors.primaryGreen,
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 36,
+                      color: AppColors.primaryGreen,
+                    ),
                   ),
-                  SizedBox(height: 16),
-                  Text(
+                  const SizedBox(height: 20),
+                  const Text(
                     "Security Updated",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                   ),
-                  SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: 12),
+                  const Text(
                     "Your security preferences have been successfully updated.",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: context.colorTextLight,
+                      color: Colors.grey,
+                      height: 1.4,
                     ),
                   ),
-                  SizedBox(height: 32),
+                  const SizedBox(height: 32),
                   PrimaryButton(
                     label: "Done",
                     onTap: () async {
@@ -969,23 +1118,43 @@ class _SettingsScreenState extends State<SettingsScreen>
               );
             }
 
-            return AlertDialog(
-              backgroundColor: Theme.of(ctx).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              contentPadding: EdgeInsets.all(24),
-              content: SingleChildScrollView(
-                child: AnimatedSwitcher(
-                  duration: AppMotion.defaultDuration,
-                  child:
-                      [
-                        buildInfoStep(),
-                        buildQRStep(),
-                        buildBackupStep(),
-                        buildBiometricPrompt(),
-                        buildSuccessStep(),
-                      ][currentStep],
+            // MAIN WRAPPER
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color:
+                        isDark
+                            ? AppColors.darkBorder
+                            : Colors.grey.withValues(alpha: 0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.15),
+                      blurRadius: 50,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.defaultDuration,
+                    child:
+                        [
+                          buildInfoStep(),
+                          buildQRStep(),
+                          buildBackupStep(),
+                          buildBiometricPrompt(),
+                          buildSuccessStep(),
+                        ][currentStep],
+                  ),
                 ),
               ),
             );
@@ -1070,134 +1239,154 @@ class _SettingsScreenState extends State<SettingsScreen>
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            return AlertDialog(
-              backgroundColor: Theme.of(ctx).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: Row(
-                children: [
-                  Icon(Icons.lock_outline, color: AppColors.primaryGreen),
-                  SizedBox(width: 10),
-                  Text("Change Password"),
-                ],
-              ),
-              content: SingleChildScrollView(
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color:
+                        isDark
+                            ? AppColors.darkBorder
+                            : Colors.grey.withValues(alpha: 0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.15),
+                      blurRadius: 50,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.verified,
-                          color: AppColors.primaryGreen,
-                          size: 16,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          "Identity verified.",
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.primaryGreen,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.lock_reset_rounded,
+                        color: AppColors.primaryGreen,
+                        size: 36,
+                      ),
                     ),
-                    SizedBox(height: 16),
-                    Text(
-                      "Enter your new password below.",
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Change Password",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 24),
                     AppTextField(
                       controller: newPassController,
                       hintText: "New Password",
                       isPassword: true,
+                      prefix: const Icon(Icons.lock_outline, size: 18),
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     AppTextField(
                       controller: confirmPassController,
                       hintText: "Confirm Password",
                       isPassword: true,
+                      prefix: const Icon(Icons.lock_outline, size: 18),
                     ),
                     if (isDialogLoading)
-                      Center(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: 16),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.primaryGreen,
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primaryGreen,
                         ),
                       ),
+                    const SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed:
+                                isDialogLoading
+                                    ? null
+                                    : () => Navigator.pop(dialogCtx),
+                            child: const Text(
+                              "Cancel",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: PrimaryButton(
+                            isLoading: isDialogLoading,
+                            label: "Update",
+                            onTap: () async {
+                              final newPass = newPassController.text.trim();
+                              if (newPass.length < 6) {
+                                CustomSnackbar.showError(
+                                  ctx,
+                                  "Password must be at least 6 characters",
+                                );
+                                return;
+                              }
+                              if (newPass !=
+                                  confirmPassController.text.trim()) {
+                                CustomSnackbar.showError(
+                                  ctx,
+                                  "Passwords do not match",
+                                );
+                                return;
+                              }
+                              setDialogState(() => isDialogLoading = true);
+                              try {
+                                await _settingsRepository.updatePassword(
+                                  newPass,
+                                );
+                                if (!dialogCtx.mounted) return;
+                                Navigator.pop(dialogCtx);
+                                if (mounted) {
+                                  CustomSnackbar.showSuccess(
+                                    context,
+                                    "Password updated successfully!",
+                                  );
+                                }
+                              } on AppFailure catch (failure) {
+                                setDialogState(() => isDialogLoading = false);
+                                if (ctx.mounted) {
+                                  CustomSnackbar.showError(
+                                    ctx,
+                                    failure.userMessage,
+                                  );
+                                }
+                              } catch (_) {
+                                setDialogState(() => isDialogLoading = false);
+                                if (ctx.mounted) {
+                                  CustomSnackbar.showError(
+                                    ctx,
+                                    "Failed to update password",
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed:
-                      isDialogLoading ? null : () => Navigator.pop(dialogCtx),
-                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed:
-                      isDialogLoading
-                          ? null
-                          : () async {
-                            final newPass = newPassController.text.trim();
-                            final confirmPass =
-                                confirmPassController.text.trim();
-                            if (newPass.length < 6) {
-                              CustomSnackbar.showError(
-                                ctx,
-                                "Password must be at least 6 characters",
-                              );
-                              return;
-                            }
-                            if (newPass != confirmPass) {
-                              CustomSnackbar.showError(
-                                ctx,
-                                "Passwords do not match",
-                              );
-                              return;
-                            }
-                            setDialogState(() => isDialogLoading = true);
-                            try {
-                              await _settingsRepository.updatePassword(newPass);
-                              if (!dialogCtx.mounted) return;
-                              Navigator.pop(dialogCtx);
-                              if (!mounted) return;
-                              CustomSnackbar.showSuccess(
-                                context,
-                                "Password updated successfully!",
-                              );
-                            } on AppFailure catch (failure) {
-                              setDialogState(() => isDialogLoading = false);
-                              if (!ctx.mounted) return;
-                              CustomSnackbar.showError(
-                                ctx,
-                                failure.userMessage,
-                              );
-                            } catch (e) {
-                              setDialogState(() => isDialogLoading = false);
-                              if (!ctx.mounted) return;
-                              CustomSnackbar.showError(
-                                ctx,
-                                "Failed to update password",
-                              );
-                            }
-                          },
-                  child: Text(
-                    "Update",
-                    style: TextStyle(
-                      color: AppColors.primaryGreen,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
             );
           },
         );
@@ -1219,80 +1408,123 @@ class _SettingsScreenState extends State<SettingsScreen>
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
             bool canDelete = confirmController.text == "DELETE";
-            return AlertDialog(
-              backgroundColor: Theme.of(ctx).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text(
-                    "Delete Account",
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
+
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color:
+                        isDark
+                            ? AppColors.darkBorder
+                            : Colors.grey.withValues(alpha: 0.2),
+                    width: 1.5,
                   ),
-                ],
-              ),
-              content: SingleChildScrollView(
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.dangerRed.withValues(alpha: 0.15),
+                      blurRadius: 50,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.dangerRed.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.delete_forever_rounded,
+                        color: AppColors.dangerRed,
+                        size: 36,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Delete Account",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: AppColors.dangerRed,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
                       "This action is irreversible. All your data, medical records, and appointments will be permanently removed.",
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: context.colorTextDark,
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      "Type DELETE to confirm:",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
                         color: Colors.grey,
+                        height: 1.4,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 24),
                     AppTextField(
                       controller: confirmController,
-                      hintText: "DELETE",
+                      hintText: "Type DELETE to confirm",
                       onChanged: (val) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text(
+                              "Cancel",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.dangerRed,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              disabledBackgroundColor: AppColors.dangerRed
+                                  .withValues(alpha: 0.3),
+                            ),
+                            onPressed:
+                                canDelete
+                                    ? () {
+                                      Navigator.pop(ctx);
+                                      _executeAccountDeletion();
+                                    }
+                                    : null,
+                            child: const Text(
+                              "Delete",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed:
-                      canDelete
-                          ? () {
-                            Navigator.pop(ctx);
-                            _executeAccountDeletion();
-                          }
-                          : null,
-                  child: Text(
-                    "Delete",
-                    style: TextStyle(
-                      color:
-                          canDelete
-                              ? Colors.red
-                              : Colors.red.withValues(alpha: 0.5),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
             );
           },
         );

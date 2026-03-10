@@ -275,60 +275,85 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
         widget.absoluteTimeout;
   }
 
+  // --- PRO FIX: Premium Adaptive Glass Lock Overlay ---
   Widget _buildLockOverlay() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Material(
-      color: Color(0xFF0F151E),
+      color: Colors.black.withValues(alpha: 0.7), // Richer, modern dimming
       child: SafeArea(
         child: Center(
           child: Container(
             width: 340,
             margin: EdgeInsets.all(24),
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(28), // Smoother corners
+              border: Border.all(
+                color:
+                    isDark
+                        ? AppColors.darkBorder
+                        : Colors.grey.withValues(alpha: 0.2),
+                width: 1.5,
+              ),
+              boxShadow: [
+                // Premium Glowing "Halo" Shadow
+                BoxShadow(
+                  color: AppColors.primaryGreen.withValues(alpha: 0.15),
+                  blurRadius: 50,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Floating Halo Icon
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: 72,
+                  height: 72,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryGreen.withValues(alpha: 0.12),
+                    color: AppColors.primaryGreen.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     Icons.lock_outline_rounded,
                     color: AppColors.primaryGreen,
+                    size: 32,
                   ),
                 ),
-                SizedBox(height: 16),
+                SizedBox(height: 24),
                 Text(
                   'App Locked',
                   style: TextStyle(
-                    color: context.colorTextDark,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
                   ),
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'For your privacy, re-authenticate to continue.',
+                  'For your privacy, please re-authenticate to continue your session.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: context.colorTextLight, fontSize: 14),
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
                 ),
-                SizedBox(height: 20),
+                SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: ElevatedButton(
                     onPressed: _isUnlocking ? null : _unlock,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryGreen,
                       foregroundColor: Colors.white,
-                      minimumSize: Size.fromHeight(48),
+                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                     child: Text(
@@ -337,15 +362,22 @@ class _InactivityLockGuardState extends State<InactivityLockGuard>
                           : _biometricAvailable
                           ? 'Unlock'
                           : 'Retry Unlock',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                 ),
-                SizedBox(height: 10),
+                SizedBox(height: 12),
                 TextButton(
                   onPressed: _signOutFromLockScreen,
                   child: Text(
                     'Sign out instead',
-                    style: TextStyle(color: context.colorTextLight),
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
