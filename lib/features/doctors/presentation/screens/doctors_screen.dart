@@ -113,7 +113,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       final hospitals = await _doctorRepo.fetchHospitals(query: query);
       final clinics = await _doctorRepo.fetchClinicsList(query: query);
 
-      if (mounted) {
+      // PRO FIX: The Match Guard
+      // This ensures that if the user cleared the search bar while the network
+      // was downloading, the app throws away the old search results instead of showing them.
+      if (mounted && _searchController.text.trim() == query) {
         setState(() {
           _doctors = doctors;
           _hospitals = hospitals;
@@ -122,7 +125,9 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && _searchController.text.trim() == query) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -194,7 +199,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   // --- PRO FIX: Clean Typographic Header with Reactive Inbox Badge ---
   Widget _buildHeader() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
       child: Row(
@@ -202,11 +207,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            "Find a Doctor", 
-            style: AppTextStyles.h1(context).copyWith(
-              fontSize: 26, 
-              letterSpacing: -0.5,
-            ),
+            "Find a Doctor",
+            style: AppTextStyles.h1(
+              context,
+            ).copyWith(fontSize: 26, letterSpacing: -0.5),
           ),
           Container(
             width: 44,
@@ -223,10 +227,14 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               alignment: Alignment.center,
               children: [
                 IconButton(
-                  icon: Icon(Icons.notifications_none_rounded, color: context.colorTextDark, size: 22),
+                  icon: Icon(
+                    Icons.notifications_none_rounded,
+                    color: context.colorTextDark,
+                    size: 22,
+                  ),
                   onPressed: () => context.push(AppRoutes.notifications),
                 ),
-                
+
                 // Reactive Unread Badge!
                 AnimatedBuilder(
                   animation: NotificationNotifier.instance,
@@ -238,16 +246,19 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                       right: 10,
                       top: 10,
                       child: Container(
-                        width: 10, 
+                        width: 10,
                         height: 10,
                         decoration: BoxDecoration(
-                          color: AppColors.dangerRed, 
+                          color: AppColors.dangerRed,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Theme.of(context).colorScheme.surface, width: 1.5), // Cutout effect
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.surface,
+                            width: 1.5,
+                          ), // Cutout effect
                         ),
                       ),
                     );
-                  }
+                  },
                 ),
               ],
             ),

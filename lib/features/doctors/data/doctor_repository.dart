@@ -202,12 +202,35 @@ class DoctorRepository {
     return _fetchWithCache(
       cacheKey: cacheKey,
       fetcher: () async {
+        // PRO FIX: Removed !inner so doctors without a specialty don't disappear
         var dbQuery = _client
             .from('doctors')
             .select(
               '*, specialties(name), doctor_clinics(clinics(latitude, longitude))',
             );
-        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
+
+        if (isSearch) {
+          // PRO FIX: Safe Relational Search - Step 1: Find matching specialties
+          final specResponse = await _client
+              .from('specialties')
+              .select('id')
+              .ilike('name', '%$query%');
+
+          final specIds =
+              List<Map<String, dynamic>>.from(
+                specResponse,
+              ).map((e) => e['id']).toList();
+
+          // PRO FIX: Safe Relational Search - Step 2: Apply secure OR filter
+          if (specIds.isNotEmpty) {
+            // Double quotes ("%$query%") prevent spaces from crashing the Supabase parser!
+            dbQuery = dbQuery.or(
+              'full_name.ilike."%$query%",specialty_id.in.(${specIds.join(',')})',
+            );
+          } else {
+            dbQuery = dbQuery.ilike('full_name', '%$query%');
+          }
+        }
 
         if (countryIso != null && countryIso.isNotEmpty) {
           dbQuery = dbQuery.eq('country_iso', countryIso);
@@ -277,12 +300,53 @@ class DoctorRepository {
       var dbQuery = _client
           .from('doctors')
           .select(
-            '*, specialties!inner(name), doctor_clinics(clinics(name, latitude, longitude))',
+            '*, specialties(name), doctor_clinics(clinics(name, latitude, longitude))',
           );
+
       if (query.isNotEmpty) {
-        dbQuery = dbQuery.or(
-          'full_name.ilike.%$query%,specialties.name.ilike.%$query%,doctor_clinics.clinics.name.ilike.%$query%',
-        );
+        // PRO FIX: 1. Safely find matching specialties
+        final specResponse = await _client
+            .from('specialties')
+            .select('id')
+            .ilike('name', '%$query%');
+        final specIds =
+            List<Map<String, dynamic>>.from(
+              specResponse,
+            ).map((e) => e['id']).toList();
+
+        // PRO FIX: 2. Safely find matching clinics
+        final clinicResponse = await _client
+            .from('clinics')
+            .select('id')
+            .ilike('name', '%$query%');
+        final clinicIds =
+            List<Map<String, dynamic>>.from(
+              clinicResponse,
+            ).map((e) => e['id']).toList();
+
+        // PRO FIX: 3. Find doctors that work in those clinics
+        List<int> docIdsFromClinics = [];
+        if (clinicIds.isNotEmpty) {
+          final junctionResponse = await _client
+              .from('doctor_clinics')
+              .select('doctor_id')
+              .inFilter('clinic_id', clinicIds);
+          docIdsFromClinics =
+              List<Map<String, dynamic>>.from(
+                junctionResponse,
+              ).map((e) => e['doctor_id'] as int).toList();
+        }
+
+        // PRO FIX: 4. Construct the ultimate safe OR query using ONLY local doctor table columns
+        List<String> orConditions = ['full_name.ilike."%$query%"'];
+        if (specIds.isNotEmpty) {
+          orConditions.add('specialty_id.in.(${specIds.join(',')})');
+        }
+        if (docIdsFromClinics.isNotEmpty) {
+          orConditions.add('id.in.(${docIdsFromClinics.join(',')})');
+        }
+
+        dbQuery = dbQuery.or(orConditions.join(','));
       }
 
       if (countryIso != null && countryIso.isNotEmpty) {

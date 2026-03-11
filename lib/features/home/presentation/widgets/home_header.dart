@@ -54,16 +54,23 @@ class HomeHeader extends StatelessWidget {
                 children: [
                   Text(
                     "Hi $fullName!",
-                    style: AppTextStyles.body(
-                      context,
-                    ).copyWith(color: Colors.white70, fontSize: 16),
+                    style: AppTextStyles.body(context).copyWith(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      fontWeight:
+                          FontWeight
+                              .w500, // PRO FIX: Gave the greeting a bit more weight
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
                     "Find Your Doctor",
-                    style: AppTextStyles.h1(
-                      context,
-                    ).copyWith(color: Colors.white),
+                    style: AppTextStyles.h1(context).copyWith(
+                      color: Colors.white,
+                      fontSize: 26, // PRO FIX: Matched size with DoctorsScreen
+                      letterSpacing:
+                          -0.5, // PRO FIX: Modern typographic kerning
+                    ),
                   ),
                 ],
               ),

@@ -20,6 +20,7 @@ import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../settings/presentation/settings_notifier.dart'; // IMPORTED
 import '../widgets/record_card.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
+import '../../../../core/network/network_notifier.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -215,9 +216,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   Future<void> _viewFile(MedicalRecord record) async {
-    if (record.fileUrls.isEmpty) {
-      return;
-    }
+    if (record.fileUrls.isEmpty) return;
 
     Future<void> openPath(String path) async {
       try {
@@ -227,17 +226,45 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           'png',
         ].contains(path.split('.').last.toLowerCase());
 
-        final url = await _repository.getSignedUrl(path);
+        // PRO FIX: OFFLINE CACHE SYSTEM
+        // Check the local app directory for the file before hitting the network
+        final dir = await getApplicationDocumentsDirectory();
+        final fileName = _getCleanFileName(path);
+        final localFile = File('${dir.path}/$fileName');
+        final bool existsLocally = await localFile.exists();
+
+        final isOffline = NetworkNotifier.instance.isOffline;
+
+        if (isOffline && !existsLocally) {
+          if (mounted) {
+            CustomSnackbar.showError(
+              context,
+              "You need internet to download this file for the first time.",
+            );
+          }
+          return;
+        }
+
+        String? networkUrl;
+        if (!isOffline) {
+          networkUrl = await _repository.getSignedUrl(path);
+        }
+
+        // PRO FIX: Background Caching. If we are online and don't have it locally, save it forever!
+        if (!isOffline && !existsLocally && networkUrl != null) {
+          http.get(Uri.parse(networkUrl)).then((response) {
+            if (response.statusCode == 200) {
+              localFile.writeAsBytes(response.bodyBytes);
+            }
+          });
+        }
 
         if (isImage) {
-          if (!mounted) {
-            return;
-          }
+          if (!mounted) return;
           await showDialog(
             context: context,
             builder: (_) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
-
               return Dialog(
                 backgroundColor: Colors.transparent,
                 elevation: 0,
@@ -246,17 +273,13 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                   vertical: 40,
                 ),
                 child: Stack(
-                  clipBehavior:
-                      Clip.none, // Allows the close button to overlap the edge
+                  clipBehavior: Clip.none,
                   alignment: Alignment.topRight,
                   children: [
-                    // --- The Well-Defined Image Box ---
                     Container(
                       width: double.infinity,
                       constraints: BoxConstraints(
-                        maxHeight:
-                            MediaQuery.of(context).size.height *
-                            0.7, // Keeps it from stretching too tall
+                        maxHeight: MediaQuery.of(context).size.height * 0.7,
                       ),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.surface,
@@ -274,20 +297,21 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                           ),
                         ],
                       ),
-                      // ClipRRect ensures the image doesn't bleed over the rounded corners of the box
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(22),
                         child: InteractiveViewer(
-                          child: AppNetworkImage(
-                            imageUrl: url,
-                            cacheKey: path, // Keeps your offline caching!
-                            fit: BoxFit.contain,
-                          ),
+                          // PRO FIX: Instantly load the local file if it exists
+                          child:
+                              existsLocally
+                                  ? Image.file(localFile, fit: BoxFit.contain)
+                                  : AppNetworkImage(
+                                    imageUrl: networkUrl,
+                                    cacheKey: path,
+                                    fit: BoxFit.contain,
+                                  ),
                         ),
                       ),
                     ),
-
-                    // --- Premium Overlapping Close Button ---
                     Positioned(
                       top: -12,
                       right: -12,
@@ -331,27 +355,30 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           return;
         }
 
-        if (mounted) {
-          CustomSnackbar.showInfo(context, "Opening file...");
-        }
-
-        final response = await http.get(Uri.parse(url));
-        if (response.statusCode != 200) {
-          throw Exception('Failed to download file');
-        }
-
-        final dir = await getTemporaryDirectory();
-        final fileName = _getCleanFileName(path);
-        final file = File('${dir.path}/$fileName');
-
-        await file.writeAsBytes(response.bodyBytes);
-
-        final result = await OpenFilex.open(file.path);
-        if (result.type != ResultType.done && mounted) {
-          CustomSnackbar.showError(
-            context,
-            "Could not open file: ${result.message}",
-          );
+        // PRO FIX: Handling non-image documents (PDFs) offline
+        if (existsLocally) {
+          final result = await OpenFilex.open(localFile.path);
+          if (result.type != ResultType.done && mounted) {
+            CustomSnackbar.showError(
+              context,
+              "Could not open file: ${result.message}",
+            );
+          }
+        } else {
+          if (mounted) CustomSnackbar.showInfo(context, "Downloading file...");
+          final response = await http.get(Uri.parse(networkUrl!));
+          if (response.statusCode == 200) {
+            await localFile.writeAsBytes(response.bodyBytes);
+            final result = await OpenFilex.open(localFile.path);
+            if (result.type != ResultType.done && mounted) {
+              CustomSnackbar.showError(
+                context,
+                "Could not open file: ${result.message}",
+              );
+            }
+          } else {
+            throw Exception('Failed to download file');
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -378,8 +405,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                   Text("Attached Files", style: AppTextStyles.h3(context)),
                   SizedBox(height: 16),
                   ...record.fileUrls.asMap().entries.map((entry) {
-                    final index =
-                        entry.key; // PRO FIX: Used to number the files
+                    final index = entry.key;
                     final path = entry.value;
                     final isImage = [
                       'jpg',
@@ -415,12 +441,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                             color: AppColors.primaryGreen,
                           ),
                         ),
-                        // PRO FIX: Clean, professional naming convention
                         title: Text(
                           "Document ${index + 1}",
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        // Keep the actual filename small underneath just for reference
                         subtitle: Text(
                           _getCleanFileName(path),
                           style: TextStyle(fontSize: 10, color: Colors.grey),

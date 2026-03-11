@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../../features/appointments/data/appointment_repository.dart';
 import '../../features/medical_records/data/medical_record_repository.dart';
 import '../../features/profile/data/profile_repository.dart';
+// PRO FIX 1: Import the Doctor Repo and Appointment Notifier
+import '../../features/doctors/data/doctor_repository.dart';
+import '../../features/appointments/presentation/appointment_notifier.dart';
 
 class NetworkNotifier extends ChangeNotifier {
   static final NetworkNotifier instance = NetworkNotifier._internal();
@@ -14,19 +17,16 @@ class NetworkNotifier extends ChangeNotifier {
   bool _isOffline = false;
   bool get isOffline => _isOffline;
 
-  // --- PRO FIX: The Sync Lock Mechanism ---
   bool _isSyncing = false;
   Completer<void>? _syncCompleter;
 
   bool get isSyncing => _isSyncing;
 
-  /// Allows repositories to pause their fetching until the queue is completely uploaded!
   Future<void> waitForSync() async {
     if (_syncCompleter != null) {
       await _syncCompleter!.future;
     }
   }
-  // ----------------------------------------
 
   late StreamSubscription<List<ConnectivityResult>> _subscription;
 
@@ -60,11 +60,9 @@ class NetworkNotifier extends ChangeNotifier {
     }
   }
 
-  /// The global engine that fires off all repository sync methods
   Future<void> _syncOfflineQueues() async {
-    if (_isSyncing) return; // Prevent overlapping syncs
+    if (_isSyncing) return;
 
-    // 1. Turn the traffic light RED
     _isSyncing = true;
     _syncCompleter = Completer<void>();
     notifyListeners();
@@ -74,18 +72,22 @@ class NetworkNotifier extends ChangeNotifier {
         '🌐 [NetworkNotifier] Internet restored. Syncing offline queues...',
       );
 
-      final appointmentRepo = AppointmentRepository();
-      await appointmentRepo.syncOfflineQueue();
+      // PRO FIX 2: Await ALL repository syncs, including the missing Doctor favorites
+      await Future.wait([
+        AppointmentRepository().syncOfflineQueue(),
+        ProfileRepository().syncOfflineQueue(),
+        MedicalRecordRepository().syncOfflineQueue(),
+        DoctorRepository().syncOfflineQueue(),
+      ]);
 
-      final profileRepo = ProfileRepository();
-      await profileRepo.syncOfflineQueue();
-
-      final medicalRepo = MedicalRecordRepository();
-      await medicalRepo.syncOfflineQueue();
+      // PRO FIX 3: Silently refresh the appointments UI to clear any 'pending' states
+      // that were just synced to the server, without showing a loading spinner.
+      unawaited(
+        AppointmentNotifier.instance.fetchAppointments(isBackground: true),
+      );
     } catch (e) {
       debugPrint('❌ [NetworkNotifier] Error syncing offline queues: $e');
     } finally {
-      // 2. Turn the traffic light GREEN, allowing all paused fetches to resume!
       _isSyncing = false;
       if (_syncCompleter != null && !_syncCompleter!.isCompleted) {
         _syncCompleter!.complete();

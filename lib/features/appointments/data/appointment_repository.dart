@@ -399,21 +399,32 @@ class AppointmentRepository {
     };
 
     final box = await _getCacheBox();
-    final cacheKey = 'activity_log_complete_$userId';
-    final cachedData = box.get(cacheKey);
-    if (cachedData != null) {
-      final List<dynamic> decoded = jsonDecode(cachedData);
+
+    // Update Activity Log Cache
+    final logCacheKey = 'activity_log_complete_$userId';
+    final logData = box.get(logCacheKey);
+    if (logData != null) {
+      final List<dynamic> decoded = jsonDecode(logData);
       for (var item in decoded) {
         if (item['id'] == appointmentId) item['has_review'] = true;
       }
-      await box.put(cacheKey, jsonEncode(decoded));
+      await box.put(logCacheKey, jsonEncode(decoded));
+    }
+
+    // PRO FIX 4: Immediately remove the item from the Pending Reviews cache
+    final pendingCacheKey = 'pending_reviews_$userId';
+    final pendingData = box.get(pendingCacheKey);
+    if (pendingData != null) {
+      final List<dynamic> decodedPending = jsonDecode(pendingData);
+      decodedPending.removeWhere((item) => item['id'] == appointmentId);
+      await box.put(pendingCacheKey, jsonEncode(decodedPending));
     }
 
     if (NetworkNotifier.instance.isOffline) {
       await _queueAction('submit_review', payload);
       return;
     }
-    await NetworkNotifier.instance.waitForSync(); // PRO FIX
+    await NetworkNotifier.instance.waitForSync();
 
     try {
       await _client.from('reviews').insert(payload);
@@ -455,14 +466,25 @@ class AppointmentRepository {
 
     if (appointmentId != null) {
       final box = await _getCacheBox();
-      final cacheKey = 'activity_log_complete_$userId';
-      final cachedData = box.get(cacheKey);
-      if (cachedData != null) {
-        final List<dynamic> decoded = jsonDecode(cachedData);
+
+      // Update Activity Log Cache
+      final logCacheKey = 'activity_log_complete_$userId';
+      final logData = box.get(logCacheKey);
+      if (logData != null) {
+        final List<dynamic> decoded = jsonDecode(logData);
         for (var item in decoded) {
           if (item['id'] == appointmentId) item['has_complaint'] = true;
         }
-        await box.put(cacheKey, jsonEncode(decoded));
+        await box.put(logCacheKey, jsonEncode(decoded));
+      }
+
+      // PRO FIX 5: Immediately remove the item from the Pending Complaints cache
+      final pendingCacheKey = 'pending_complaints_$userId';
+      final pendingData = box.get(pendingCacheKey);
+      if (pendingData != null) {
+        final List<dynamic> decodedPending = jsonDecode(pendingData);
+        decodedPending.removeWhere((item) => item['id'] == appointmentId);
+        await box.put(pendingCacheKey, jsonEncode(decodedPending));
       }
     }
 
@@ -470,7 +492,7 @@ class AppointmentRepository {
       await _queueAction('submit_complaint', payload);
       return;
     }
-    await NetworkNotifier.instance.waitForSync(); // PRO FIX
+    await NetworkNotifier.instance.waitForSync();
 
     try {
       await _client.from('complaints').insert(payload);
