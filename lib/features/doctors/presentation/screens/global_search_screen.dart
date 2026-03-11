@@ -493,7 +493,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                               imageUrl: doctor['profile_picture_url'],
                               isFavorite: isFavorite,
                               heroTagPrefix: 'search-',
-                              onFavoriteTap: () => _favNotifier.toggle(docId),
+                              onFavoriteTap: () => _favNotifier.toggle(doctor),
                               onCardTap:
                                   () => context.push(
                                     AppRoutes.doctorDetailsById('$docId'),

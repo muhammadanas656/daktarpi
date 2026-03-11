@@ -382,7 +382,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           views: (doctor['views_count'] ?? 0).toString(),
           imageUrl: doctor['profile_picture_url'],
           isFavorite: _favNotifier.isFavorite(doctor['id']),
-          onFavoriteTap: () => _favNotifier.toggle(doctor['id']),
+          onFavoriteTap: () => _favNotifier.toggle(doctor),
           onCardTap:
               () => context.push(
                 AppRoutes.doctorDetailsById('${doctor['id']}'),

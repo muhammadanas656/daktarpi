@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/appointment.dart';
@@ -20,9 +19,12 @@ class AppointmentNotifier extends ChangeNotifier {
   bool _isRealtimeInitialized = false;
 
   List<Appointment> _appointments = [];
-
   List<Map<String, dynamic>> _pendingReviews = [];
   List<Map<String, dynamic>> _pendingComplaints = [];
+
+  // PRO FIX: Centralized Activity Log Vault
+  List<Map<String, dynamic>> _activityLog = [];
+  List<Map<String, dynamic>> get activityLog => _activityLog;
 
   List<Map<String, dynamic>> get actionRequiredItems {
     final combined = [..._pendingReviews, ..._pendingComplaints];
@@ -42,23 +44,19 @@ class AppointmentNotifier extends ChangeNotifier {
       unawaited(_ensureRealtimeSubscription());
       return;
     }
-
     _isRealtimeInitialized = true;
     _authStateSub = Supabase.instance.client.auth.onAuthStateChange.listen((
       authState,
     ) {
       final userId = authState.session?.user.id;
-
       if (userId == null) {
         unawaited(_removeRealtimeSubscription());
         unawaited(clear());
         return;
       }
-
       unawaited(_ensureRealtimeSubscription(userIdOverride: userId));
       unawaited(fetchAppointments());
     });
-
     unawaited(_ensureRealtimeSubscription());
   }
 
@@ -68,7 +66,6 @@ class AppointmentNotifier extends ChangeNotifier {
       await _removeRealtimeSubscription();
       return;
     }
-
     if (_appointmentsSubscription != null && _subscribedUserId == userId) {
       return;
     }
@@ -78,7 +75,6 @@ class AppointmentNotifier extends ChangeNotifier {
     _appointmentsSubscription = _appointmentRepo.subscribeToAppointments(
       userId: userId,
       onChange: (_) {
-        // PRO FIX: Trigger a silent background fetch so the UI doesn't show a loading spinner!
         unawaited(fetchAppointments(isBackground: true));
       },
     );
@@ -88,9 +84,7 @@ class AppointmentNotifier extends ChangeNotifier {
     final channel = _appointmentsSubscription;
     _appointmentsSubscription = null;
     _subscribedUserId = null;
-
     if (channel == null) return;
-
     try {
       await _appointmentRepo.removeChannel(channel);
     } catch (e) {
@@ -98,25 +92,16 @@ class AppointmentNotifier extends ChangeNotifier {
     }
   }
 
-  // PRO FIX: Added `isBackground` parameter to prevent UI flashes
   Future<void> fetchAppointments({bool isBackground = false}) async {
     initializeRealtime();
     await _ensureRealtimeSubscription();
 
     final userId = _appointmentRepo.currentUserId;
     if (userId == null) {
-      _appointments = [];
-      _pendingReviews = [];
-      _pendingComplaints = [];
-      _error = null;
-      _isLoading = false;
-      notifyListeners();
-      await _removeRealtimeSubscription();
-      unawaited(_cacheRepo.clear());
+      await clear();
       return;
     }
 
-    // PRO FIX: Only show loading spinner if it's a manual/initial fetch
     if (!isBackground) {
       _isLoading = true;
       _error = null;
@@ -136,18 +121,20 @@ class AppointmentNotifier extends ChangeNotifier {
     try {
       final previousIds = _appointments.map((a) => a.id).toSet();
 
+      // PRO FIX: Fetch ALL related data simultaneously, including the Activity Log!
       final results = await Future.wait([
         _appointmentRepo.fetchAppointments(userId),
         _appointmentRepo.fetchPendingReviews(userId),
         _appointmentRepo.fetchPendingComplaints(userId),
+        _appointmentRepo.fetchActivityLog(userId),
       ]);
 
       final freshAppointments = results[0] as List<Appointment>;
       _pendingReviews = results[1] as List<Map<String, dynamic>>;
       _pendingComplaints = results[2] as List<Map<String, dynamic>>;
+      _activityLog = results[3] as List<Map<String, dynamic>>;
 
       final nextIds = freshAppointments.map((a) => a.id).toSet();
-
       for (final removedId in previousIds.difference(nextIds)) {
         unawaited(_notificationService.cancelReminder(removedId));
       }
@@ -158,12 +145,63 @@ class AppointmentNotifier extends ChangeNotifier {
       if (!isBackground) _error = e.toString();
       debugPrint("AppointmentNotifier Error: $e");
     } finally {
-      // PRO FIX: Ensure loading flag is turned off, and notify the UI to update with fresh data
       _isLoading = false;
       notifyListeners();
     }
   }
 
+  // --- PRO FIX: 0ms Optimistic UI Submissions ---
+  void submitComplaint(
+    Map<String, dynamic> appointment,
+    String description,
+    String recipient,
+  ) {
+    final apptId = appointment['id'];
+
+    // 1. Instantly remove from pending UI
+    _pendingComplaints.removeWhere((c) => c['id'] == apptId);
+
+    // 2. Instantly update Account Activity UI
+    for (var act in _activityLog) {
+      if (act['id'] == apptId) act['has_complaint'] = true;
+    }
+    notifyListeners();
+
+    // 3. Silently process network/offline queue in background
+    unawaited(
+      _appointmentRepo.submitComplaint(
+        appointmentId: apptId,
+        doctorId: appointment['doctor_id'],
+        description: description,
+        recipient: recipient,
+      ),
+    );
+  }
+
+  void submitReview(
+    Map<String, dynamic> appointment,
+    int rating,
+    String comment,
+  ) {
+    final apptId = appointment['id'];
+
+    _pendingReviews.removeWhere((r) => r['id'] == apptId);
+    for (var act in _activityLog) {
+      if (act['id'] == apptId) act['has_review'] = true;
+    }
+    notifyListeners();
+
+    unawaited(
+      _appointmentRepo.submitReview(
+        appointmentId: apptId,
+        doctorId: appointment['doctor_id'],
+        rating: rating,
+        comment: comment,
+      ),
+    );
+  }
+
+  // --- Existing Methods ---
   void removePendingReview(int appointmentId) {
     _pendingReviews.removeWhere((appt) => appt['id'] == appointmentId);
     notifyListeners();
@@ -178,12 +216,10 @@ class AppointmentNotifier extends ChangeNotifier {
     try {
       await _appointmentRepo.cancelAppointment(appointmentId);
       await _notificationService.cancelReminder(appointmentId);
-
       _appointments.removeWhere((app) => app.id == appointmentId);
       await _cacheRepo.saveAppointments(_appointments);
       notifyListeners();
     } catch (e) {
-      debugPrint("AppointmentNotifier Cancel Error: $e");
       rethrow;
     }
   }
@@ -192,12 +228,10 @@ class AppointmentNotifier extends ChangeNotifier {
     try {
       await _appointmentRepo.completeAppointment(appointmentId);
       await _notificationService.cancelReminder(appointmentId);
-
       _appointments.removeWhere((app) => app.id == appointmentId);
       await _cacheRepo.saveAppointments(_appointments);
       notifyListeners();
     } catch (e) {
-      debugPrint("AppointmentNotifier Complete Error: $e");
       rethrow;
     }
   }
@@ -214,6 +248,7 @@ class AppointmentNotifier extends ChangeNotifier {
     _appointments = [];
     _pendingReviews = [];
     _pendingComplaints = [];
+    _activityLog = [];
     _error = null;
     _isLoading = false;
     await _cacheRepo.clear();

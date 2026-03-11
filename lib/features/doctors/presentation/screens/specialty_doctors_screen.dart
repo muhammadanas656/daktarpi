@@ -84,6 +84,11 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
 
   // --- FETCH DATA ---
   Future<void> _fetchData({String? query}) async {
+    // PRO FIX: Ensure favorites are loaded into RAM before showing the list
+    if (!_favNotifier.isLoaded) {
+      await _favNotifier.loadFavorites();
+    }
+    
     try {
       final countryIso = _profileNotifier.profile?.countryIso;
       final doctors = await _doctorRepo.fetchDoctorsBySpecialty(
@@ -102,11 +107,6 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
       debugPrint('Error fetching data: $e');
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  // --- TOGGLE FAVORITE ---
-  Future<void> _toggleFavorite(int doctorId) async {
-    await _favNotifier.toggle(doctorId);
   }
 
   // --- NAVIGATION LOGIC ---
@@ -239,7 +239,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                                 imageUrl: doctor['profile_picture_url'],
                                 isFavorite: isFavorite,
                                 heroTagPrefix: 'specialty-',
-                                onFavoriteTap: () => _toggleFavorite(docId),
+                                onFavoriteTap: () => _favNotifier.toggle(doctor),
                                 onCardTap:
                                     () => _navigateToDoctorDetails(docId, doctor),
                               );

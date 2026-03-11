@@ -239,9 +239,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   void _toggleFavorite() {
-    final docIdInt = int.tryParse(widget.doctorId);
-    if (docIdInt == null) return;
-    _favNotifier.toggle(docIdInt);
+    if (_doctor == null) return;
+    _favNotifier.toggle(_doctor!);
   }
 
   Future<void> _openDatePicker() async {

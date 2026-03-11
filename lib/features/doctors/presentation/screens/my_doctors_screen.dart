@@ -20,49 +20,43 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
   final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
 
-  late Future<List<Map<String, dynamic>>> _favoritesFuture;
   late Future<List<Map<String, dynamic>>> _recentFuture;
-
   final Set<int> _pendingRemovalIds = {};
 
   @override
   void initState() {
     super.initState();
-    _refreshData();
+    // PRO FIX: Ensures favorites are loaded into RAM if they haven't been yet
+    if (!_favNotifier.isLoaded) {
+      _favNotifier.loadFavorites();
+    }
+    _recentFuture = _doctorRepo.fetchRecentDoctors();
     _favNotifier.addListener(_onFavoritesChanged);
   }
 
   @override
   void dispose() {
     for (final id in _pendingRemovalIds) {
-      _favNotifier.toggle(id);
+      // Actually delete them from DB if the user leaves the screen before Undo expires
+      _favNotifier.toggle({'id': id});
     }
     _favNotifier.removeListener(_onFavoritesChanged);
     super.dispose();
   }
 
   void _onFavoritesChanged() {
-    if (mounted) {
-      setState(() {
-        _favoritesFuture = _doctorRepo.fetchFavoriteDoctors();
-      });
-    }
-  }
-
-  void _refreshData() {
-    setState(() {
-      _favoritesFuture = _doctorRepo.fetchFavoriteDoctors();
-      _recentFuture = _doctorRepo.fetchRecentDoctors();
-    });
+    if (mounted) setState(() {});
   }
 
   void _navigateToDoctorDetails(int doctorId) {
-    context
-        .push(AppRoutes.doctorDetailsById('$doctorId'))
-        .then((_) => _refreshData());
+    // When returning, refresh the recent list. Favorites updates instantly via Notifier.
+    context.push(AppRoutes.doctorDetailsById('$doctorId')).then((_) {
+      if (mounted) {
+        setState(() => _recentFuture = _doctorRepo.fetchRecentDoctors());
+      }
+    });
   }
 
-  // --- PRO FIX: Perfectly Consistent Dark/Light Mode Confirmation Dialog ---
   void _showUnlikeConfirmationDialog(
     BuildContext context,
     int doctorId,
@@ -84,10 +78,9 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
             ),
             elevation: 0,
             child: Container(
-              padding: const EdgeInsets.all(28), // Slightly more breathing room
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(28),
-                // PRO FIX: Dynamic border matching ComplaintDialog
                 border: Border.all(
                   color: Colors.redAccent.withValues(alpha: isDark ? 0.2 : 0.1),
                   width: 1.5,
@@ -137,12 +130,6 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
                       Expanded(
                         child: TextButton(
                           onPressed: () => Navigator.pop(ctx),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
                           child: Text(
                             "Cancel",
                             style: TextStyle(
@@ -158,7 +145,6 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
                         child: Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
-                            // PRO FIX: Dynamic shadow intensity
                             boxShadow: AppStyles.primaryShadow(
                               context,
                               Colors.redAccent,
@@ -168,7 +154,8 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
                           child: ElevatedButton(
                             onPressed: () {
                               Navigator.pop(ctx);
-                              _favNotifier.toggle(doctorId);
+                              // Needs full object for the new Notifier logic!
+                              _favNotifier.toggle({'id': doctorId});
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.redAccent,
@@ -198,7 +185,6 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     );
   }
 
-  // --- PRO FIX: Adaptive SnackBar ---
   void _handleUnlikeWithUndo(
     int doctorId,
     String doctorName,
@@ -222,13 +208,11 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
             margin: const EdgeInsets.only(bottom: 24, left: 24, right: 24),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              // PRO FIX: Add a subtle border in dark mode to separate it from dark backgrounds
               side:
                   isDark
                       ? BorderSide(color: Colors.white.withValues(alpha: 0.1))
                       : BorderSide.none,
             ),
-            // PRO FIX: Dynamic premium colors for Light/Dark
             backgroundColor:
                 isDark ? const Color(0xFF1E293B) : const Color(0xFF2C3E50),
             elevation: 6,
@@ -266,9 +250,10 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
         )
         .closed
         .then((reason) {
+          // PRO FIX: Actually delete it from the RAM Vault once the undo timer finishes!
           if (reason != SnackBarClosedReason.action &&
               _pendingRemovalIds.contains(doctorId)) {
-            _favNotifier.toggle(doctorId);
+            _favNotifier.toggle({'id': doctorId});
             if (mounted) setState(() => _pendingRemovalIds.remove(doctorId));
           }
         });
@@ -299,9 +284,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
             unselectedLabelColor: context.colorTextGrey,
             labelStyle: AppTextStyles.bodyBold(context),
             indicatorColor: AppColors.primaryGreen,
-            dividerColor:
-                Colors
-                    .transparent, // PRO FIX: Removes the default harsh line under the tabs
+            dividerColor: Colors.transparent,
             tabs: const [Tab(text: "Favorites"), Tab(text: "Recent Visits")],
           ),
         ),
@@ -310,8 +293,8 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
           child: SafeArea(
             child: TabBarView(
               children: [
-                _buildDoctorList(_favoritesFuture, isFavoritesTab: true),
-                _buildDoctorList(_recentFuture, isFavoritesTab: false),
+                _buildFavoritesList(), // PRO FIX: Direct RAM Read
+                _buildRecentList(), // Standard Fetch
               ],
             ),
           ),
@@ -320,12 +303,73 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     );
   }
 
-  Widget _buildDoctorList(
-    Future<List<Map<String, dynamic>>> future, {
-    required bool isFavoritesTab,
-  }) {
+  // --- PRO FIX: Completely separate Favorites List without FutureBuilder ---
+  Widget _buildFavoritesList() {
+    if (!_favNotifier.isLoaded) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryGreen),
+      );
+    }
+
+    final doctors = _favNotifier.favoriteDoctors;
+
+    if (doctors.isEmpty) {
+      return Center(
+        child: Text(
+          'No favorites yet.',
+          style: AppTextStyles.body(
+            context,
+          ).copyWith(color: context.colorTextGrey),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: doctors.length,
+      itemBuilder: (context, index) {
+        final doctor = doctors[index];
+        final docId = doctor['id'] as int;
+        final isBeingRemoved = _pendingRemovalIds.contains(docId);
+
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 250),
+            opacity: isBeingRemoved ? 0.0 : 1.0,
+            child:
+                isBeingRemoved
+                    ? const SizedBox(width: double.infinity)
+                    : Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: DoctorListCard(
+                        id: docId,
+                        name: doctor['full_name'] ?? 'Unknown',
+                        specialty:
+                            doctor['specialties']?['name'] ?? 'Specialist',
+                        rating: (doctor['rating'] as num?)?.toString() ?? '0.0',
+                        views: (doctor['views_count'] ?? 0).toString(),
+                        imageUrl: doctor['profile_picture_url'],
+                        isFavorite: true,
+                        onFavoriteTap:
+                            () => _handleUnlikeWithUndo(
+                              docId,
+                              doctor['full_name'] ?? 'Unknown',
+                              doctors.length,
+                            ),
+                        onCardTap: () => _navigateToDoctorDetails(docId),
+                      ),
+                    ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRecentList() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: future,
+      future: _recentFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -333,18 +377,11 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
           );
         }
 
-        var doctors = snapshot.data ?? [];
-        if (isFavoritesTab) {
-          doctors =
-              doctors
-                  .where((doc) => _favNotifier.isFavorite(doc['id'] as int))
-                  .toList();
-        }
-
+        final doctors = snapshot.data ?? [];
         if (doctors.isEmpty) {
           return Center(
             child: Text(
-              isFavoritesTab ? 'No favorites yet.' : 'No recent visits.',
+              'No recent visits.',
               style: AppTextStyles.body(
                 context,
               ).copyWith(color: context.colorTextGrey),
@@ -358,68 +395,37 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
           itemBuilder: (context, index) {
             final doctor = doctors[index];
             final docId = doctor['id'] as int;
-            final isBeingRemoved =
-                isFavoritesTab && _pendingRemovalIds.contains(docId);
 
-            Widget? trailing;
-            if (!isFavoritesTab) {
-              trailing = Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  "Book",
-                  style: AppTextStyles.bodyBold(
-                    context,
-                  ).copyWith(color: AppColors.primaryGreen, fontSize: 12),
-                ),
-              );
-            }
+            final trailing = Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                "Book",
+                style: AppTextStyles.bodyBold(
+                  context,
+                ).copyWith(color: AppColors.primaryGreen, fontSize: 12),
+              ),
+            );
 
-            return AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOutCubic,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: isBeingRemoved ? 0.0 : 1.0,
-                child:
-                    isBeingRemoved
-                        ? const SizedBox(width: double.infinity)
-                        : Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: DoctorListCard(
-                            id: docId,
-                            name: doctor['full_name'] ?? 'Unknown',
-                            specialty:
-                                doctor['specialties']?['name'] ?? 'Specialist',
-                            rating:
-                                (doctor['rating'] as num?)?.toString() ?? '0.0',
-                            views: (doctor['views_count'] ?? 0).toString(),
-                            imageUrl: doctor['profile_picture_url'],
-                            isFavorite:
-                                isFavoritesTab
-                                    ? true
-                                    : _favNotifier.isFavorite(docId),
-                            onFavoriteTap: () {
-                              if (isFavoritesTab) {
-                                _handleUnlikeWithUndo(
-                                  docId,
-                                  doctor['full_name'] ?? 'Unknown',
-                                  doctors.length,
-                                );
-                              } else {
-                                _favNotifier.toggle(docId);
-                              }
-                            },
-                            onCardTap: () => _navigateToDoctorDetails(docId),
-                            trailingWidget: trailing,
-                          ),
-                        ),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: DoctorListCard(
+                id: docId,
+                name: doctor['full_name'] ?? 'Unknown',
+                specialty: doctor['specialties']?['name'] ?? 'Specialist',
+                rating: (doctor['rating'] as num?)?.toString() ?? '0.0',
+                views: (doctor['views_count'] ?? 0).toString(),
+                imageUrl: doctor['profile_picture_url'],
+                isFavorite: _favNotifier.isFavorite(docId),
+                onFavoriteTap:
+                    () => _favNotifier.toggle(
+                      doctor,
+                    ), // PRO FIX: Pass whole object
+                onCardTap: () => _navigateToDoctorDetails(docId),
+                trailingWidget: trailing,
               ),
             );
           },

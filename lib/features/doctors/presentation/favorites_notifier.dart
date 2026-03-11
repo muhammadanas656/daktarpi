@@ -1,39 +1,33 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/doctor_repository.dart';
 
-/// Singleton ChangeNotifier that holds the set of favorite doctor IDs.
-/// All screens listen to this instead of maintaining their own sets.
 class FavoritesNotifier extends ChangeNotifier {
   FavoritesNotifier._();
   static final FavoritesNotifier instance = FavoritesNotifier._();
 
   final _doctorRepo = DoctorRepository();
+
+  // PRO FIX: Now holds the FULL doctor objects, completely replacing FutureBuilders!
+  List<Map<String, dynamic>> _favoriteDoctors = [];
   Set<int> _favoriteIds = {};
   bool _loaded = false;
 
-  Set<int> get favoriteIds => _favoriteIds;
+  List<Map<String, dynamic>> get favoriteDoctors => _favoriteDoctors;
   bool get isLoaded => _loaded;
 
   bool isFavorite(int doctorId) => _favoriteIds.contains(doctorId);
 
-  /// Synchronize a single doctor's favorite status from an external source
-  /// (e.g. detailed screen fetch) without triggering a DB call.
-  void syncSingle(int doctorId, bool isFavorite) {
-    if (isFavorite) {
-      if (_favoriteIds.add(doctorId)) notifyListeners();
-    } else {
-      if (_favoriteIds.remove(doctorId)) notifyListeners();
-    }
-  }
-
-  /// Load favorites from the database. Safe to call multiple times —
-  /// subsequent calls refresh the set.
   Future<void> loadFavorites() async {
+    // PRO FIX: If we are already loaded, DO NOT fetch again and wipe RAM.
+    if (_loaded) return; 
+
     final userId = _doctorRepo.currentUserId;
     if (userId == null) return;
 
     try {
-      _favoriteIds = await _doctorRepo.fetchFavoriteIds(userId);
+      _favoriteDoctors = await _doctorRepo.fetchFavoriteDoctors();
+      _favoriteIds = _favoriteDoctors.map((d) => d['id'] as int).toSet();
       _loaded = true;
       notifyListeners();
     } catch (e) {
@@ -41,39 +35,42 @@ class FavoritesNotifier extends ChangeNotifier {
     }
   }
 
-  /// Toggle a doctor's favorite status with optimistic UI update.
-  /// Reverts on error.
-  Future<void> toggle(int doctorId) async {
+  // PRO FIX: Toggle now accepts the full doctor object to instantly populate the MyDoctorsScreen!
+  void toggle(Map<String, dynamic> doctor) {
     final userId = _doctorRepo.currentUserId;
     if (userId == null) return;
 
+    final doctorId = doctor['id'] as int;
     final wasFavorite = _favoriteIds.contains(doctorId);
 
-    // 1. Optimistic update
+    // 1. Optimistic UI (Instant)
     if (wasFavorite) {
       _favoriteIds.remove(doctorId);
+      _favoriteDoctors.removeWhere((d) => d['id'] == doctorId);
     } else {
       _favoriteIds.add(doctorId);
+      _favoriteDoctors.insert(0, doctor); // Puts the newest favorite at the top
     }
     notifyListeners();
 
-    try {
-      // 2. Database sync
-      await _doctorRepo.toggleFavorite(doctorId, userId, wasFavorite);
-    } catch (e) {
-      debugPrint('FavoritesNotifier: error toggling favorite: $e');
-      // 3. Revert on error
-      if (wasFavorite) {
-        _favoriteIds.add(doctorId);
-      } else {
-        _favoriteIds.remove(doctorId);
-      }
-      notifyListeners();
-    }
+    // 2. Background Sync
+    unawaited(
+      _doctorRepo.toggleFavorite(doctorId, userId, wasFavorite).catchError((e) {
+        // Revert if database explicitly rejects it
+        if (wasFavorite) {
+          _favoriteIds.add(doctorId);
+          _favoriteDoctors.insert(0, doctor);
+        } else {
+          _favoriteIds.remove(doctorId);
+          _favoriteDoctors.removeWhere((d) => d['id'] == doctorId);
+        }
+        notifyListeners();
+      }),
+    );
   }
 
-  /// Clear state on logout.
   void clear() {
+    _favoriteDoctors = [];
     _favoriteIds = {};
     _loaded = false;
     notifyListeners();

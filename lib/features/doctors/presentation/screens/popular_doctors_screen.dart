@@ -204,7 +204,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                                 imageUrl: doctor['profile_picture_url'],
                                 isFavorite: isFavorite,
                                 heroTagPrefix: 'popular-',
-                                onFavoriteTap: () => _favNotifier.toggle(docId),
+                                onFavoriteTap: () => _favNotifier.toggle(doctor),
                                 onCardTap:
                                     () => _navigateToDoctorDetails(docId, doctor),
                               );

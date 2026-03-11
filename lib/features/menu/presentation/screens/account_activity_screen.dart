@@ -4,9 +4,9 @@ import 'package:intl/intl.dart';
 import '../../../../presentation/widgets/complaint_dialog.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
-import '../../../appointments/data/appointment_repository.dart';
 import '../../presentation/widgets/review_dialog.dart';
 import '../../../../core/network/network_notifier.dart';
+import '../../../../features/appointments/presentation/appointment_notifier.dart'; // PRO FIX: Imported Notifier
 
 class AccountActivityScreen extends StatefulWidget {
   const AccountActivityScreen({super.key});
@@ -16,52 +16,39 @@ class AccountActivityScreen extends StatefulWidget {
 }
 
 class _AccountActivityScreenState extends State<AccountActivityScreen> {
-  final _repository = AppointmentRepository();
-  List<Map<String, dynamic>> _activities = [];
-  bool _isLoading = true;
+  final _appointmentNotifier = AppointmentNotifier.instance;
 
   @override
   void initState() {
     super.initState();
-    _fetchActivity();
-    
-    // PRO FIX: Actively listen for internet connection changes
+    // PRO FIX: Instantly listen to the RAM Vault instead of fetching from DB
+    _appointmentNotifier.addListener(_onNotifierChanged);
     NetworkNotifier.instance.addListener(_onNetworkChanged);
+
+    // Ensure data is loaded if they navigated here first
+    if (_appointmentNotifier.activityLog.isEmpty) {
+      _appointmentNotifier.fetchAppointments(isBackground: true);
+    }
   }
 
-  // PRO FIX: Clean up the network listener
   @override
   void dispose() {
+    _appointmentNotifier.removeListener(_onNotifierChanged);
     NetworkNotifier.instance.removeListener(_onNetworkChanged);
     super.dispose();
   }
 
-  // PRO FIX: Triggers a UI rebuild and an automatic silent data refresh!
-  void _onNetworkChanged() {
-    if (mounted) {
-      setState(() {}); // Instantly hides the offline banner
-      
-      if (!NetworkNotifier.instance.isOffline) {
-        // The second the internet returns, silently fetch the live history!
-        _fetchActivity();
-      }
-    }
+  void _onNotifierChanged() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _fetchActivity() async {
-    final userId = _repository.currentUserId;
-    if (userId == null) return;
-
-    try {
-      final data = await _repository.fetchActivityLog(userId);
-      if (mounted) {
-        setState(() {
-          _activities = data;
-          _isLoading = false;
-        });
+  void _onNetworkChanged() {
+    if (mounted) {
+      setState(() {});
+      if (!NetworkNotifier.instance.isOffline) {
+        // Silently sync in background when internet returns
+        _appointmentNotifier.fetchAppointments(isBackground: true);
       }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -113,7 +100,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       builder:
           (ctx) => ReviewDialog(
             appointment: appointment,
-            onReviewSubmitted: _fetchActivity,
+            onReviewSubmitted: () {}, // Handled silently by the Vault now!
           ),
     );
   }
@@ -128,13 +115,17 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       builder:
           (ctx) => ComplaintDialog(
             appointment: appointment,
-            onComplaintSubmitted: _fetchActivity,
+            onComplaintSubmitted: () {}, // Handled silently by the Vault now!
           ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // PRO FIX: Read directly from the central Vault
+    final activities = _appointmentNotifier.activityLog;
+    final isLoading = _appointmentNotifier.isLoading;
+
     return Scaffold(
       backgroundColor: context.colorBg,
       appBar: AppBar(
@@ -155,29 +146,25 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
         ),
       ),
       body:
-          // PRO FIX: Allows the history list to update silently in the background
-          (_isLoading && _activities.isEmpty)
-              ? Center(
+          (isLoading && activities.isEmpty)
+              ? const Center(
                 child: CircularProgressIndicator(color: AppColors.primaryGreen),
               )
-              : _activities.isEmpty
+              : activities.isEmpty
               ? _buildEmptyState()
               : ListView.builder(
-                padding: EdgeInsets.all(24),
-                // Increase item count by 1 to make room for the banner
+                padding: const EdgeInsets.all(24),
                 itemCount:
-                    _activities.length +
+                    activities.length +
                     (NetworkNotifier.instance.isOffline ? 1 : 0),
                 itemBuilder: (context, index) {
-                  // PRO FIX: Show the offline warning at the top of the history list
                   if (NetworkNotifier.instance.isOffline && index == 0) {
                     return _buildOfflineWarningBanner();
                   }
 
-                  // Adjust the index if the banner is showing
                   final actualIndex =
                       NetworkNotifier.instance.isOffline ? index - 1 : index;
-                  final item = _activities[actualIndex];
+                  final item = activities[actualIndex];
 
                   final action =
                       item['action_type']?.toString().toUpperCase() ??
@@ -191,8 +178,8 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                   }
 
                   return Container(
-                    margin: EdgeInsets.only(bottom: 16),
-                    padding: EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(16),
                     decoration: AppStyles.surfaceCard(
                       context,
                       borderRadius: BorderRadius.circular(16),
@@ -201,7 +188,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: _getActionColor(
                               action,
@@ -214,7 +201,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                             size: 24,
                           ),
                         ),
-                        SizedBox(width: 16),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,7 +215,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   letterSpacing: 1.2,
                                 ),
                               ),
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
                               Text(
                                 "Appointment with $doctorName",
                                 style: TextStyle(
@@ -237,7 +224,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   fontSize: 16,
                                 ),
                               ),
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
                               if (date != null)
                                 Text(
                                   DateFormat(
@@ -249,50 +236,17 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   ),
                                 ),
 
-                              if (action == 'WAITING') ...[
-                                SizedBox(height: 16),
-                                Container(
-                                  padding: EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: Colors.amber.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.info_outline_rounded,
-                                        color: Colors.amber,
-                                        size: 18,
-                                      ),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          "The clinic is running slightly behind schedule. Please wait.",
-                                          style: TextStyle(
-                                            color: Colors.amber,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-
                               if (action == 'COMPLETED' &&
                                   item['has_review'] != true) ...[
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 OutlinedButton.icon(
                                   onPressed:
                                       () => _showReviewDialog(context, item),
-                                  icon: Icon(Icons.star_rate_rounded, size: 18),
-                                  label: Text(
+                                  icon: const Icon(
+                                    Icons.star_rate_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text(
                                     "Leave a Review",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
@@ -300,11 +254,14 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   ),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: AppColors.primaryGreen,
-                                    side: BorderSide(
+                                    side: const BorderSide(
                                       color: AppColors.primaryGreen,
                                       width: 1.5,
                                     ),
-                                    minimumSize: Size(double.infinity, 40),
+                                    minimumSize: const Size(
+                                      double.infinity,
+                                      40,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -312,14 +269,11 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                 ),
                               ],
 
-                              // --- UPDATED: Button only shows if has_complaint is false ---
-                              // --- UPDATED: Show Complaint Button OR Status Badge ---
                               if (action == 'MISSED') ...[
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 if (item['has_complaint'] == true)
-                                  // Show a non-interactive status badge if already submitted
                                   Container(
-                                    padding: EdgeInsets.symmetric(
+                                    padding: const EdgeInsets.symmetric(
                                       vertical: 8,
                                       horizontal: 12,
                                     ),
@@ -332,7 +286,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                         ),
                                       ),
                                     ),
-                                    child: Row(
+                                    child: const Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
@@ -353,16 +307,15 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                     ),
                                   )
                                 else
-                                  // Show the active button if no complaint exists
                                   OutlinedButton.icon(
                                     onPressed:
                                         () =>
                                             _showComplaintDialog(context, item),
-                                    icon: Icon(
+                                    icon: const Icon(
                                       Icons.report_problem_outlined,
                                       size: 18,
                                     ),
-                                    label: Text(
+                                    label: const Text(
                                       "File Complaint",
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
@@ -370,11 +323,14 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                     ),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: Colors.deepOrange,
-                                      side: BorderSide(
+                                      side: const BorderSide(
                                         color: Colors.deepOrange,
                                         width: 1.5,
                                       ),
-                                      minimumSize: Size(double.infinity, 40),
+                                      minimumSize: const Size(
+                                        double.infinity,
+                                        40,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
@@ -398,7 +354,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.history_toggle_off, size: 80, color: Colors.grey[300]),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             "No Activity Yet",
             style: TextStyle(
@@ -407,7 +363,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
               color: context.colorTextDark,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             "Your booking history will appear here.",
             style: TextStyle(color: context.colorTextLight),
@@ -435,7 +391,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
             child: Text(
               "You are currently offline. Live wait times and appointment statuses will update automatically when you reconnect.",
               style: TextStyle(
-                color: Colors.orange[800], // Darker orange for readability
+                color: Colors.orange[800],
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),

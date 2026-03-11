@@ -187,7 +187,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
                           views: (doctor['views_count'] ?? 0).toString(),
                           imageUrl: doctor['profile_picture_url'],
                           isFavorite: isFavorite,
-                          onFavoriteTap: () => _favNotifier.toggle(docId),
+                          onFavoriteTap: () => _favNotifier.toggle(doctor),
                           onCardTap: () => _navigateToDoctorDetails(docId, doctor),
                         );
                       },

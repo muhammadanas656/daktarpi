@@ -4,7 +4,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // This fixes RemoteMessage & FirebaseMessaging
+import 'firebase_options.dart'; // This fixes DefaultFirebaseOptions
+import 'core/services/fcm_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import 'app.dart';
 import 'core/constants/app_routes.dart';
@@ -14,11 +19,56 @@ import 'core/security/device_integrity_service.dart';
 import 'core/services/appointment_notification_service.dart';
 import 'core/services/error_telemetry_service.dart';
 import 'core/widgets/app_error_fallback.dart';
-import 'features/settings/presentation/settings_notifier.dart';
+import 'features/notifications/data/notification_repository.dart';
 import 'features/notifications/presentation/notification_notifier.dart';
+import 'features/settings/presentation/settings_notifier.dart';
+
+// 1. Add this TOP-LEVEL function (must be outside any class)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // This code runs when the app is in the background or terminated
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('Firebase not initialized for this platform: $e');
+    return;
+  }
+
+  if (message.notification != null) {
+    await Hive.initFlutter();
+    final repo = NotificationRepository();
+    final notifications = await repo.getNotifications();
+    
+    final newNotif = {
+      'id': const Uuid().v4(),
+      'title': message.notification!.title ?? 'New Notification',
+      'body': message.notification!.body ?? '',
+      'timestamp': DateTime.now().toIso8601String(),
+      'is_read': false,
+    };
+    
+    notifications.insert(0, newNotif);
+    notifications.sort(
+      (a, b) => DateTime.parse(
+        b['timestamp'],
+      ).compareTo(DateTime.parse(a['timestamp'])),
+    );
+    
+    await repo.saveNotifications(notifications);
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. Initialize Firebase
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    // 2. Add this line right after Firebase.initializeApp
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    debugPrint('Firebase not initialized for this platform (usually missing android firebase_options.dart): $e');
+  }
   await dotenv.load(fileName: ".env");
   await Hive.initFlutter();
 
@@ -26,6 +76,13 @@ Future<void> main() async {
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  // 2. Start the FCM Service to grab the token
+  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    if (data.session != null) {
+      FcmService.instance.initialize();
+    }
+  });
 
   await SettingsNotifier.instance.loadSettings();
   await NotificationNotifier.instance.load();

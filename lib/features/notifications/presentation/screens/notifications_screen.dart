@@ -58,7 +58,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final notifications = NotificationNotifier.instance.notifications;
+    final now = DateTime.now();
+    final notifications =
+        NotificationNotifier.instance.notifications.where((n) {
+          return DateTime.parse(n['timestamp']).isBefore(now);
+        }).toList();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(

@@ -71,6 +71,8 @@ dependencies:
   map_launcher: ^3.4.0
   add_2_calendar: ^3.0.1
   share_plus: ^12.0.1
+  firebase_core: ^4.5.0
+  firebase_messaging: ^16.1.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

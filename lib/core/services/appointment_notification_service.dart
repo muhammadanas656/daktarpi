@@ -32,14 +32,18 @@ class AppointmentNotificationService {
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
-    const iosSettings = DarwinInitializationSettings();
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     const settings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
 
     await _plugin.initialize(settings);
-    await _requestPermissions();
+    // Removed `await _requestPermissions();` to prevent deadlocks in main()
     _initialized = true;
   }
 
@@ -80,6 +84,41 @@ class AppointmentNotificationService {
       await _plugin.show(immediateId, title, body, notificationDetails);
     } catch (e) {
       debugPrint("Failed to show immediate confirmation notification: $e");
+    }
+  }
+
+  /// Displays a generic push notification when the app is in the foreground.
+  Future<void> showPushNotification({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    if (!_isSupportedPlatform) return;
+
+    try {
+      await initialize();
+
+      const notificationDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'push_notifications',
+          'Push Notifications',
+          channelDescription: 'General alerts and updates',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      );
+
+      final immediateId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+      await _plugin.show(immediateId, title, body, notificationDetails, payload: payload);
+    } catch (e) {
+      debugPrint("Failed to show foreground push notification: $e");
     }
   }
 
@@ -222,7 +261,7 @@ class AppointmentNotificationService {
     await _plugin.cancelAll();
   }
 
-  Future<void> _requestPermissions() async {
+  Future<void> requestPermissions() async {
     final androidImpl =
         _plugin
             .resolvePlatformSpecificImplementation<

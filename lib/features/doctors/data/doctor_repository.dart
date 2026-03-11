@@ -654,33 +654,58 @@ class DoctorRepository {
     String userId,
     bool isFavorite,
   ) async {
+    // PRO FIX: Intercept offline actions so they don't crash and cause a UI Rebound!
     if (NetworkNotifier.instance.isOffline) {
       await _queueAction('toggle_favorite', {
         'doctor_id': doctorId,
         'user_id': userId,
         'isFavorite': isFavorite,
       });
-      return;
+      return; // Crucial: Returns immediately so no error is thrown!
     }
 
     // PRO FIX: Added Sync Guard here as well. If the user hits "like" the moment
     // internet returns, this pauses the action so it doesn't conflict with the queue!
     await NetworkNotifier.instance.waitForSync();
 
-    if (isFavorite) {
-      await _client.from('favorite_doctors').delete().match({
-        'user_id': userId,
-        'doctor_id': doctorId,
-      });
-    } else {
-      await _client.from('favorite_doctors').insert({
-        'user_id': userId,
-        'doctor_id': doctorId,
-      });
-    }
+    try {
+      if (isFavorite) {
+        await _client.from('favorite_doctors').delete().match({
+          'user_id': userId,
+          'doctor_id': doctorId,
+        });
+      } else {
+        await _client.from('favorite_doctors').insert({
+          'user_id': userId,
+          'doctor_id': doctorId,
+        });
+      }
 
-    final box = await _getCacheBox();
-    await box.delete('favorites_$userId');
+      final box = await _getCacheBox();
+      await box.delete('favorites_$userId');
+    } catch (error) {
+      // PRO FIX: Catch "Lie-Fi" connection issues and queue them instead of reverting the UI!
+      final errStr = error.toString().toLowerCase();
+      if (errStr.contains('socketexception') ||
+          errStr.contains('clientexception') ||
+          errStr.contains('failed host lookup') ||
+          errStr.contains('connection closed')) {
+        
+        debugPrint('⚠️ Network error during like toggle. Queueing offline action.');
+        await _queueAction('toggle_favorite', {
+          'doctor_id': doctorId,
+          'user_id': userId,
+          'isFavorite': isFavorite, 
+        });
+        return; // Return normally so FavoritesNotifier keeps the optimistic UI
+      }
+
+      // If it's a real database error (not a network issue), throw it to revert UI
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Failed to update favorite.',
+      );
+    }
   }
 
   Future<List<Map<String, dynamic>>> fetchFavoriteDoctors() async {

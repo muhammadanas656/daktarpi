@@ -2,66 +2,115 @@
 
 ## 1. Theme Foundation
 
-The current UI system is built on:
+The app uses a lightweight in-repo design system rather than a separate package.
+
+Core foundations:
+
 - Material 3
 - `GoogleFonts.poppinsTextTheme()`
-- app-specific tokens under `lib/core/theme/`
+- token files under `lib/core/theme/`
 
-`AppTheme` provides:
-- light and dark themes
-- a `ColorScheme` seeded from `AppColors.primaryGreen`
-- shared button and input decoration themes
+Current theme tokens include:
 
-## 2. Shared Styling Primitives
+- `AppColors`
+  Brand green, light neutrals, destructive red, and the dark "Deep Medical Slate" palette
+- `AppTextStyles`
+  Heading, body, button, and label presets
+- `AppDimens`
+  Shared spacing and elevation values
+- `AppShapes`
+  Shared radii
+- `AppMotion`
+  Shared durations and curves
+- `AppStyles`
+  Context-aware gradients, card surfaces, and shadow helpers
 
-The most reused styling helpers are in `AppStyles`:
-- `pageGradient(context)` for page backgrounds
-- `surfaceCard(context)` for bordered cards and panels
-- `cardShadow(context)` for standard light-mode elevation
-- `elevatedShadow(context)` for dialogs and floating surfaces
-- `primaryShadow(context, color)` for emphasized controls
-- `drawerShadow(context)` for the drawer transform in `MainWrapper`
+`AppTheme` defines both light and dark themes and seeds the `ColorScheme` from `AppColors.primaryGreen`.
 
-These helpers already adapt to light and dark mode, so screens generally compose from them instead of hardcoding colors.
+## 2. Reusable Surface and Layout Primitives
 
-## 3. Input and Control Pattern
+The most reused styling helpers are in `AppStyles`.
 
-`AppTextField` is the shared text-input primitive.
+- `pageGradient(context)`
+  The default page background. In light mode it uses a white/green wash; in dark mode it collapses to a deep slate gradient.
+- `surfaceCard(context)`
+  The primary card/panel container with adaptive border and shadow treatment.
+- `cardShadow(context)` and `elevatedShadow(context)`
+  Standard depth helpers. Shadows are intentionally reduced or removed in dark mode.
+- `primaryShadow(context, color)`
+  Used for high-emphasis buttons, chips, and branded cards.
+- `drawerShadow(context)`
+  Used exclusively by the animated drawer shell.
 
-Current capabilities include:
-- optional labels
-- password visibility toggle
-- prefix and suffix widgets
-- single-line and multiline layouts
-- adaptive fill, border, and text colors
+Common layout patterns across the codebase:
 
-`AuthTextField` and `CustomTextField` delegate to this shared implementation.
+- gradient-backed screens with transparent or low-elevation app bars
+- large rounded cards for grouped content
+- safe-area aware `SingleChildScrollView` forms
+- persistent bottom action bars for booking, records, and checkout flows
 
-The app also uses `PessimisticSwitch` for settings that should update UI state only after async work succeeds.
+## 3. Shared Controls
 
-## 4. Current Motion Patterns
+The app has a small but consistent set of reusable controls.
 
-The implemented motion system is concentrated in a few places:
+- `AppTextField`
+  Shared input primitive with labels, password toggles, prefixes/suffixes, multiline support, and adaptive light/dark colors
+- `PrimaryButton`
+  Default full-width CTA button
+- `SocialButton`
+  Branded auth/provider entry button
+- `CustomSearchBar`
+  Search-field wrapper used in doctor discovery surfaces
+- `PessimisticSwitch`
+  Settings switch that only commits visual state after the async operation succeeds
+- `AppNetworkImage`
+  Shared network-image widget used to make profile, doctor, and record media more offline-friendly
+
+Legacy wrappers such as `AuthTextField` and `CustomTextField` still exist, but they delegate back to the shared input approach.
+
+## 4. Visual Character
+
+The current visual system leans toward:
+
+- bright green accenting on light surfaces
+- deep slate surfaces in dark mode
+- rounded corners almost everywhere
+- large, legible Poppins typography
+- soft gradients and glass-like dialog treatments for security and settings flows
+
+Many newer screens use `AppStyles.surfaceCard()` and context-aware theme extensions consistently. Some older or one-off surfaces still hardcode white cards or direct colors, so the system is practical rather than fully uniform.
+
+## 5. Motion Patterns in the Current App
+
+Motion is used selectively and mostly for state transitions, not decoration.
 
 - `MainWrapper`
-  Drawer open/close uses translation, scaling, rounded-corner growth, and an optional startup hint animation.
+  The drawer animates with translation, scaling, corner-radius growth, and an optional startup hint.
 - `OfflineModeGuard`
-  Shows and hides an offline banner with `AnimatedPositioned`.
+  Slides the offline banner in and out with `AnimatedPositioned`.
+- `InactivityLockGuard`
+  Fades the lock overlay with `AnimatedOpacity`.
 - `SettingsPreferencesSection`
-  Uses `AnimatedSize` for expanding notification controls and inline reminder-time controls.
+  Uses `AnimatedSize` to expand notification controls and reminder-time choices.
 - `Verify2FAScreen`
-  Uses `AnimatedSwitcher` and `AnimatedCrossFade` between TOTP and recovery-code modes.
+  Uses `AnimatedSwitcher`, `AnimatedCrossFade`, and timed recovery-assist reveal.
 - `NotificationsScreen`
-  Uses `Dismissible` for swipe-to-delete notification cards.
+  Uses `Dismissible` for swipe-to-delete inbox items.
+- `ClinicLocationMapSection`
+  Uses `AnimatedContainer`, `AnimatedSize`, and `AnimatedRotation` for its in-app map controls.
+- `MyAppointmentsScreen`
+  Uses dialog transitions, animated receipt generation flows, and an action-required carousel.
 - `LiveCountdownBadge`
-  Updates once per second for waiting appointments and flashes when close to expiry.
+  Updates every second for waiting appointments and visually escalates near expiry.
 
-## 5. Practical Layout Rules in the Current Code
+## 6. Practical Design Rules to Preserve
 
-Across the app, most screens follow the same layout approach:
-- gradient or scaffold-backed page surfaces
-- `surfaceCard` containers for major content groups
-- bottom action bars for primary actions in booking, records, and settings flows
-- `SingleChildScrollView` plus safe-area padding for forms, dialogs, and sheets
+When extending the current app, the existing codebase favors these conventions:
 
-This keeps the app visually consistent without a separate design-system package.
+- Use theme extensions like `context.colorTextDark` and `context.colorBorder` instead of hardcoded colors
+- Prefer `AppStyles.surfaceCard()` over custom card decorations
+- Keep primary CTAs full width and visually dominant
+- Use `AppMotion` durations for state transitions when adding new motion
+- Keep dark-mode behavior intentional; avoid light-mode shadows copied directly into dark surfaces
+
+That is the effective design system today, even though it is implemented as shared helpers inside the app rather than a formal component library.

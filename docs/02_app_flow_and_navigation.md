@@ -1,35 +1,39 @@
 # DaktarPai - App Flow and Navigation
 
-## 1. Startup and Entry Routing
+## 1. Entry Routing
 
-Startup currently works like this:
-1. `main.dart` initializes app services.
-2. The router opens `/`, which renders `SplashScreen`.
-3. `SplashScreen` waits 2 seconds, then asks `AuthEntryRouteService` for the next route.
+Startup navigation is driven by `SplashScreen` plus `AuthEntryRouteService`.
 
-`AuthRouteResolver` and `AuthEntryRouteService` currently resolve post-auth navigation as follows:
+1. The app boots into `/`
+2. `SplashScreen` waits 2 seconds
+3. `AuthEntryRouteService.resolvePostAuthRoute()` decides the next screen
 
-| Condition | Route |
+Current entry-routing rules are:
+
+| Condition | Destination |
 |---|---|
-| No session | `/login` |
-| Signed in, AAL2 step-up required | `/verify-2fa` |
-| Signed in, no DOB in user metadata | `/profile/edit` |
-| Signed in, auth and profile checks passed | `/home` |
+| No active session | `/login` |
+| Signed in and AAL2 step-up still required | `/verify-2fa` |
+| Signed in but auth metadata still lacks DOB | `/profile/edit` |
+| Signed in, cleared security gate, and profile looks complete | `/home` |
 
-Trusted-device behavior:
-- If the resolved route is `/verify-2fa` and the current device is still trusted, the app skips the TOTP screen.
-- After that bypass, the next route is `/home` or `/profile/edit` depending on profile completion.
-- An intended route from the login redirect is reused only when the final destination would otherwise be `/home`.
+Trusted-device bypass is applied after the basic route decision:
 
-## 2. Router Guard
+- If the initial target is `/verify-2fa` and the current device is still trusted, the app skips the TOTP screen.
+- After bypass, the app lands on `/home` or `/profile/edit`.
+- The `from=` query parameter captured during login is reused when the final destination would otherwise be `/home`.
 
-`GoRouter` has a top-level redirect for authenticated access:
-- unauthenticated users can visit `/`, `/login`, `/signup`, and `/verify-2fa`
-- any other route redirects to `/login?from=...`
+## 2. Router Guard Model
 
-This means deep links into protected screens preserve the original target path for reuse after login.
+`appRouter` uses a top-level redirect tied to Supabase auth state.
 
-## 3. Route Map
+- Public routes are `/`, `/login`, `/signup`, and `/verify-2fa`
+- Everything else requires an authenticated session
+- Unauthenticated access to a protected route redirects to `/login?from=...`
+
+Most non-tab screens are pushed on the root navigator with `parentNavigatorKey: _rootNavigatorKey`, so they appear above the tab shell instead of nesting inside a branch stack.
+
+## 3. Route Inventory
 
 Current route constants live in `lib/core/constants/app_routes.dart`.
 
@@ -42,9 +46,7 @@ Current route constants live in `lib/core/constants/app_routes.dart`.
 | `/signup` | `SignUpScreen` |
 | `/verify-2fa` | `Verify2FAScreen` |
 
-### Shell tabs
-
-These are hosted inside `MainWrapper`:
+### Shell branches inside `MainWrapper`
 
 | Path | Screen |
 |---|---|
@@ -53,7 +55,7 @@ These are hosted inside `MainWrapper`:
 | `/appointments` | `MyAppointmentsScreen` |
 | `/profile` | `ProfileViewScreen` |
 
-### Standalone routes
+### Root-level pushed routes
 
 | Path | Screen |
 |---|---|
@@ -84,39 +86,60 @@ These are hosted inside `MainWrapper`:
 | `/specialty_doctors/:id` | `SpecialtyDoctorsScreen` |
 | `/clinic_doctors/:id` | `ClinicDoctorsScreen` |
 
-## 4. Main User Flows
+## 4. Primary User Journeys
 
-### Auth flow
+### Auth and recovery
 
 - Login supports email/password and Google sign-in.
-- Forgot-password is handled from a bottom sheet and uses an 8-digit recovery OTP flow.
-- If MFA step-up is required, the app routes to `Verify2FAScreen`.
+- Forgot-password is implemented as a bottom sheet with a three-step email recovery flow.
+- The recovery flow uses an 8-digit email OTP and then password reset.
+- MFA step-up uses `Verify2FAScreen`, which supports both authenticator codes and backup codes.
 
-### Doctor discovery flow
+### Profile completion
 
-- Home can send users to global search, popular doctors, featured doctors, specialty lists, clinic lists, and doctor details.
-- The doctors tab is the main list-first browsing surface.
+- New email sign-ups go to `/profile/edit` immediately if a session is returned.
+- Existing users missing DOB metadata are also redirected to `/profile/edit`.
+- The profile form can request GPS permission through `/location_permission`.
 
-### Booking and reschedule flow
+### Doctor discovery
 
-The current booking path is:
-1. doctor/clinic selection
-2. `/appointment_booking` for patient details
-3. `/payment_method` for date and slot selection
-4. `/dummy_payment` for the final simulated checkout and appointment write
+- `HomeScreen` links into global search, popular doctors, featured doctors, specialty doctor lists, clinic doctor lists, and doctor details.
+- `DoctorsScreen` is the broad browsing surface with filter chips and facility grids.
+- `DoctorDetailsScreen` is the bridge into booking.
 
-Reschedules reuse the same latter steps with an existing appointment id.
+### Booking and rescheduling
 
-### Profile and account flow
+Current booking flow:
 
-- `/profile` is the shell tab.
-- `/profile/edit` is pushed as a full-screen edit flow.
-- Settings, account activity, notifications, linked accounts, help, privacy policy, and terms are separate root-level routes.
+1. Doctor and clinic selection in doctor discovery surfaces
+2. `/appointment_booking` for patient details and saved-patient selection
+3. `/payment_method` for date and slot confirmation
+4. `/dummy_payment` for the simulated checkout and final appointment write
 
-## 5. MainWrapper Behavior
+Reschedules reuse step 3 and step 4 with an existing appointment id.
 
-`MainWrapper` is more than a tab scaffold:
-- it hosts the 4 shell branches
-- it renders the custom drawer and drawer animation
-- it starts appointment realtime initialization
-- it refreshes appointments and profile data on app resume
+### Account, records, and support
+
+- `/profile` is the tabbed profile home
+- `/profile/edit` is a full-screen edit flow above the shell
+- Medical records, settings, notifications, account activity, linked accounts, help, privacy, and terms are all separate root routes
+
+## 5. `MainWrapper` Behavior
+
+`MainWrapper` is more than a visual shell.
+
+- Hosts the 4 `StatefulShellRoute` branches
+- Renders the custom sliding/scaling drawer on top of the shell
+- Starts appointment realtime and initial profile/appointment hydration in `initState()`
+- Refreshes appointments and profile when the app returns to the foreground
+- Shows an intro drawer hint animation on first-time startup when enabled in settings
+- Intercepts back presses to close the drawer first, pop nested routes second, and exit the app when the user is already on a root tab
+
+## 6. Route Data Conventions
+
+Several routes rely on typed `extra` payloads rather than query parameters.
+
+- `Verify2FAScreen` accepts `Verify2FARouteArgs`
+- Booking and reschedule routes use typed booking argument objects
+- `DoctorDetailsScreen` can receive a lightweight doctor map for instant handoff rendering before the full fetch completes
+- `AddRecordScreen` accepts either `MedicalRecordRouteArgs` or a raw `MedicalRecord`

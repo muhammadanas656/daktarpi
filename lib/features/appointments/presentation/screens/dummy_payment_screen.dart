@@ -71,31 +71,42 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
         if (SettingsNotifier.instance.notificationsEnabled &&
             SettingsNotifier.instance.reminderAlertsEnabled &&
             SettingsNotifier.instance.globalReminderMinutes > 0) {
-          // <-- Only checking Global Time now
-
+          final globalMins = SettingsNotifier.instance.globalReminderMinutes;
           final maxWaitTime = widget.args.clinic['max_wait_time'] ?? 30;
           final maxWaitInt =
               maxWaitTime is int
                   ? maxWaitTime
                   : int.tryParse(maxWaitTime.toString()) ?? 30;
 
-          // Calculate timeout: Appointment Time + Max Wait + 15 Min Grace Period
           final timeoutDateTime = widget.args.appointmentDateTime.add(
             Duration(minutes: maxWaitInt + 15),
           );
 
+          // A. Schedule the OS Banner
           await _notificationService.scheduleReminder(
             appointmentId: persistedAppointmentId,
             appointmentLocalDateTime: widget.args.appointmentDateTime,
             appointmentEndDateTime: timeoutDateTime,
-            reminderMinutes:
-                SettingsNotifier
-                    .instance
-                    .globalReminderMinutes, // <-- Only passing Global Time now
+            reminderMinutes: globalMins,
             doctorName: widget.args.doctorName,
           );
+
+          // PRO FIX B: Create the Time-Released In-App Notification!
+          final reminderUnlockTime = widget.args.appointmentDateTime.subtract(
+            Duration(minutes: globalMins),
+          );
+
+          // Only add it to the inbox if the reminder time is actually in the future
+          if (reminderUnlockTime.isAfter(DateTime.now())) {
+            await NotificationNotifier.instance.addNotification(
+              title: "Upcoming Appointment",
+              body:
+                  "Reminder: You have an appointment with Dr. ${widget.args.doctorName} at ${widget.args.displayTime}.",
+              scheduledTime:
+                  reminderUnlockTime, // It stays hidden until this exact minute
+            );
+          }
         } else {
-          // Ensure any old/stale reminders for this ID are cleared if disabled
           await _notificationService.cancelReminder(persistedAppointmentId);
         }
       } catch (error) {
