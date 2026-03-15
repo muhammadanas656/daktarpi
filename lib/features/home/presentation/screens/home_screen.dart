@@ -6,12 +6,14 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../doctors/presentation/favorites_notifier.dart';
 import '../../../profile/presentation/profile_notifier.dart';
-import '../../../doctors/data/doctor_repository.dart';
+import '../../../doctors/presentation/doctors_notifier.dart'; // PRO FIX: Central Notifier
 import '../../../home/data/home_repository.dart';
 import '../../../doctors/presentation/models/doctors_route_args.dart';
 
 import '../../../../presentation/widgets/home_popular_doctor_card.dart';
 import '../../../../presentation/widgets/home_featured_doctor_card.dart';
+import '../../../../core/widgets/app_loader.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
 
 import '../widgets/home_header.dart';
 import '../widgets/home_banner.dart';
@@ -27,18 +29,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
-  final _doctorRepo = DoctorRepository();
   final _homeRepo = HomeRepository();
   final _favNotifier = FavoritesNotifier.instance;
   final _profileNotifier = ProfileNotifier.instance;
+  final _docsNotifier = DoctorsNotifier.instance; // PRO FIX: Singleton Vault
 
   // --- STATE VARIABLES ---
-  bool _isLoading = true;
-
-  // Data Lists
-  List<Map<String, dynamic>> _specialties = [];
-  List<Map<String, dynamic>> _popularDoctors = [];
-  List<Map<String, dynamic>> _featuredDoctors = [];
+  bool _isScreenLoading = true; // PRO FIX: Unified loading state
   List<Map<String, dynamic>> _banners = [];
 
   @override
@@ -68,8 +65,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchAllData({bool forceRefresh = false}) async {
+    if (!mounted) return;
+
+    // PRO FIX: Only show full-screen loader if we have no data (First Launch)
+    // If it's a pull-to-refresh, the RefreshIndicator handles the UI seamlessly.
+    final isFirstLoad =
+        _docsNotifier.popularDoctors.isEmpty && _banners.isEmpty;
+    if (isFirstLoad) {
+      setState(() => _isScreenLoading = true);
+    }
+
     try {
-      // PRO FIX: Strictly await profile load to ensure countryIso is populated
+      // 1. Await User Profile first (since we need their Country ISO for banners)
       if (forceRefresh || !_profileNotifier.isLoaded) {
         await Future.wait([
           _profileNotifier.loadProfile(),
@@ -77,47 +84,32 @@ class _HomeScreenState extends State<HomeScreen> {
         ]);
       }
 
-      final userLocation = _profileNotifier.profile?.location;
       final countryIso = _profileNotifier.profile?.countryIso;
 
-      // PRO FIX: Catch errors individually. If offline, banners might fail, but it won't crash the whole screen!
+      // 2. PRO FIX: Unified Future Lock
+      // Group all fetches together so they resolve at the exact same millisecond
       final results = await Future.wait([
-        _doctorRepo
-            .fetchSpecialties(forceRefresh: forceRefresh)
-            .catchError((_) => _specialties),
-        _doctorRepo
-            .fetchPopularDoctors(
-              limit: 5,
-              forceRefresh: forceRefresh,
-              userLocation: userLocation,
-              countryIso: countryIso,
-            )
-            .catchError((_) => _popularDoctors),
-        _doctorRepo
-            .fetchFeaturedDoctors(
-              limit: 5,
-              forceRefresh: forceRefresh,
-              userLocation: userLocation,
-              countryIso: countryIso,
-            )
-            .catchError((_) => _featuredDoctors),
-        _homeRepo.fetchBanners(countryIso).catchError((_) => _banners),
+        _docsNotifier.fetchSpecialties(forceRefresh: forceRefresh),
+        _docsNotifier.fetchPopularDoctors(limit: 5, forceRefresh: forceRefresh),
+        _docsNotifier.fetchFeaturedDoctors(
+          limit: 5,
+          forceRefresh: forceRefresh,
+        ),
+        _homeRepo
+            .fetchBanners(countryIso)
+            .catchError((_) => <Map<String, dynamic>>[]),
       ]);
 
       if (mounted) {
         setState(() {
-          _specialties = results[0];
-          _popularDoctors = results[1];
-          _featuredDoctors = results[2];
-          _banners = results[3];
-          _isLoading = false;
+          // Banners are the 4th item in the Future.wait array (index 3)
+          _banners = results[3] as List<Map<String, dynamic>>;
+          _isScreenLoading = false; // Unlock the UI!
         });
       }
     } catch (e) {
       debugPrint("Error loading home data: $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isScreenLoading = false);
     }
   }
 
@@ -134,12 +126,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    // PRO FIX: Clean, singular loading condition
+    if (_isScreenLoading) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryGreen),
-        ),
+        body: const AppLoader(),
       );
     }
 
@@ -150,10 +141,17 @@ class _HomeScreenState extends State<HomeScreen> {
         color: AppColors.primaryGreen,
         backgroundColor: Theme.of(context).colorScheme.surface,
         child: SingleChildScrollView(
-          physics: AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [_buildHeader(), _buildBanner(), _buildContentSections()],
+            children: [
+              _buildHeader(),
+              _buildBanner(),
+              ListenableBuilder(
+                listenable: _docsNotifier,
+                builder: (context, _) => _buildContentSections(),
+              ),
+            ],
           ),
         ),
       ),
@@ -179,6 +177,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildContentSections() {
+    final specialties = _docsNotifier.specialties;
+    final popular = _docsNotifier.popularDoctors;
+    final featured = _docsNotifier.featuredDoctors;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -191,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         HomeSpecialtiesRow(
-          specialties: _specialties,
+          specialties: specialties,
           onSpecialtyTap: _navigateToSpecialty,
         ),
         HomeSectionHeader(
@@ -201,10 +203,10 @@ class _HomeScreenState extends State<HomeScreen> {
             if (mounted) _refreshData();
           },
         ),
-        if (_popularDoctors.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: const Text("No popular doctors found"),
+        if (popular.isEmpty)
+          const EmptyStateWidget(
+            icon: Icons.group_off_rounded,
+            title: "No popular doctors found",
           )
         else
           SizedBox(
@@ -212,10 +214,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               scrollDirection: Axis.horizontal,
-              itemCount: _popularDoctors.length,
+              itemCount: popular.length,
               separatorBuilder: (_, __) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
-                final doc = _popularDoctors[index];
+                final doc = popular[index];
                 return HomePopularDoctorCard(
                   id: doc['id'],
                   name: doc['full_name'] ?? 'Unknown',
@@ -233,10 +235,10 @@ class _HomeScreenState extends State<HomeScreen> {
             if (mounted) _refreshData();
           },
         ),
-        if (_featuredDoctors.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: const Text("No featured doctors found"),
+        if (featured.isEmpty)
+          const EmptyStateWidget(
+            icon: Icons.star_border_rounded,
+            title: "No featured doctors found",
           )
         else
           SizedBox(
@@ -244,10 +246,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               scrollDirection: Axis.horizontal,
-              itemCount: _featuredDoctors.length,
+              itemCount: featured.length,
               separatorBuilder: (_, __) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
-                final doc = _featuredDoctors[index];
+                final doc = featured[index];
                 return HomeFeaturedDoctorCard(
                   id: doc['id'],
                   name: doc['full_name'] ?? 'Unknown',

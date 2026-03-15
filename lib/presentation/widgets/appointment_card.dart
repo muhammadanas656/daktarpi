@@ -3,7 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../core/theme/app_styles.dart';
+import '../../core/widgets/custom_card.dart';
 import '../../features/appointments/presentation/widgets/live_countdown_badge.dart';
 import 'app_network_image.dart';
 
@@ -49,12 +49,11 @@ class AppointmentCard extends StatelessWidget {
                 ? AppColors.darkBorder
                 : context.colorBorder.withValues(alpha: 0.5));
 
-    return Container(
+    return CustomCard(
       margin: const EdgeInsets.only(bottom: AppDimens.spaceLg),
-      decoration: AppStyles.surfaceCard(
-        context,
-        borderRadius: AppShapes.xl,
-      ).copyWith(border: Border.all(color: borderColor)),
+      padding: EdgeInsets.zero,
+      borderColor: borderColor,
+      hasShadow: true,
       // PRO FIX: ClipRRect ensures the bottom InkWell perfectly hugs the card corners
       child: ClipRRect(
         borderRadius: AppShapes.xl,

@@ -9,6 +9,7 @@ import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
+import '../../../../core/widgets/app_loader.dart';
 import '../../../../core/utils/navigation_helper.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../data/route_repository.dart';
@@ -620,7 +621,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                 color: Colors.black.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: AppLoader()),
             ),
           ),
 
@@ -702,12 +703,9 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                                     SizedBox(
                                                       width: 12,
                                                       height: 12,
-                                                      child:
-                                                          CircularProgressIndicator(
+                                                      child: const AppLoader(
                                                             strokeWidth: 2,
-                                                            color:
-                                                                AppColors
-                                                                    .primaryGreen,
+                                                            color: AppColors.primaryGreen,
                                                           ),
                                                     ),
                                                     SizedBox(width: 8),

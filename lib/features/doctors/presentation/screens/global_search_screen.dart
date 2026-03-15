@@ -12,6 +12,7 @@ import '../../data/doctor_repository.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../models/doctors_route_args.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
   const GlobalSearchScreen({super.key});
@@ -459,7 +460,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                 child:
                     _isLoading
                         ? Center(
-                          child: CircularProgressIndicator(
+                          child: const AppLoader(
                             color: AppColors.primaryGreen,
                           ),
                         )

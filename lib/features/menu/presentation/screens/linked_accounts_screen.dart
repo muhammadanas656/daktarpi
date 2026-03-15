@@ -12,6 +12,8 @@ import '../../../../core/security/sensitive_action_step_up_service.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/data/security_gate_service.dart';
 import '../../data/settings_repository.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
+import '../../../../presentation/widgets/primary_button.dart';
 
 class LinkedAccountsScreen extends StatefulWidget {
   const LinkedAccountsScreen({super.key});
@@ -88,26 +90,26 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
 
     await showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       barrierDismissible: false,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            final isDark =
-                Theme.of(ctx).brightness ==
-                Brightness.dark; // PRO FIX: Define isDark here
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            final themeColor =
+                isRecoveryMode ? Colors.orange : AppColors.primaryGreen;
 
             final defaultPinTheme = PinTheme(
-              width: 36,
-              height: 46,
+              width: 38,
+              height: 48,
               textStyle: TextStyle(
                 fontSize: 18,
                 color: context.colorTextDark,
                 fontWeight: FontWeight.bold,
               ),
               decoration: BoxDecoration(
-                // PRO FIX: Dynamic background and border for the PIN squares
                 color: isDark ? AppColors.darkScaffold : Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: isDark ? AppColors.darkBorder : context.colorBorder,
                 ),
@@ -148,102 +150,87 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
               }
             }
 
-            return AlertDialog(
-              backgroundColor: Theme.of(ctx).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: Row(
-                children: [
-                  Icon(
-                    isRecoveryMode ? Icons.lock_open : Icons.security,
-                    color:
-                        isRecoveryMode ? Colors.orange : AppColors.primaryGreen,
+            return AppFloatingDialog(
+              headerIcon:
+                  isRecoveryMode
+                      ? Icons.lock_open_rounded
+                      : Icons.security_rounded,
+              iconColor: themeColor,
+              title: isRecoveryMode ? "Account Recovery" : "Security Check",
+              description:
+                  isRecoveryMode
+                      ? "Enter an 8-character backup code to bypass and disable 2FA."
+                      : "To make security changes, please verify your identity with your 6-digit code.",
+              isUpdating: isDialogLoading,
+              content: AnimatedCrossFade(
+                firstChild: Pinput(
+                  length: 6,
+                  controller: otpController,
+                  autofocus: true,
+                  defaultPinTheme: defaultPinTheme,
+                  focusedPinTheme: defaultPinTheme.copyWith(
+                    decoration: defaultPinTheme.decoration!.copyWith(
+                      border: Border.all(color: themeColor, width: 2),
+                    ),
                   ),
-                  SizedBox(width: 10),
-                  Text(isRecoveryMode ? "Account Recovery" : "Security Check"),
-                ],
+                  onCompleted: submitCode,
+                ),
+                secondChild: AppTextField(
+                  controller: recoveryController,
+                  hintText: "XXXX-XXXX",
+                  keyboardType: TextInputType.text,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: [BackupCodeFormatter()],
+                  textAlign: TextAlign.center,
+                  onChanged: (val) {
+                    if (val.length == 9) submitCode(val);
+                  },
+                  onSubmitted: submitCode,
+                ),
+                crossFadeState:
+                    isRecoveryMode
+                        ? CrossFadeState.showSecond
+                        : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 300),
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      isRecoveryMode
-                          ? "Enter an 8-character backup code to bypass and disable 2FA."
-                          : "To make security changes to your account, please verify your identity with your 6-digit authenticator code.",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: context.colorTextLight,
-                        height: 1.4,
-                      ),
-                    ),
-                    SizedBox(height: 24),
-                    AnimatedCrossFade(
-                      firstChild: Pinput(
-                        length: 6,
-                        controller: otpController,
-                        autofocus: true,
-                        defaultPinTheme: defaultPinTheme,
-                        onCompleted: submitCode,
-                      ),
-                      secondChild: AppTextField(
-                        controller: recoveryController,
-                        hintText: "XXXX-XXXX",
-                        keyboardType: TextInputType.text,
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: [BackupCodeFormatter()],
-                        textAlign: TextAlign.center,
-                        onChanged: (val) {
-                          if (val.length == 9) submitCode(val);
-                        },
-                        onSubmitted: submitCode,
-                      ),
-                      crossFadeState:
-                          isRecoveryMode
-                              ? CrossFadeState.showSecond
-                              : CrossFadeState.showFirst,
-                      duration: Duration(milliseconds: 300),
-                    ),
-                    if (isDialogLoading)
-                      Padding(
-                        padding: EdgeInsets.only(top: 16),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.primaryGreen,
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading ? null : () => Navigator.pop(ctx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
-                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed:
-                      isDialogLoading
-                          ? null
-                          : () {
-                            setDialogState(() {
-                              isRecoveryMode = !isRecoveryMode;
-                              otpController.clear();
-                              recoveryController.clear();
-                            });
-                          },
-                  child: Text(
-                    isRecoveryMode ? "Use Authenticator" : "Use Backup Code",
-                    style: TextStyle(
-                      color:
-                          isRecoveryMode
-                              ? AppColors.primaryGreen
-                              : Colors.orange,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading
+                              ? null
+                              : () {
+                                setDialogState(() {
+                                  isRecoveryMode = !isRecoveryMode;
+                                  otpController.clear();
+                                  recoveryController.clear();
+                                });
+                              },
+                      child: Text(
+                        isRecoveryMode ? "Use App" : "Use Backup",
+                        style: TextStyle(
+                          color: themeColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         );
@@ -284,124 +271,113 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
 
     await showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       barrierDismissible: false,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            return AlertDialog(
-              backgroundColor: Theme.of(ctx).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+            return AppFloatingDialog(
+              headerIcon: Icons.email_rounded,
+              iconColor: AppColors.primaryGreen,
+              title: "Link Email Account",
+              description:
+                  "To link your email address, please set a secure password for this account.",
+              isUpdating: isDialogLoading,
+              content: AppTextField(
+                controller: passwordController,
+                hintText: "Set a Password",
+                isPassword: true,
               ),
-              title: Row(
+              actions: Row(
                 children: [
-                  Icon(Icons.email, color: AppColors.primaryGreen),
-                  SizedBox(width: 10),
-                  Text("Link Email Account"),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      "To link your email address, please set a secure password for this account.",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: context.colorTextLight,
-                        height: 1.4,
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading ? null : () => Navigator.pop(ctx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                    SizedBox(height: 20),
-                    AppTextField(
-                      controller: passwordController,
-                      hintText: "Set a Password",
-                      isPassword: true,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
-                  child: Text("Cancel", style: TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed:
-                      isDialogLoading
-                          ? null
-                          : () async {
-                            if (passwordController.text.length < 6) {
-                              CustomSnackbar.showError(
-                                ctx,
-                                "Password must be at least 6 characters.",
-                              );
-                              return;
-                            }
-
-                            setDialogState(() => isDialogLoading = true);
-
-                            try {
-                              try {
-                                await _settingsRepository.updatePassword(
-                                  passwordController.text,
-                                );
-                                await Supabase.instance.client.auth.updateUser(
-                                  UserAttributes(
-                                    data: {'has_email_password': true},
-                                  ),
-                                );
-                              } catch (e) {
-                                if (e.toString().toLowerCase().contains(
-                                  'authentication failed',
-                                )) {
-                                  await Supabase.instance.client.auth
-                                      .updateUser(
-                                        UserAttributes(
-                                          data: {'has_email_password': true},
-                                        ),
-                                      );
-                                } else {
-                                  rethrow;
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Link",
+                      onTap:
+                          isDialogLoading
+                              ? () {}
+                              : () async {
+                                if (passwordController.text.length < 6) {
+                                  CustomSnackbar.showError(
+                                    ctx,
+                                    "Password must be at least 6 characters.",
+                                  );
+                                  return;
                                 }
-                              }
 
-                              await _settingsRepository.refreshSession();
-                              if (!ctx.mounted) return;
-                              Navigator.pop(ctx);
+                                setDialogState(() => isDialogLoading = true);
+                                try {
+                                  try {
+                                    await _settingsRepository.updatePassword(
+                                      passwordController.text,
+                                    );
+                                    await Supabase.instance.client.auth
+                                        .updateUser(
+                                          UserAttributes(
+                                            data: {'has_email_password': true},
+                                          ),
+                                        );
+                                  } catch (e) {
+                                    if (e.toString().toLowerCase().contains(
+                                      'authentication failed',
+                                    )) {
+                                      await Supabase.instance.client.auth
+                                          .updateUser(
+                                            UserAttributes(
+                                              data: {
+                                                'has_email_password': true,
+                                              },
+                                            ),
+                                          );
+                                    } else {
+                                      rethrow;
+                                    }
+                                  }
 
-                              await _fetchIdentities();
-                              if (!mounted) return;
+                                  await _settingsRepository.refreshSession();
+                                  if (!ctx.mounted) return;
+                                  Navigator.pop(ctx);
+                                  await _fetchIdentities();
 
-                              CustomSnackbar.showSuccess(
-                                context,
-                                "Email account linked successfully!",
-                              );
-                            } catch (e) {
-                              setDialogState(() => isDialogLoading = false);
-                              if (!ctx.mounted) return;
-                              CustomSnackbar.showError(
-                                ctx,
-                                "Failed to link email: $e",
-                              );
-                            }
-                          },
-                  child:
-                      isDialogLoading
-                          ? SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : Text(
-                            "Link Account",
-                            style: TextStyle(
-                              color: AppColors.primaryGreen,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                ),
-              ],
+                                  if (mounted) {
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      "Email account linked successfully!",
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (ctx.mounted) {
+                                    CustomSnackbar.showError(
+                                      ctx,
+                                      "Failed to link email: $e",
+                                    );
+                                  }
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setDialogState(
+                                      () => isDialogLoading = false,
+                                    );
+                                  }
+                                }
+                              },
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         );
@@ -419,76 +395,95 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     final providerName =
         identity.provider[0].toUpperCase() + identity.provider.substring(1);
 
-    final confirm = await showDialog<bool>(
+    await showDialog(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            backgroundColor: Theme.of(ctx).colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Row(
-              children: [
-                Icon(Icons.link_off, color: Colors.red),
-                SizedBox(width: 10),
-                Text("Unlink $providerName?"),
-              ],
-            ),
-            content: Text(
-              "Are you sure you want to unlink your $providerName account? You won't be able to sign in with this method anymore.",
-              style: TextStyle(height: 1.4, color: context.colorTextDark),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text("Cancel", style: TextStyle(color: Colors.grey)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(
-                  "Unlink",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (dialogCtx) {
+        bool isDialogLoading = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AppFloatingDialog(
+              headerIcon: Icons.link_off_rounded,
+              iconColor: AppColors.dangerRed,
+              title: "Unlink $providerName?",
+              description:
+                  "Are you sure you want to unlink your $providerName account? You won't be able to sign in with this method anymore.",
+              isUpdating: isDialogLoading,
+              content: const SizedBox.shrink(),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading ? null : () => Navigator.pop(ctx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Unlink",
+                      backgroundColor: AppColors.dangerRed,
+                      onTap:
+                          isDialogLoading
+                              ? () {}
+                              : () async {
+                                setDialogState(() => isDialogLoading = true);
+                                try {
+                                  await _settingsRepository.unlinkIdentity(
+                                    identity,
+                                  );
+                                  await _settingsRepository.refreshSession();
+                                  if (dialogCtx.mounted) {
+                                    Navigator.pop(dialogCtx);
+                                  }
+                                  if (mounted) {
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      "$providerName account unlinked successfully.",
+                                    );
+                                    _fetchIdentities();
+                                  }
+                                } catch (e) {
+                                  if (ctx.mounted) {
+                                    final errorStr = e.toString().toLowerCase();
+                                    if (errorStr.contains('primary identity') ||
+                                        errorStr.contains('auth_exception')) {
+                                      CustomSnackbar.showError(
+                                        ctx,
+                                        "You cannot unlink the account you originally used to sign up.",
+                                      );
+                                    } else {
+                                      CustomSnackbar.showError(
+                                        ctx,
+                                        "Failed to unlink $providerName: $e",
+                                      );
+                                    }
+                                  }
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setDialogState(
+                                      () => isDialogLoading = false,
+                                    );
+                                  }
+                                }
+                              },
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-    );
-
-    if (confirm != true) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      await _settingsRepository.unlinkIdentity(identity);
-      await _settingsRepository.refreshSession();
-
-      if (!mounted) return;
-      CustomSnackbar.showSuccess(
-        context,
-        "$providerName account unlinked successfully.",
-      );
-      _fetchIdentities();
-    } catch (e) {
-      if (!mounted) return;
-
-      final errorStr = e.toString().toLowerCase();
-      // Catch Supabase rejecting the deletion of a Primary Identity
-      if (errorStr.contains('primary identity') ||
-          errorStr.contains('authentication failed') ||
-          errorStr.contains('auth_exception')) {
-        CustomSnackbar.showError(
-          context,
-          "You cannot unlink the account you originally used to sign up.",
+            );
+          },
         );
-      } else {
-        CustomSnackbar.showError(context, "Failed to unlink $providerName: $e");
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+      },
+    );
   }
 
   // PSEUDO-UNLINK (For implicitly added passwords/email)
@@ -498,65 +493,88 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     );
     if (!passedSecurity || !mounted) return;
 
-    final confirm = await showDialog<bool>(
+    await showDialog(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            backgroundColor: Theme.of(ctx).colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Row(
-              children: [
-                Icon(Icons.link_off, color: Colors.red),
-                SizedBox(width: 10),
-                Text("Unlink Email?"),
-              ],
-            ),
-            content: Text(
-              "Are you sure you want to unlink your Email/Password account? You won't be able to sign in with this method anymore.",
-              style: TextStyle(height: 1.4, color: context.colorTextDark),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text("Cancel", style: TextStyle(color: Colors.grey)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(
-                  "Unlink",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (dialogCtx) {
+        bool isDialogLoading = false;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AppFloatingDialog(
+              headerIcon: Icons.link_off_rounded,
+              iconColor: AppColors.dangerRed,
+              title: "Unlink Email?",
+              description:
+                  "Are you sure you want to unlink your Email/Password account? You won't be able to sign in with this method anymore.",
+              isUpdating: isDialogLoading,
+              content: const SizedBox.shrink(),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading ? null : () => Navigator.pop(ctx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Unlink",
+                      backgroundColor: AppColors.dangerRed,
+                      onTap:
+                          isDialogLoading
+                              ? () {}
+                              : () async {
+                                setDialogState(() => isDialogLoading = true);
+                                try {
+                                  await Supabase.instance.client.auth
+                                      .updateUser(
+                                        UserAttributes(
+                                          data: {'has_email_password': false},
+                                        ),
+                                      );
+                                  await _settingsRepository.refreshSession();
+                                  if (dialogCtx.mounted) {
+                                    Navigator.pop(dialogCtx);
+                                  }
+                                  if (mounted) {
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      "Email account unlinked successfully.",
+                                    );
+                                    _fetchIdentities();
+                                  }
+                                } catch (e) {
+                                  if (ctx.mounted) {
+                                    CustomSnackbar.showError(
+                                      ctx,
+                                      "Failed to unlink Email: $e",
+                                    );
+                                  }
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setDialogState(
+                                      () => isDialogLoading = false,
+                                    );
+                                  }
+                                }
+                              },
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
+        );
+      },
     );
-
-    if (confirm != true) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(data: {'has_email_password': false}),
-      );
-      await _settingsRepository.refreshSession();
-      if (!mounted) return;
-      CustomSnackbar.showSuccess(
-        context,
-        "Email account unlinked successfully.",
-      );
-      _fetchIdentities();
-    } catch (e) {
-      if (!mounted) return;
-      CustomSnackbar.showError(context, "Failed to unlink Email: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
   }
 
   Widget _buildProviderTile(String provider, String iconPath, Color color) {

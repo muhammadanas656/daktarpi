@@ -16,6 +16,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/security_formatters.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
+import '../../../../core/widgets/app_loader.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/data/security_gate_service.dart';
@@ -25,6 +26,7 @@ import '../../data/settings_repository.dart';
 import '../widgets/settings_account_security_section.dart';
 import '../widgets/settings_preferences_section.dart';
 import '../widgets/settings_support_legal_section.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -152,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
         if (!_is2FAEnabled && !_isBiometricEnabled && !_hasPromptedSecurity) {
           _hasPromptedSecurity = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (mounted) {
               _showSecurityOnboardingPrompt();
             }
@@ -167,76 +169,32 @@ class _SettingsScreenState extends State<SettingsScreen>
   void _showSecurityOnboardingPrompt() {
     showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: Theme.of(ctx).colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color:
-                    isDark
-                        ? AppColors.darkBorder
-                        : Colors.grey.withValues(alpha: 0.2),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.orange.withValues(alpha: 0.15),
-                  blurRadius: 50,
-                  offset: const Offset(0, 15),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.privacy_tip_rounded,
-                    color: Colors.orange,
-                    size: 36,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  "Protect Your Account",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  "You currently have no security measures enabled. We recommend Two-Factor Authentication to secure your medical records.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                PrimaryButton(
+        return AppFloatingDialog(
+          headerIcon: Icons.privacy_tip_rounded,
+          iconColor: Colors.orange,
+          title: "Protect Your Account",
+          description:
+              "You currently have no security measures enabled. We recommend Two-Factor Authentication to secure your medical records.",
+          isUpdating: false,
+          content: const SizedBox.shrink(),
+          actions: Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryButton(
                   label: "Set Up Security",
                   onTap: () {
                     Navigator.pop(ctx);
                     _start2FASetupWizard();
                   },
                 ),
-                const SizedBox(height: 8),
-                TextButton(
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text(
                     "Maybe Later",
@@ -246,8 +204,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -276,6 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     await showDialog(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
@@ -286,7 +245,11 @@ class _SettingsScreenState extends State<SettingsScreen>
             final defaultPinTheme = PinTheme(
               width: 38,
               height: 48,
-              textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textStyle: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: context.colorTextDark,
+              ),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkScaffold : Colors.grey[50],
                 borderRadius: BorderRadius.circular(10),
@@ -324,159 +287,87 @@ class _SettingsScreenState extends State<SettingsScreen>
               }
             }
 
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              insetPadding: EdgeInsets.symmetric(horizontal: 24),
-              child: Container(
-                padding: EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color:
-                        isDark
-                            ? AppColors.darkBorder
-                            : Colors.grey.withValues(alpha: 0.2),
-                    width: 1.5,
+            return AppFloatingDialog(
+              headerIcon:
+                  isRecoveryMode
+                      ? Icons.lock_open_rounded
+                      : Icons.security_rounded,
+              iconColor: themeColor,
+              title: isRecoveryMode ? "Account Recovery" : "Security Check",
+              description:
+                  isRecoveryMode
+                      ? "Enter an 8-character backup code to verify your identity."
+                      : "Please verify your identity with your 6-digit authenticator code.",
+              isUpdating: isDialogLoading,
+              content: AnimatedCrossFade(
+                firstChild: Pinput(
+                  length: 6,
+                  controller: otpController,
+                  autofocus: true,
+                  defaultPinTheme: defaultPinTheme,
+                  focusedPinTheme: defaultPinTheme.copyWith(
+                    decoration: defaultPinTheme.decoration!.copyWith(
+                      border: Border.all(color: themeColor, width: 2),
+                    ),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: themeColor.withValues(alpha: 0.15),
-                      blurRadius: 50,
-                      offset: const Offset(0, 15),
-                    ),
-                  ],
+                  autofillHints: const [],
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onCompleted: submitCode,
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: themeColor.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isRecoveryMode
-                            ? Icons.lock_open_rounded
-                            : Icons.security_rounded,
-                        color: themeColor,
-                        size: 36,
-                      ),
-                    ),
-                    SizedBox(height: 20),
-                    Text(
-                      isRecoveryMode ? "Account Recovery" : "Security Check",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      isRecoveryMode
-                          ? "Enter an 8-character backup code to verify your identity."
-                          : "Please verify your identity with your 6-digit authenticator code.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                        height: 1.4,
-                      ),
-                    ),
-                    SizedBox(height: 28),
-                    AnimatedCrossFade(
-                      firstChild: Pinput(
-                        length: 6,
-                        controller: otpController,
-                        autofocus: true,
-                        defaultPinTheme: defaultPinTheme,
-                        focusedPinTheme: defaultPinTheme.copyWith(
-                          decoration: defaultPinTheme.decoration!.copyWith(
-                            border: Border.all(color: themeColor, width: 2),
-                          ),
+                secondChild: AppTextField(
+                  controller: recoveryController,
+                  keyboardType: TextInputType.text,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: [BackupCodeFormatter()],
+                  textAlign: TextAlign.center,
+                  hintText: "XXXX-XXXX",
+                  onChanged: (val) {
+                    if (val.length == 9) submitCode(val);
+                  },
+                  onSubmitted: submitCode,
+                ),
+                crossFadeState:
+                    isRecoveryMode
+                        ? CrossFadeState.showSecond
+                        : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 300),
+              ),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading ? null : () => Navigator.pop(ctx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
                         ),
-
-                        // PRO FIX: Force disable OS autofill
-                        autofillHints: const [],
-                        keyboardType: TextInputType.number,
-
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-
-                        // PRO FIX: Triggers submission on the 6th digit
-                        onCompleted: submitCode,
                       ),
-                      secondChild: AppTextField(
-                        controller: recoveryController,
-                        keyboardType: TextInputType.text,
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: [BackupCodeFormatter()],
-                        textAlign: TextAlign.center,
-                        hintText: "XXXX-XXXX",
-                        onChanged: (val) {
-                          if (val.length == 9) submitCode(val);
-                        },
-                        onSubmitted: submitCode,
-                      ),
-                      crossFadeState:
-                          isRecoveryMode
-                              ? CrossFadeState.showSecond
-                              : CrossFadeState.showFirst,
-                      duration: Duration(milliseconds: 300),
                     ),
-                    if (isDialogLoading)
-                      Padding(
-                        padding: EdgeInsets.only(top: 20),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
+                  ),
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading
+                              ? null
+                              : () => setDialogState(() {
+                                isRecoveryMode = !isRecoveryMode;
+                                otpController.clear();
+                                recoveryController.clear();
+                              }),
+                      child: Text(
+                        isRecoveryMode ? "Use App" : "Use Backup",
+                        style: TextStyle(
                           color: themeColor,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    SizedBox(height: 32),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton(
-                            onPressed:
-                                isDialogLoading
-                                    ? null
-                                    : () => Navigator.pop(ctx),
-                            child: Text(
-                              "Cancel",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: TextButton(
-                            onPressed:
-                                isDialogLoading
-                                    ? null
-                                    : () => setDialogState(() {
-                                      isRecoveryMode = !isRecoveryMode;
-                                      otpController.clear();
-                                      recoveryController.clear();
-                                    }),
-                            child: Text(
-                              isRecoveryMode ? "Use App" : "Use Backup",
-                              style: TextStyle(
-                                color: themeColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           },
@@ -830,7 +721,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   if (isDialogLoading)
                     const Padding(
                       padding: EdgeInsets.only(top: 16),
-                      child: CircularProgressIndicator(
+                      child: AppLoader(
                         strokeWidth: 2,
                         color: AppColors.primaryGreen,
                       ),
@@ -1126,7 +1017,10 @@ class _SettingsScreenState extends State<SettingsScreen>
               child: Container(
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.surface,
+                  color:
+                      isDark
+                          ? AppColors.deepMedicalSlate
+                          : Theme.of(ctx).colorScheme.surface,
                   borderRadius: BorderRadius.circular(28),
                   border: Border.all(
                     color:
@@ -1135,13 +1029,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                             : Colors.grey.withValues(alpha: 0.2),
                     width: 1.5,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.15),
-                      blurRadius: 50,
-                      offset: const Offset(0, 15),
-                    ),
-                  ],
                 ),
                 child: SingleChildScrollView(
                   child: AnimatedSwitcher(
@@ -1236,156 +1123,106 @@ class _SettingsScreenState extends State<SettingsScreen>
     await showDialog(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            final isDark = Theme.of(ctx).brightness == Brightness.dark;
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Container(
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color:
-                        isDark
-                            ? AppColors.darkBorder
-                            : Colors.grey.withValues(alpha: 0.2),
-                    width: 1.5,
+            return AppFloatingDialog(
+              headerIcon: Icons.lock_reset_rounded,
+              iconColor: AppColors.primaryGreen,
+              title: "Change Password",
+              isUpdating: isDialogLoading,
+              content: Column(
+                children: [
+                  AppTextField(
+                    controller: newPassController,
+                    hintText: "New Password",
+                    isPassword: true,
+                    prefix: const Icon(Icons.lock_outline, size: 18),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.15),
-                      blurRadius: 50,
-                      offset: const Offset(0, 15),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.lock_reset_rounded,
-                        color: AppColors.primaryGreen,
-                        size: 36,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "Change Password",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    AppTextField(
-                      controller: newPassController,
-                      hintText: "New Password",
-                      isPassword: true,
-                      prefix: const Icon(Icons.lock_outline, size: 18),
-                    ),
-                    const SizedBox(height: 12),
-                    AppTextField(
-                      controller: confirmPassController,
-                      hintText: "Confirm Password",
-                      isPassword: true,
-                      prefix: const Icon(Icons.lock_outline, size: 18),
-                    ),
-                    if (isDialogLoading)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.primaryGreen,
+                  const SizedBox(height: 12),
+                  AppTextField(
+                    controller: confirmPassController,
+                    hintText: "Confirm Password",
+                    isPassword: true,
+                    prefix: const Icon(Icons.lock_outline, size: 18),
+                  ),
+                ],
+              ),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDialogLoading
+                              ? null
+                              : () => Navigator.pop(dialogCtx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    const SizedBox(height: 32),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton(
-                            onPressed:
-                                isDialogLoading
-                                    ? null
-                                    : () => Navigator.pop(dialogCtx),
-                            child: const Text(
-                              "Cancel",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: PrimaryButton(
-                            isLoading: isDialogLoading,
-                            label: "Update",
-                            onTap: () async {
-                              final newPass = newPassController.text.trim();
-                              if (newPass.length < 6) {
-                                CustomSnackbar.showError(
-                                  ctx,
-                                  "Password must be at least 6 characters",
-                                );
-                                return;
-                              }
-                              if (newPass !=
-                                  confirmPassController.text.trim()) {
-                                CustomSnackbar.showError(
-                                  ctx,
-                                  "Passwords do not match",
-                                );
-                                return;
-                              }
-                              setDialogState(() => isDialogLoading = true);
-                              try {
-                                await _settingsRepository.updatePassword(
-                                  newPass,
-                                );
-                                if (!dialogCtx.mounted) return;
-                                Navigator.pop(dialogCtx);
-                                if (mounted) {
-                                  CustomSnackbar.showSuccess(
-                                    context,
-                                    "Password updated successfully!",
-                                  );
-                                }
-                              } on AppFailure catch (failure) {
-                                setDialogState(() => isDialogLoading = false);
-                                if (ctx.mounted) {
+                    ),
+                  ),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Update",
+                      onTap:
+                          isDialogLoading
+                              ? () {}
+                              : () async {
+                                final newPass = newPassController.text.trim();
+                                if (newPass.length < 6) {
                                   CustomSnackbar.showError(
                                     ctx,
-                                    failure.userMessage,
+                                    "Password must be at least 6 characters",
                                   );
+                                  return;
                                 }
-                              } catch (_) {
-                                setDialogState(() => isDialogLoading = false);
-                                if (ctx.mounted) {
+                                if (newPass !=
+                                    confirmPassController.text.trim()) {
                                   CustomSnackbar.showError(
                                     ctx,
-                                    "Failed to update password",
+                                    "Passwords do not match",
                                   );
+                                  return;
                                 }
-                              }
-                            },
-                          ),
-                        ),
-                      ],
+                                setDialogState(() => isDialogLoading = true);
+                                try {
+                                  await _settingsRepository.updatePassword(
+                                    newPass,
+                                  );
+                                  if (!dialogCtx.mounted) return;
+                                  Navigator.pop(dialogCtx);
+                                  if (mounted) {
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      "Password updated successfully!",
+                                    );
+                                  }
+                                } on AppFailure catch (failure) {
+                                  setDialogState(() => isDialogLoading = false);
+                                  if (ctx.mounted) {
+                                    CustomSnackbar.showError(
+                                      ctx,
+                                      failure.userMessage,
+                                    );
+                                  }
+                                } catch (_) {
+                                  setDialogState(() => isDialogLoading = false);
+                                  if (ctx.mounted) {
+                                    CustomSnackbar.showError(
+                                      ctx,
+                                      "Failed to update password",
+                                    );
+                                  }
+                                }
+                              },
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           },
@@ -1405,125 +1242,55 @@ class _SettingsScreenState extends State<SettingsScreen>
     await showDialog(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            final isDark = Theme.of(ctx).brightness == Brightness.dark;
             bool canDelete = confirmController.text == "DELETE";
 
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Container(
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color:
-                        isDark
-                            ? AppColors.darkBorder
-                            : Colors.grey.withValues(alpha: 0.2),
-                    width: 1.5,
+            return AppFloatingDialog(
+              headerIcon: Icons.delete_forever_rounded,
+              iconColor: AppColors.dangerRed,
+              title: "Delete Account",
+              description:
+                  "This action is irreversible. All your data, medical records, and appointments will be permanently removed.",
+              isUpdating: _isLoading,
+              content: AppTextField(
+                controller: confirmController,
+                hintText: "Type DELETE to confirm",
+                onChanged: (val) => setDialogState(() {}),
+              ),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: _isLoading ? null : () => Navigator.pop(ctx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.dangerRed.withValues(alpha: 0.15),
-                      blurRadius: 50,
-                      offset: const Offset(0, 15),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Delete",
+                      backgroundColor: AppColors.dangerRed,
+                      onTap:
+                          canDelete && !_isLoading
+                              ? () async {
+                                setDialogState(() => _isLoading = true);
+                                await _executeAccountDeletion();
+                                if (mounted && dialogContext.mounted) {
+                                  Navigator.pop(dialogContext);
+                                }
+                              }
+                              : () {},
                     ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.dangerRed.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.delete_forever_rounded,
-                        color: AppColors.dangerRed,
-                        size: 36,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "Delete Account",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                        color: AppColors.dangerRed,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "This action is irreversible. All your data, medical records, and appointments will be permanently removed.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    AppTextField(
-                      controller: confirmController,
-                      hintText: "Type DELETE to confirm",
-                      onChanged: (val) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 32),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text(
-                              "Cancel",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.dangerRed,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              disabledBackgroundColor: AppColors.dangerRed
-                                  .withValues(alpha: 0.3),
-                            ),
-                            onPressed:
-                                canDelete
-                                    ? () {
-                                      Navigator.pop(ctx);
-                                      _executeAccountDeletion();
-                                    }
-                                    : null,
-                            child: const Text(
-                              "Delete",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           },
@@ -1602,9 +1369,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (_isLoading)
           Container(
             color: Colors.black.withValues(alpha: 0.5),
-            child: Center(
-              child: CircularProgressIndicator(color: AppColors.primaryGreen),
-            ),
+            child: const AppLoader(),
           ),
       ],
     );

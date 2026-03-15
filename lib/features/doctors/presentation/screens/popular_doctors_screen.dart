@@ -7,10 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../favorites_notifier.dart';
 import '../../../profile/presentation/profile_notifier.dart';
-import '../../data/doctor_repository.dart';
+import '../doctors_notifier.dart'; // PRO FIX: Central Notifier
 
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class PopularDoctorsScreen extends StatefulWidget {
   const PopularDoctorsScreen({super.key});
@@ -21,14 +22,13 @@ class PopularDoctorsScreen extends StatefulWidget {
 
 class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   final _searchController = TextEditingController();
-  final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
   final _profileNotifier = ProfileNotifier.instance;
+  final _docsNotifier = DoctorsNotifier.instance; // PRO FIX: Singleton Vault
   Timer? _debounce;
 
   // Data State
-  List<Map<String, dynamic>> _doctors = [];
-  bool _isLoading = true;
+  bool _isLoading = true; // Only block UI if the vault is completely empty
   bool _showClearIcon = false;
 
   @override
@@ -65,7 +65,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      setState(() => _isLoading = true);
+      // PRO FIX: Removed setState(() => _isLoading = true);
+      // The vault's fetch method will update the list transparently.
       _fetchData(query: _searchController.text);
     });
   }
@@ -79,20 +80,17 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   // --- FETCH DATA ---
   Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
     try {
-      final countryIso = _profileNotifier.profile?.countryIso;
-      final doctors = await _doctorRepo.fetchPopularDoctors(
-        query: query,
-        forceRefresh: forceRefresh,
-        countryIso: countryIso,
-      );
-
       if (!_favNotifier.isLoaded) {
         await _favNotifier.loadFavorites();
       }
 
+      await _docsNotifier.fetchPopularDoctors(
+        query: query ?? '',
+        forceRefresh: forceRefresh,
+      );
+
       if (mounted) {
         setState(() {
-          _doctors = doctors;
           _isLoading = false;
         });
       }
@@ -166,51 +164,52 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
 
               // --- DOCTOR LIST ---
               Expanded(
-                child:
-                    _isLoading
-                        ? const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryGreen,
-                          ),
-                        )
-                        : _doctors.isEmpty
-                        ? const Center(child: Text("No popular doctors found"))
-                        : RefreshIndicator(
-                          onRefresh: () => _fetchData(forceRefresh: true),
-                          color: AppColors.primaryGreen,
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                            itemCount: _doctors.length,
-                            separatorBuilder:
-                                (context, index) => const SizedBox(height: 16),
-                            itemBuilder: (context, index) {
-                              final doctor = _doctors[index];
-                              final docId = doctor['id'] as int;
-                              final specialtyName =
-                                  doctor['specialties'] != null
-                                      ? doctor['specialties']['name']
-                                      : 'Specialist';
-                              final views =
-                                  doctor['views_count']?.toString() ?? '0';
+                child: ListenableBuilder(
+                  listenable: _docsNotifier,
+                  builder: (context, _) {
+                    final doctors = _docsNotifier.popularDoctors;
+                    // Only show loading spinner if it's the very first time and vault is empty
+                    if (_isLoading && doctors.isEmpty) {
+                      return const Center(
+                        child: AppLoader(color: AppColors.primaryGreen),
+                      );
+                    }
+                    if (doctors.isEmpty) {
+                      return const Center(child: Text("No popular doctors found"));
+                    }
+                    return RefreshIndicator(
+                      onRefresh: () => _fetchData(forceRefresh: true),
+                      color: AppColors.primaryGreen,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                        itemCount: doctors.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final doctor = doctors[index];
+                          final docId = doctor['id'] as int;
+                          final specialtyName = doctor['specialties'] != null
+                              ? doctor['specialties']['name']
+                              : 'Specialist';
+                          final views = doctor['views_count']?.toString() ?? '0';
+                          final isFavorite = _favNotifier.isFavorite(docId);
 
-                              final isFavorite = _favNotifier.isFavorite(docId);
-
-                              return DoctorListCard(
-                                id: docId,
-                                name: doctor['full_name'] ?? 'Unknown',
-                                specialty: " $specialtyName",
-                                rating: doctor['rating']?.toString() ?? '0.0',
-                                views: views,
-                                imageUrl: doctor['profile_picture_url'],
-                                isFavorite: isFavorite,
-                                heroTagPrefix: 'popular-',
-                                onFavoriteTap: () => _favNotifier.toggle(doctor),
-                                onCardTap:
-                                    () => _navigateToDoctorDetails(docId, doctor),
-                              );
-                            },
-                          ),
-                        ),
+                          return DoctorListCard(
+                            id: docId,
+                            name: doctor['full_name'] ?? 'Unknown',
+                            specialty: " $specialtyName",
+                            rating: doctor['rating']?.toString() ?? '0.0',
+                            views: views,
+                            imageUrl: doctor['profile_picture_url'],
+                            isFavorite: isFavorite,
+                            heroTagPrefix: 'popular-',
+                            onFavoriteTap: () => _favNotifier.toggle(doctor),
+                            onCardTap: () => _navigateToDoctorDetails(docId, doctor),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),

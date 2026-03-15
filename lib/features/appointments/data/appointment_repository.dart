@@ -191,7 +191,7 @@ class AppointmentRepository {
       final response =
           await _client
               .from('appointments')
-              .delete()
+              .update({'status': 'canceled'})
               .eq('id', appointmentId)
               .select();
 

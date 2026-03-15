@@ -224,6 +224,46 @@ class ProfileRepository {
     }
   }
 
+  Future<String> uploadPatientPicture(String userId, String relation, File imageFile) async {
+    if (NetworkNotifier.instance.isOffline) {
+      throw const AppFailure(
+        type: AppFailureType.network,
+        userMessage: 'You must be online to upload a category picture.',
+        technicalMessage: 'offline',
+      );
+    }
+
+    try {
+      final fileExt = imageFile.path.split('.').last;
+      final sanitizedRelation = relation.replaceAll(' ', '_').toLowerCase();
+      final fileName = '$userId/${sanitizedRelation}_avatar.$fileExt';
+
+      await _client.storage
+          .from('profile_pictures')
+          .upload(
+            fileName,
+            imageFile,
+            fileOptions: const FileOptions(upsert: true),
+          );
+
+      final String publicUrl = _client.storage
+          .from('profile_pictures')
+          .getPublicUrl(fileName);
+      return Uri.parse(publicUrl)
+          .replace(
+            queryParameters: {
+              't': DateTime.now().millisecondsSinceEpoch.toString(),
+            },
+          )
+          .toString();
+    } catch (error) {
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage: 'Unable to upload category image right now.',
+      );
+    }
+  }
+
   Future<void> deleteOldProfilePic(String userId, String? currentUrl) async {
     if (NetworkNotifier.instance.isOffline) {
       return;

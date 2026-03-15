@@ -19,6 +19,7 @@ import '../../data/auth_entry_route_service.dart';
 import '../../data/auth_repository.dart';
 import '../../data/security_gate_service.dart';
 import '../../data/trusted_device_repository.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
 
 class Verify2FAScreen extends StatefulWidget {
   final Verify2FARouteArgs routeArgs;
@@ -143,83 +144,28 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
               );
             }
             // --- PRO FIX: Adaptive Glass Success Dialog ---
+            // --- PRO FIX: Adaptive Glass Success Dialog ---
             await showDialog(
               context: context,
+              barrierColor: Colors.black.withValues(alpha: 0.6),
               barrierDismissible: false,
               builder: (ctx) {
-                final isDark = Theme.of(ctx).brightness == Brightness.dark;
-                return Dialog(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: Theme.of(ctx).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(
-                        color:
-                            isDark
-                                ? AppColors.darkBorder
-                                : Colors.grey.withValues(alpha: 0.2),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primaryGreen.withValues(alpha: 0.15),
-                          blurRadius: 50,
-                          offset: const Offset(0, 15),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryGreen.withValues(
-                              alpha: 0.1,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check_circle_outline_rounded,
-                            color: AppColors.primaryGreen,
-                            size: 36,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          "Access Recovered",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          "Your backup code was accepted.\n\nFor your security, your account is currently unprotected. We highly recommend re-enabling 2FA in your settings soon.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        SizedBox(
-                          width: double.infinity,
-                          child: PrimaryButton(
-                            label: "Continue",
-                            onTap: () async {
-                              Navigator.pop(ctx);
-                              await _handleVerificationSuccess();
-                            },
-                          ),
-                        ),
-                      ],
+                return AppFloatingDialog(
+                  headerIcon: Icons.check_circle_outline_rounded,
+                  iconColor: AppColors.primaryGreen,
+                  title: "Access Recovered",
+                  description:
+                      "Your backup code was accepted.\n\nFor your security, your account is currently unprotected. We highly recommend re-enabling 2FA in your settings soon.",
+                  content: const SizedBox.shrink(),
+                  isUpdating: false,
+                  actions: SizedBox(
+                    width: double.infinity,
+                    child: PrimaryButton(
+                      label: "Continue",
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        await _handleVerificationSuccess();
+                      },
                     ),
                   ),
                 );

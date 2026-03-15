@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
+import '../../core/widgets/custom_card.dart';
 import '../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/profile/presentation/profile_notifier.dart';
@@ -28,15 +28,12 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: 130,
-      decoration: BoxDecoration(
-        borderRadius: AppStyles.cardRadius,
-        boxShadow: AppStyles.cardShadow(context),
-      ),
-      child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: AppShapes.xl,
+      child: CustomCard(
+        padding: EdgeInsets.zero,
+        borderRadius: 16,
+        hasShadow: true,
         child: InkWell(
           onTap:
               () => context.push(

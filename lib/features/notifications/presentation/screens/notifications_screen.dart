@@ -32,16 +32,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   String _formatTime(String timestamp) {
     final date = DateTime.parse(timestamp);
-    final now = DateTime.now();
-    final diff = now.difference(date);
-
-    if (diff.inDays == 0) return DateFormat('h:mm a').format(date);
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return DateFormat('EEEE').format(date);
-    return DateFormat('MMM d').format(date);
+    return DateFormat('h:mm a').format(date);
   }
 
-  // Helper to dynamically pick the right icon
   IconData _getIconForTitle(String title) {
     final lower = title.toLowerCase();
     if (lower.contains('booking') || lower.contains('appointment')) {
@@ -56,6 +49,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Icons.notifications_active_rounded;
   }
 
+  Map<String, List<Map<String, dynamic>>> _groupNotifications(
+    List<Map<String, dynamic>> notifications,
+  ) {
+    final grouped = <String, List<Map<String, dynamic>>>{
+      'Today': [],
+      'Yesterday': [],
+      'Older': [],
+    };
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    for (var notif in notifications) {
+      final date = DateTime.parse(notif['timestamp']);
+      final notifDate = DateTime(date.year, date.month, date.day);
+
+      if (notifDate == today) {
+        grouped['Today']!.add(notif);
+      } else if (notifDate == yesterday) {
+        grouped['Yesterday']!.add(notif);
+      } else {
+        grouped['Older']!.add(notif);
+      }
+    }
+
+    grouped.removeWhere((key, value) => value.isEmpty);
+    return grouped;
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -63,6 +86,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         NotificationNotifier.instance.notifications.where((n) {
           return DateTime.parse(n['timestamp']).isBefore(now);
         }).toList();
+
+    final groupedNotifications = _groupNotifications(notifications);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -70,6 +95,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
@@ -78,7 +104,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text("Notifications", style: AppTextStyles.h2(context)),
-        centerTitle: true,
         actions: [
           if (notifications.isNotEmpty)
             Padding(
@@ -104,183 +129,221 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child:
             notifications.isEmpty
                 ? _buildPremiumEmptyState(isDark)
-                : ListView.separated(
+                : ListView.builder(
+                  // Restored the exact original padding dimensions
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-                  itemCount: notifications.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 16),
-                  itemBuilder: (context, index) {
-                    final notif = notifications[index];
-                    final isRead = notif['is_read'] == true;
+                  itemCount: groupedNotifications.length,
+                  itemBuilder: (context, sectionIndex) {
+                    final sectionKey = groupedNotifications.keys.elementAt(
+                      sectionIndex,
+                    );
+                    final sectionItems = groupedNotifications[sectionKey]!;
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: AppStyles.cardShadow(context),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Dismissible(
-                          key: Key(notif['id']),
-                          direction: DismissDirection.endToStart,
-                          onDismissed: (direction) {
-                            NotificationNotifier.instance.deleteNotification(
-                              notif['id'],
-                            );
-                          },
-                          // PRO FIX: Added decoration and radius to the background
-                          // so it remains round while the card is being moved.
-                          background: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.only(right: 24),
-                            decoration: BoxDecoration(
-                              color: AppColors.dangerRed,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(
-                              Icons.delete_outline_rounded,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                          child: InkWell(
-                            onTap:
-                                () => NotificationNotifier.instance.markAsRead(
-                                  notif['id'],
-                                ),
-                            borderRadius: BorderRadius.circular(20),
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16, bottom: 16),
+                          child: Center(
                             child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color:
-                                      isRead
-                                          ? Colors.transparent
-                                          : AppColors.primaryGreen.withValues(
-                                            alpha: 0.3,
-                                          ),
-                                  width: 1.5,
-                                ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 6,
                               ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Icon Box
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          isRead
-                                              ? Colors.grey.withValues(
-                                                alpha: 0.1,
-                                              )
-                                              : AppColors.primaryGreen
-                                                  .withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      _getIconForTitle(notif['title']),
-                                      color:
-                                          isRead
-                                              ? Colors.grey
-                                              : AppColors.primaryGreen,
-                                      size: 22,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-
-                                  // Content Column
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // PRO FIX: Header Row with CrossAxisAlignment.start
-                                        // This ensures the timestamp stays at the top even if the title wraps.
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                notif['title'],
-                                                style: TextStyle(
-                                                  fontWeight:
-                                                      isRead
-                                                          ? FontWeight.w600
-                                                          : FontWeight.w800,
-                                                  fontSize: 16,
-                                                  color: context.colorTextDark,
-                                                  letterSpacing: -0.2,
-                                                  height:
-                                                      1.2, // Tighter line height
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              _formatTime(notif['timestamp']),
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color:
-                                                    isRead
-                                                        ? Colors.grey
-                                                        : AppColors
-                                                            .primaryGreen,
-                                                fontWeight:
-                                                    isRead
-                                                        ? FontWeight.w500
-                                                        : FontWeight.w700,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          notif['body'],
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: context.colorTextLight,
-                                            height: 1.3,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // Premium Subtle Unread Dot
-                                  if (!isRead)
-                                    Container(
-                                      margin: const EdgeInsets.only(
-                                        left: 12,
-                                        top: 6,
-                                      ),
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primaryGreen,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: AppColors.primaryGreen
-                                                .withValues(alpha: 0.4),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
+                              decoration: BoxDecoration(
+                                color:
+                                    isDark
+                                        ? Colors.white.withValues(alpha: 0.05)
+                                        : Colors.black.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                sectionKey,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.colorTextLight,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                        ...sectionItems.map(
+                          (notif) => _buildNotificationCard(notif, isDark),
+                        ),
+                      ],
                     );
                   },
                 ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationCard(Map<String, dynamic> notif, bool isDark) {
+    final isRead = notif['is_read'] == true;
+
+    // We pre-calculate a 100% solid color so the red background physically cannot bleed through
+    final surfaceColor = Theme.of(context).colorScheme.surface;
+    final unreadTint = AppColors.primaryGreen.withValues(
+      alpha: isDark ? 0.08 : 0.04,
+    );
+    final solidCardColor =
+        isRead ? surfaceColor : Color.alphaBlend(unreadTint, surfaceColor);
+
+    return Container(
+      // EXACT ORIGINAL MARGIN: Restored to purely bottom: 16. No extra bulk.
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppStyles.cardShadow(
+          context,
+        ), // Shadow is static and safe outside the clip
+      ),
+      // MASTER MASK: Forces perfectly rounded corners on both the background and sliding card
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Dismissible(
+          key: Key(notif['id']),
+          direction: DismissDirection.endToStart,
+          onDismissed: (direction) {
+            NotificationNotifier.instance.deleteNotification(notif['id']);
+          },
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 24),
+            color: AppColors.dangerRed,
+            child: const Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: solidCardColor, // Uses the solid blended color
+              border: Border.all(
+                color:
+                    isRead
+                        ? (isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.transparent)
+                        : AppColors.primaryGreen.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap:
+                    () => NotificationNotifier.instance.markAsRead(notif['id']),
+                // EXACT ORIGINAL PADDING: 16 all around
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color:
+                              isRead
+                                  ? Colors.grey.withValues(alpha: 0.1)
+                                  : AppColors.primaryGreen.withValues(
+                                    alpha: 0.15,
+                                  ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _getIconForTitle(notif['title']),
+                          color: isRead ? Colors.grey : AppColors.primaryGreen,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    notif['title'],
+                                    style: TextStyle(
+                                      fontWeight:
+                                          isRead
+                                              ? FontWeight.w600
+                                              : FontWeight.w800,
+                                      fontSize: 16,
+                                      color: context.colorTextDark,
+                                      letterSpacing: -0.2,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _formatTime(notif['timestamp']),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        isRead
+                                            ? Colors.grey
+                                            : AppColors.primaryGreen,
+                                    fontWeight:
+                                        isRead
+                                            ? FontWeight.w500
+                                            : FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              notif['body'],
+                              style: TextStyle(
+                                fontSize: 14,
+                                color:
+                                    isRead
+                                        ? context.colorTextLight
+                                        : context.colorTextDark.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isRead)
+                        Container(
+                          margin: const EdgeInsets.only(left: 12, top: 6),
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryGreen,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primaryGreen.withValues(
+                                  alpha: 0.4,
+                                ),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -326,7 +389,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 60), // Visual balance
+          const SizedBox(height: 60),
         ],
       ),
     );

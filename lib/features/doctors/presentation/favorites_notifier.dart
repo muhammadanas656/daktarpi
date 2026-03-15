@@ -1,9 +1,13 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'package:flutter/widgets.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../data/doctor_repository.dart';
 
-class FavoritesNotifier extends ChangeNotifier {
-  FavoritesNotifier._();
+class FavoritesNotifier extends ChangeNotifier with WidgetsBindingObserver {
+  FavoritesNotifier._() {
+    WidgetsBinding.instance.addObserver(this);
+  }
   static final FavoritesNotifier instance = FavoritesNotifier._();
 
   final _doctorRepo = DoctorRepository();
@@ -17,6 +21,36 @@ class FavoritesNotifier extends ChangeNotifier {
   bool get isLoaded => _loaded;
 
   bool isFavorite(int doctorId) => _favoriteIds.contains(doctorId);
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // PRO FIX: Force an immediate sync of any pending "Favorite" actions when app backgrounds
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _doctorRepo.syncOfflineQueue();
+    }
+  }
+
+  Future<void> _updateLocalCache() async {
+    final userId = _doctorRepo.currentUserId;
+    if (userId == null) return;
+    try {
+      // PRO FIX: Immediate flush to Hive to prevent data wipe on unexpected close
+      if (!Hive.isBoxOpen('doctor_cache')) {
+        await Hive.openBox('doctor_cache');
+      }
+      final box = Hive.box('doctor_cache');
+      await box.put('favorites_$userId', jsonEncode(_favoriteDoctors));
+      await box.put('favorites_${userId}_time', DateTime.now().toIso8601String());
+    } catch (e) {
+      debugPrint('Failed to update local favorites cache: $e');
+    }
+  }
 
   Future<void> loadFavorites() async {
     // PRO FIX: If we are already loaded, DO NOT fetch again and wipe RAM.
@@ -53,6 +87,9 @@ class FavoritesNotifier extends ChangeNotifier {
     }
     notifyListeners();
 
+    // PRO FIX: Immediate Block Flush
+    unawaited(_updateLocalCache());
+
     // 2. Background Sync
     unawaited(
       _doctorRepo.toggleFavorite(doctorId, userId, wasFavorite).catchError((e) {
@@ -65,6 +102,7 @@ class FavoritesNotifier extends ChangeNotifier {
           _favoriteDoctors.removeWhere((d) => d['id'] == doctorId);
         }
         notifyListeners();
+        unawaited(_updateLocalCache());
       }),
     );
   }
@@ -76,3 +114,4 @@ class FavoritesNotifier extends ChangeNotifier {
     notifyListeners();
   }
 }
+

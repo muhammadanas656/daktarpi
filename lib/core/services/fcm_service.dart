@@ -1,7 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import '../../core/router/app_router.dart';
 import '../../features/notifications/presentation/notification_notifier.dart';
 import 'appointment_notification_service.dart';
 
@@ -13,7 +13,7 @@ class FcmService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   Future<void> initialize() async {
-    // 1. Request permission from the user (Required for iOS, good practice for Android)
+    // 1. Request permission from the user
     NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -23,52 +23,66 @@ class FcmService {
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       debugPrint('✅ User granted push notification permission');
 
-      // 2. Fetch the unique device token
       await _fetchAndSaveToken();
-      
-      // Request local alarm permissions for appointment reminders
       await AppointmentNotificationService.instance.requestPermissions();
 
-      // 3. Listen for token refreshes (in case the device assigns a new one)
       _messaging.onTokenRefresh.listen((newToken) {
         _saveTokenToSupabase(newToken);
       });
 
-      // 4. Listen for foreground messages
+      // 2. Foreground Messages (App is open)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('📩 Got a message whilst in the foreground!');
-        
+        _saveToInbox(message); // PRO FIX: Abstracted save logic
+
         if (message.notification != null) {
-          final title = message.notification!.title ?? 'New Notification';
-          final body = message.notification!.body ?? '';
-
-          // Save to local inbox
-          NotificationNotifier.instance.addNotification(
-            title: title,
-            body: body,
-          );
-
-          // Show local heads-up notification
           AppointmentNotificationService.instance.showPushNotification(
-            title: title,
-            body: body,
+            title: message.notification!.title ?? 'New Notification',
+            body: message.notification!.body ?? '',
             payload: message.data.toString(),
           );
         }
       });
 
-      // 5. Listen for when user taps the notification from background
+      // 3. Background Messages (User taps notification from background)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('📩 App opened from background via notification!');
+        _saveToInbox(message); // PRO FIX: Now it actually saves!
+
+        // --- PRO FIX: Route the user based on the FCM data payload! ---
+        final payload = message.data['type'] ?? message.data.toString();
+        handleNotificationTap(payload);
       });
 
-      // 6. Check if app was opened from terminated state
+      // 4. Terminated Messages (User taps notification to cold-boot the app)
       final initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) {
         debugPrint('📩 App opened from terminated state via notification!');
+        _saveToInbox(initialMessage); // PRO FIX: Now it actually saves!
+
+        // --- PRO FIX: Delay routing slightly so the app has time to draw the first frame! ---
+        Future.delayed(const Duration(milliseconds: 500), () {
+          final payload =
+              initialMessage.data['type'] ?? initialMessage.data.toString();
+          handleNotificationTap(payload);
+        });
       }
     } else {
       debugPrint('⚠️ User declined push notification permission');
+    }
+  }
+
+  // --- PRO FIX: Centralized Inbox Saver ---
+  void _saveToInbox(RemoteMessage message) {
+    if (message.notification != null) {
+      final title = message.notification!.title ?? 'New Notification';
+      final body = message.notification!.body ?? '';
+
+      NotificationNotifier.instance.addNotification(
+        title: title,
+        body: body,
+        payload: message.data.toString(),
+      );
     }
   }
 
@@ -86,11 +100,7 @@ class FcmService {
 
   Future<void> _saveTokenToSupabase(String token) async {
     final user = _supabase.auth.currentUser;
-
-    // Wrap the 'return' in curly braces to fix the warning
-    if (user == null) {
-      return;
-    }
+    if (user == null) return;
 
     try {
       await _supabase
@@ -98,9 +108,9 @@ class FcmService {
           .update({'fcm_token': token})
           .eq('id', user.id);
 
-      debugPrint('✅ FCM Token securely saved to Supabase Profiles');
+      debugPrint('✅ FCM Token securely saved to Supabase');
     } catch (e) {
-      debugPrint('❌ Failed to save FCM token to Supabase: $e');
+      debugPrint('❌ Failed to save FCM token: $e');
     }
   }
 }

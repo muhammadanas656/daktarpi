@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 import '../../data/doctor_repository.dart';
 import '../../presentation/favorites_notifier.dart';
+import '../../../../core/widgets/app_loader.dart'; // Added this import
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../core/theme/app_styles.dart';
 
@@ -118,7 +120,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    "Are you sure you want to remove Dr. $doctorName from your favorites?",
+                    "Are you sure you want to remove $doctorName from your favorites?",
                     textAlign: TextAlign.center,
                     style: AppTextStyles.body(
                       context,
@@ -227,7 +229,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    "Removed Dr. $doctorName",
+                    "Removed $doctorName",
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
@@ -266,19 +268,9 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: Text("My Doctors", style: AppTextStyles.h2(context)),
-          centerTitle: true,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(
-              Icons.arrow_back_ios,
-              color: context.colorTextDark,
-              size: 20,
-            ),
-            onPressed: () => context.pop(),
-          ),
+        appBar: CustomAppBar(
+          title: "My Doctors",
+          onBackPressed: () => context.pop(),
           bottom: TabBar(
             labelColor: AppColors.primaryGreen,
             unselectedLabelColor: context.colorTextGrey,
@@ -307,7 +299,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
   Widget _buildFavoritesList() {
     if (!_favNotifier.isLoaded) {
       return const Center(
-        child: CircularProgressIndicator(color: AppColors.primaryGreen),
+        child: AppLoader(color: AppColors.primaryGreen),
       );
     }
 
@@ -373,7 +365,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: AppColors.primaryGreen),
+            child: AppLoader(color: AppColors.primaryGreen),
           );
         }
 

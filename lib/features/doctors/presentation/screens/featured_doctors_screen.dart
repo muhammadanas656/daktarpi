@@ -8,9 +8,10 @@ import '../../../../core/theme/app_text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../profile/presentation/profile_notifier.dart';
-import '../../data/doctor_repository.dart';
+import '../doctors_notifier.dart'; // PRO FIX: Central Notifier
 import '../../../../presentation/widgets/featured_doctor_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class FeaturedDoctorsScreen extends StatefulWidget {
   const FeaturedDoctorsScreen({super.key});
@@ -21,14 +22,13 @@ class FeaturedDoctorsScreen extends StatefulWidget {
 
 class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
   final _searchController = TextEditingController();
-  final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
   final _profileNotifier = ProfileNotifier.instance;
+  final _docsNotifier = DoctorsNotifier.instance; // PRO FIX: Singleton Vault
   Timer? _debounce;
 
   // Data State
-  List<Map<String, dynamic>> _doctors = [];
-  bool _isLoading = true;
+  bool _isLoading = true; // Only block UI if the vault is completely empty
   bool _showClearIcon = false;
 
   @override
@@ -64,7 +64,8 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      setState(() => _isLoading = true);
+      // PRO FIX: Removed setState(() => _isLoading = true);
+      // The vault's fetch method will update the list transparently.
       _fetchData(query: _searchController.text);
     });
   }
@@ -82,16 +83,13 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
     }
     
     try {
-      final countryIso = _profileNotifier.profile?.countryIso;
-      final doctors = await _doctorRepo.fetchFeaturedDoctors(
-        query: query,
+      await _docsNotifier.fetchFeaturedDoctors(
+        query: query ?? '',
         forceRefresh: forceRefresh,
-        countryIso: countryIso,
       );
 
       if (mounted) {
         setState(() {
-          _doctors = doctors;
           _isLoading = false;
         });
       }
@@ -170,50 +168,52 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
 
               // --- DOCTOR LIST ---
               Expanded(
-                child:
-                    _isLoading
-                        ? const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryGreen,
-                          ),
-                        )
-                        : _doctors.isEmpty
-                        ? const Center(child: Text("No featured doctors found"))
-                        : RefreshIndicator(
-                          onRefresh: () => _fetchData(forceRefresh: true),
-                          color: AppColors.primaryGreen,
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                            itemCount: _doctors.length,
-                            separatorBuilder:
-                                (context, index) => const SizedBox(height: 16),
-                            itemBuilder: (context, index) {
-                              final doctor = _doctors[index];
-                              final docId = doctor['id'] as int;
-                              final specialtyName =
-                                  doctor['specialties'] != null
-                                      ? doctor['specialties']['name']
-                                      : 'Specialist';
+                child: ListenableBuilder(
+                  listenable: _docsNotifier,
+                  builder: (context, _) {
+                    final doctors = _docsNotifier.featuredDoctors;
+                    // Only show loading spinner if it's the very first time and vault is empty
+                    if (_isLoading && doctors.isEmpty) {
+                      return const Center(
+                        child: AppLoader(color: AppColors.primaryGreen),
+                      );
+                    }
+                    if (doctors.isEmpty) {
+                      return const Center(child: Text("No featured doctors found"));
+                    }
+                    return RefreshIndicator(
+                      onRefresh: () => _fetchData(forceRefresh: true),
+                      color: AppColors.primaryGreen,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                        itemCount: doctors.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final doctor = doctors[index];
+                          final docId = doctor['id'] as int;
+                          final specialtyName = doctor['specialties'] != null
+                              ? doctor['specialties']['name']
+                              : 'Specialist';
 
-                              final isFavorite = _favNotifier.isFavorite(docId);
+                          final isFavorite = _favNotifier.isFavorite(docId);
 
-                              return FeaturedDoctorCard(
-                                id: docId,
-                                name: doctor['full_name'] ?? 'Unknown',
-                                specialty: " $specialtyName",
-                                rating: doctor['rating']?.toString() ?? '0.0',
-                                views: doctor['views_count']?.toString() ?? '0',
-                                price:
-                                    doctor['hourly_rate']?.toString() ?? '20',
-                                imageUrl: doctor['profile_picture_url'],
-                                isFavorite: isFavorite,
-                                onFavoriteTap: () => _favNotifier.toggle(doctor),
-                                onCardTap:
-                                    () => _navigateToDoctorDetails(docId, doctor),
-                              );
-                            },
-                          ),
-                        ),
+                          return FeaturedDoctorCard(
+                            id: docId,
+                            name: doctor['full_name'] ?? 'Unknown',
+                            specialty: " $specialtyName",
+                            rating: doctor['rating']?.toString() ?? '0.0',
+                            views: doctor['views_count']?.toString() ?? '0',
+                            price: doctor['hourly_rate']?.toString() ?? '20',
+                            imageUrl: doctor['profile_picture_url'],
+                            isFavorite: isFavorite,
+                            onFavoriteTap: () => _favNotifier.toggle(doctor),
+                            onCardTap: () => _navigateToDoctorDetails(docId, doctor),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),

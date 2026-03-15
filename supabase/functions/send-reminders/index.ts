@@ -53,7 +53,7 @@ serve(async (req: Request) => {// Added ': Request' to fix error 7006
             token: token,
             notification: {
               title: 'Upcoming Appointment',
-              body: `Reminder: Dr. ${(appt.doctors as any)?.full_name} is expecting you soon.`
+              body: `Reminder: ${(appt.doctors as any)?.full_name} is expecting you soon.`
             }
           });
           await supabase.from('appointments').update({ reminder_sent: true }).eq('id', appt.id);

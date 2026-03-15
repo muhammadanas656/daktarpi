@@ -326,3 +326,22 @@ final appRouter = GoRouter(
     ),
   ],
 );
+
+// --- PRO FIX: Global Notification Router ---
+void handleNotificationTap(String? payload) {
+  if (payload == null || payload.isEmpty) return;
+
+  debugPrint('🚀 Routing user from notification payload: $payload');
+
+  try {
+    if (payload.startsWith('appointment:')) {
+      // Switches the bottom nav tab directly to the Appointments Screen
+      appRouter.go(AppRoutes.appointments);
+    } else {
+      // Fallback: If it's a generic message, push the Notifications inbox on top
+      appRouter.push(AppRoutes.notifications);
+    }
+  } catch (e) {
+    debugPrint('❌ Failed to route from notification: $e');
+  }
+}

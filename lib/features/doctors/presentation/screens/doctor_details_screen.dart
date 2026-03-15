@@ -9,6 +9,8 @@ import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/network/network_notifier.dart'; // PRO FIX: Network listener added
+import '../../../../core/widgets/app_loader.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
 import '../favorites_notifier.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 
@@ -368,39 +370,20 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     if (_doctor == null && _isHeavyDataLoading) {
       return Scaffold(
         backgroundColor: bgColor,
-        body: Center(child: CircularProgressIndicator(color: primaryGreen)),
+        body: const AppLoader(),
       );
     }
 
     if (_doctor == null) {
       return Scaffold(
         appBar: AppBar(title: const Text("Error")),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.grey),
-                const SizedBox(height: 16),
-                Text(
-                  "Doctor Not Found",
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.h2(context),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "We couldn't find the doctor you're looking for.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => context.pop(),
-                  child: const Text("Go Back"),
-                ),
-              ],
-            ),
+        body: EmptyStateWidget(
+          icon: Icons.error_outline,
+          title: "Doctor Not Found",
+          subtitle: "We couldn't find the doctor you're looking for.",
+          actionButton: ElevatedButton(
+            onPressed: () => context.pop(),
+            child: const Text("Go Back"),
           ),
         ),
       );
@@ -454,11 +437,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                       if (_isHeavyDataLoading) ...[
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 40),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.primaryGreen,
-                            ),
-                          ),
+                          child: AppLoader(),
                         ),
                       ] else if (_isOfflineState) ...[
                         // PRO FIX: Beautiful Offline Fallback Card
@@ -489,7 +468,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                "Connect to the internet to view Dr. ${_doctor!['full_name']}'s schedules, clinics, and reviews.",
+                                "Connect to the internet to view ${_doctor!['full_name']}'s schedules, clinics, and reviews.",
                                 textAlign: TextAlign.center,
                                 style: AppTextStyles.bodySmall(
                                   context,

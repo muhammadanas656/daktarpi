@@ -9,6 +9,7 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class ProfileViewScreen extends StatefulWidget {
   const ProfileViewScreen({super.key});
@@ -48,9 +49,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
     if (!_profileNotifier.isLoaded) {
       return Scaffold(
         backgroundColor: context.colorScaffoldBackground,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryGreen),
-        ),
+        body: const AppLoader(),
       );
     }
 

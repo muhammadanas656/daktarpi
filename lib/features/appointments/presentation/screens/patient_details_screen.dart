@@ -15,6 +15,7 @@ import '../../../../features/profile/presentation/profile_notifier.dart'; // PRO
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../models/booking_route_args.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
 
 class PatientDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
@@ -243,7 +244,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
               if (profile.dateOfBirth != null) {
                 _selectedDay = profile.dateOfBirth!.day.toString();
-                _selectedMonth = DateFormat('MMMM').format(profile.dateOfBirth!);
+                _selectedMonth = DateFormat(
+                  'MMMM',
+                ).format(profile.dateOfBirth!);
                 _selectedYear = profile.dateOfBirth!.year.toString();
               }
             }
@@ -275,91 +278,45 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
     final String? category = await showDialog<String>(
       context: context,
-      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (dialogCtx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+        return AppFloatingDialog(
+          headerIcon: Icons.person_add_alt_1_rounded,
+          iconColor: AppColors.primaryGreen,
+          title: "Add Profile Category",
+          description: "Who is this patient? (e.g. Brother, Wife)",
+          isUpdating: false,
+          content: AppTextField(
+            controller: categoryController,
+            autofocus: true,
+            hintText: "Category Name",
           ),
-          // PRO FIX: Dialog background
-          backgroundColor: Theme.of(dialogCtx).colorScheme.surface,
-          elevation: 0,
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Add Profile Category",
+          actions: Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text(
+                    "Cancel",
                     style: TextStyle(
-                      fontSize: 20,
+                      color: Colors.grey,
                       fontWeight: FontWeight.bold,
-                      color: textDark,
                     ),
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    "Who is this patient? (e.g. Brother, Wife)",
-                    style: TextStyle(fontSize: 14, color: textLight),
-                  ),
-                  SizedBox(height: 24),
-
-                  AppTextField(
-                    controller: categoryController,
-                    autofocus: true,
-                    hintText: "Category Name",
-                  ),
-                  SizedBox(height: 24),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          "Cancel",
-                          style: TextStyle(
-                            color: textLight,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (categoryController.text.trim().isNotEmpty) {
-                            Navigator.pop(
-                              context,
-                              categoryController.text.trim(),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryGreen,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          "Add",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: PrimaryButton(
+                  label: "Add",
+                  onTap: () {
+                    if (categoryController.text.trim().isNotEmpty) {
+                      Navigator.pop(dialogCtx, categoryController.text.trim());
+                    }
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -385,20 +342,39 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   Future<void> _deleteCategory(String category) async {
     final confirm = await showDialog<bool>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder:
-          (ctx) => AlertDialog(
-            title: Text("Delete Category?"),
-            content: Text("Are you sure you want to remove '$category'?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text("Cancel"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text("Delete", style: TextStyle(color: Colors.red)),
-              ),
-            ],
+          (ctx) => AppFloatingDialog(
+            headerIcon: Icons.delete_forever_rounded,
+            iconColor: AppColors.dangerRed,
+            title: "Delete Category?",
+            description: "Are you sure you want to remove '$category'?",
+            isUpdating: false,
+            content: const SizedBox.shrink(),
+            actions: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: PrimaryButton(
+                    label: "Delete",
+                    backgroundColor: AppColors.dangerRed,
+                    onTap: () => Navigator.pop(ctx, true),
+                  ),
+                ),
+              ],
+            ),
           ),
     );
 
@@ -419,7 +395,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     }
   }
 
-  void _handleContinue() {
+  void _handleContinue() async {
     if (_nameController.text.isEmpty ||
         _phoneController.text.isEmpty ||
         _selectedDay == null ||
@@ -436,14 +412,34 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       int.parse(_selectedDay!),
     );
 
-    String? imagePath =
-        _selectedCategoryName == "My Self"
-            ? _userProfileUrl
-            : _newPatientImage?.path;
-
-    // --- SAVE TO NEW DATABASE TABLE ---
+    // --- SAVE TO NEW DATABASE TABLE & UPLOAD IMAGE ---
     final catToSave = _newPendingCategory ?? _selectedCategoryName;
-    if (catToSave != "My Self") {
+    String? finalImagePath;
+
+    if (catToSave == "My Self") {
+      finalImagePath = _userProfileUrl;
+    } else {
+      // It's a custom category
+      finalImagePath = _newPatientImage?.path; // Fallback to local path
+
+      // If we have a fresh new file picked, upload it instantly
+      if (_newPatientImage != null && _newPatientImage!.existsSync()) {
+        try {
+          final userId = _profileRepo.currentUserId;
+          if (userId != null) {
+            final uploadedUrl = await _profileRepo.uploadPatientPicture(
+              userId,
+              catToSave,
+              _newPatientImage!,
+            );
+            finalImagePath = uploadedUrl;
+          }
+        } catch (e) {
+          debugPrint("Failed to upload category picture: $e");
+          // Continue anyway, it will just lack the avatar for now
+        }
+      }
+
       final monthInt = _monthStringToInt(_selectedMonth!);
       final dobString =
           DateTime(
@@ -452,17 +448,29 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
             int.parse(_selectedDay!),
           ).toIso8601String().split('T')[0];
 
-      _profileRepo.savePatientDetails({
-        'relation': catToSave,
-        'full_name': _nameController.text,
-        'gender': _selectedGender,
-        'date_of_birth': dobString,
-        'image_path': _newPatientImage?.path,
-      });
+      // Re-fetch patients silently after saving so the queue refreshes
+      unawaited(
+        _profileRepo
+            .savePatientDetails({
+              'relation': catToSave,
+              'full_name': _nameController.text,
+              'gender': _selectedGender,
+              'date_of_birth': dobString,
+              'image_path': finalImagePath,
+            })
+            .then(
+              (_) => _profileRepo.getSavedPatients(
+                _profileRepo.currentUserId ?? '',
+                forceRefresh: true,
+              ),
+            ),
+      );
     }
     // ----------------------------------
 
     unawaited(_clearDraft());
+
+    if (!mounted) return;
     context.push(
       AppRoutes.paymentMethod,
       extra: PaymentMethodArgs(
@@ -477,7 +485,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           'email': _emailController.text,
           'gender': _selectedGender,
           'dob': dob.toIso8601String(),
-          'imagePath': imagePath,
+          'imagePath': finalImagePath, // Pass the newly uploaded secure URL
           'patientType': _selectedCategoryName,
           'newCategoryToSave': _newPendingCategory,
         },
@@ -601,15 +609,48 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                             ),
                             SizedBox(width: 16),
 
-                            // --- SAVED CATEGORIES (From new DB table) ---
                             ..._savedPatients.map((patientMap) {
                               final category = patientMap['relation'] as String;
                               final savedImagePath =
                                   patientMap['image_path'] as String?;
-                              final hasValidImage =
+
+                              // Check if it's a web URL (Uploaded) or a local file
+                              final isNetworkImg =
+                                  savedImagePath != null &&
+                                  savedImagePath.startsWith('http');
+                              final hasValidLocalFile =
+                                  !isNetworkImg &&
                                   savedImagePath != null &&
                                   savedImagePath.isNotEmpty &&
                                   File(savedImagePath).existsSync();
+
+                              Widget renderCategoryAvatar() {
+                                if (isNetworkImg) {
+                                  return Image.network(
+                                    savedImagePath,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (_, __, ___) => Icon(
+                                          Icons.person_outline,
+                                          color: Colors.grey[400],
+                                          size: 30,
+                                        ),
+                                  );
+                                } else if (hasValidLocalFile) {
+                                  return Image.file(
+                                    File(savedImagePath),
+                                    fit: BoxFit.cover,
+                                    gaplessPlayback: true,
+                                    cacheWidth: 100,
+                                  );
+                                } else {
+                                  return Icon(
+                                    Icons.person_outline,
+                                    color: Colors.grey[400],
+                                    size: 30,
+                                  );
+                                }
+                              }
 
                               return Padding(
                                 padding: EdgeInsets.only(right: 16),
@@ -623,19 +664,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                         isSelected:
                                             _selectedCategoryName == category,
                                         label: category,
-                                        content:
-                                            hasValidImage
-                                                ? Image.file(
-                                                  File(savedImagePath),
-                                                  fit: BoxFit.cover,
-                                                  gaplessPlayback: true,
-                                                  cacheWidth: 100, // PRO FIX: decode small
-                                                )
-                                                : Icon(
-                                                  Icons.person_outline,
-                                                  color: Colors.grey[400],
-                                                  size: 30,
-                                                ),
+                                        content: renderCategoryAvatar(),
                                         onTap: () {},
                                       ),
                                     ),
@@ -646,19 +675,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                       isSelected:
                                           _selectedCategoryName == category,
                                       label: category,
-                                      content:
-                                          hasValidImage
-                                              ? Image.file(
-                                                File(savedImagePath),
-                                                fit: BoxFit.cover,
-                                                gaplessPlayback: true,
-                                                cacheWidth: 100, // PRO FIX: decode small
-                                              )
-                                              : Icon(
-                                                Icons.person_outline,
-                                                color: Colors.grey[400],
-                                                size: 30,
-                                              ),
+                                      content: renderCategoryAvatar(),
                                       onTap: () {},
                                     ),
                                   ),
@@ -666,19 +683,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     isSelected:
                                         _selectedCategoryName == category,
                                     label: category,
-                                    content:
-                                        hasValidImage
-                                            ? Image.file(
-                                              File(savedImagePath),
-                                              fit: BoxFit.cover,
-                                              gaplessPlayback: true,
-                                              cacheWidth: 100, // PRO FIX: decode small
-                                            )
-                                            : Icon(
-                                              Icons.person_outline,
-                                              color: Colors.grey[400],
-                                              size: 30,
-                                            ),
+                                    content: renderCategoryAvatar(),
                                     onTap: () {
                                       setState(() {
                                         _selectedCategoryName = category;
@@ -701,7 +706,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                           _selectedYear = dob.year.toString();
                                         }
 
-                                        if (hasValidImage) {
+                                        // Only repopulate _newPatientImage if it's a LOCAL file
+                                        // (Network images don't need to be manipulated via File picks anymore)
+                                        if (hasValidLocalFile) {
                                           _newPatientImage = File(
                                             savedImagePath,
                                           );

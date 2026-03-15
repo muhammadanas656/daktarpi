@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 import '../../data/faq_data.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/complaint_dialog.dart';
@@ -50,15 +51,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text("Help Center", style: AppTextStyles.h2(context)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: context.colorTextDark),
-          onPressed: () => context.pop(),
-        ),
+      appBar: CustomAppBar(
+        title: "Help Center",
+        onBackPressed: () => context.pop(),
       ),
       body: Column(
         children: [

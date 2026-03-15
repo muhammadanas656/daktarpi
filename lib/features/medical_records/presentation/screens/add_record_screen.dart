@@ -14,6 +14,7 @@ import '../../../../presentation/widgets/primary_button.dart';
 import '../../data/medical_record.dart';
 import '../../data/medical_record_repository.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class AddRecordScreen extends StatefulWidget {
   final MedicalRecord? recordToEdit;
@@ -751,11 +752,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                             return const SizedBox(
                               width: 100,
                               height: 120,
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: AppColors.primaryGreen,
-                                ),
-                              ),
+                              child: AppLoader(),
                             );
                           }
                           return GestureDetector(

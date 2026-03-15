@@ -11,6 +11,7 @@ import '../../../../core/services/appointment_notification_service.dart';
 import '../../../settings/presentation/settings_notifier.dart';
 import '../models/booking_route_args.dart';
 import '../../../notifications/presentation/notification_notifier.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
 
 class DummyPaymentScreen extends StatefulWidget {
   final DummyPaymentRouteArgs args;
@@ -82,7 +83,7 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
             Duration(minutes: maxWaitInt + 15),
           );
 
-          // A. Schedule the OS Banner
+          // A. Schedule the OS Banner (And the in-app inbox syncs via the service automatically)
           await _notificationService.scheduleReminder(
             appointmentId: persistedAppointmentId,
             appointmentLocalDateTime: widget.args.appointmentDateTime,
@@ -90,22 +91,6 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
             reminderMinutes: globalMins,
             doctorName: widget.args.doctorName,
           );
-
-          // PRO FIX B: Create the Time-Released In-App Notification!
-          final reminderUnlockTime = widget.args.appointmentDateTime.subtract(
-            Duration(minutes: globalMins),
-          );
-
-          // Only add it to the inbox if the reminder time is actually in the future
-          if (reminderUnlockTime.isAfter(DateTime.now())) {
-            await NotificationNotifier.instance.addNotification(
-              title: "Upcoming Appointment",
-              body:
-                  "Reminder: You have an appointment with Dr. ${widget.args.doctorName} at ${widget.args.displayTime}.",
-              scheduledTime:
-                  reminderUnlockTime, // It stays hidden until this exact minute
-            );
-          }
         } else {
           await _notificationService.cancelReminder(persistedAppointmentId);
         }
@@ -133,143 +118,82 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
       context: context,
       useRootNavigator: true,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            // PRO FIX: Dynamic success modal
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    height: 80,
-                    width: 80,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.check_rounded,
-                        color: AppColors.primaryGreen,
-                        size: 40,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  Text(
-                    isReschedule ? "Rescheduled!" : "Payment Successful!",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: context.colorTextDark,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    isReschedule
-                        ? "Appointment Updated"
-                        : "Your booking is confirmed",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: context.colorTextLight,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  SizedBox(height: 24),
-                  Text(
-                    "You have booked with ${widget.args.doctorName} on ${widget.args.displayDate}, at ${widget.args.displayTime}",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: context.colorTextGrey,
-                      height: 1.5,
-                    ),
-                  ),
-                  SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // Calculate end time using max wait time
-                        final maxWaitTime =
-                            widget.args.clinic['max_wait_time'] ?? 30;
-                        final maxWaitInt =
-                            maxWaitTime is int
-                                ? maxWaitTime
-                                : int.tryParse(maxWaitTime.toString()) ?? 30;
+          (context) => AppFloatingDialog(
+            headerIcon: Icons.check_circle_outline_rounded,
+            iconColor: AppColors.primaryGreen,
+            title: isReschedule ? "Rescheduled!" : "Payment Successful!",
+            description:
+                isReschedule
+                    ? "Appointment Updated.\n\nYou have re-booked with ${widget.args.doctorName} on ${widget.args.displayDate}, at ${widget.args.displayTime}."
+                    : "Your booking is confirmed.\n\nYou have booked with ${widget.args.doctorName} on ${widget.args.displayDate}, at ${widget.args.displayTime}.",
+            isUpdating: false,
+            content: const SizedBox.shrink(),
+            actions: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final maxWaitTime =
+                          widget.args.clinic['max_wait_time'] ?? 30;
+                      final maxWaitInt =
+                          maxWaitTime is int
+                              ? maxWaitTime
+                              : int.tryParse(maxWaitTime.toString()) ?? 30;
 
-                        final Event event = Event(
-                          title: 'Appointment with ${widget.args.doctorName}',
-                          description:
-                              'Medical appointment booked via DaktarPai.',
-                          location: 'Clinic',
-                          startDate: widget.args.appointmentDateTime,
-                          endDate: widget.args.appointmentDateTime.add(
-                            Duration(minutes: maxWaitInt),
-                          ),
-                        );
-                        Add2Calendar.addEvent2Cal(event);
-                      },
-                      icon: Icon(
-                        Icons.calendar_month,
+                      final Event event = Event(
+                        title: 'Appointment with ${widget.args.doctorName}',
+                        description:
+                            'Medical appointment booked via DaktarPai.',
+                        location: 'Clinic',
+                        startDate: widget.args.appointmentDateTime,
+                        endDate: widget.args.appointmentDateTime.add(
+                          Duration(minutes: maxWaitInt),
+                        ),
+                      );
+                      Add2Calendar.addEvent2Cal(event);
+                    },
+                    icon: const Icon(
+                      Icons.calendar_month,
+                      color: AppColors.primaryGreen,
+                    ),
+                    label: const Text(
+                      "Add to Calendar",
+                      style: TextStyle(
                         color: AppColors.primaryGreen,
-                      ),
-                      label: Text(
-                        "Add to Calendar",
-                        style: TextStyle(
-                          color: AppColors.primaryGreen,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                          color: AppColors.primaryGreen,
-                          width: 2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: EdgeInsets.symmetric(vertical: 14),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                  SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        context.go(
-                          AppRoutes.appointments,
-                          extra: AppointmentsRouteArgs(refresh: true),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryGreen,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: EdgeInsets.symmetric(vertical: 14),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(
+                        color: AppColors.primaryGreen,
+                        width: 2,
                       ),
-                      child: Text(
-                        "Done",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryButton(
+                    label: "Done",
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.go(
+                        AppRoutes.appointments,
+                        extra: const AppointmentsRouteArgs(refresh: true),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
     );

@@ -15,6 +15,7 @@ class ProfileNotifier extends ChangeNotifier {
   final _cacheRepo = ProfileSecureCacheRepository();
   UserProfile? _profile;
   bool _loaded = false;
+  DateTime? _lastFetchTime; // PRO FIX: Throttle Timestamp
 
   UserProfile? get profile => _profile;
   bool get isLoaded => _loaded;
@@ -54,13 +55,21 @@ class ProfileNotifier extends ChangeNotifier {
     }
   }
 
-  /// Load profile from database. Safe to call multiple times.
-  Future<void> loadProfile() async {
+  /// Load profile from database. Throttled to prevent overfetching on resume.
+  Future<void> loadProfile({bool forceRefresh = false}) async {
     final userId = _profileRepo.currentUserId;
     if (userId == null) return;
 
+    // --- PRO FIX: The Throttle Guard ---
+    if (!forceRefresh && _loaded && _lastFetchTime != null) {
+      final diff = DateTime.now().difference(_lastFetchTime!);
+      if (diff.inMinutes < 10) {
+        return; // Fast escape: Profile is already fresh in RAM!
+      }
+    }
+
     final cachedProfile = await _cacheRepo.loadProfile();
-    if (cachedProfile != null) {
+    if (cachedProfile != null && !_loaded) {
       _profile = cachedProfile;
       _loaded = true;
       notifyListeners();
@@ -72,6 +81,7 @@ class ProfileNotifier extends ChangeNotifier {
         await _cacheRepo.saveProfile(_profile!);
       }
       _loaded = true;
+      _lastFetchTime = DateTime.now(); // Mark fresh
       notifyListeners();
     } catch (e) {
       debugPrint('ProfileNotifier: error loading profile: $e');

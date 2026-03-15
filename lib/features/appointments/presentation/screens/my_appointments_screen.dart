@@ -1,7 +1,4 @@
 import 'dart:ui' as ui; // PRO FIX: Added for image capture
-
-import 'dart:typed_data'; // PRO FIX: Added for image processing
-
 import 'dart:io'; // PRO FIX: Added for file handling
 
 import 'package:flutter/rendering.dart'; // PRO FIX: Added for RepaintBoundary
@@ -17,6 +14,9 @@ import 'package:path_provider/path_provider.dart'; // PRO FIX: Added
 import 'package:share_plus/share_plus.dart'; // PRO FIX: Added
 
 import '../../../../core/services/appointment_notification_service.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
+import 'package:flutter/services.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -30,13 +30,12 @@ import '../../../../core/theme/app_text_styles.dart';
 
 import '../../../../core/constants/app_routes.dart';
 
-import '../../data/appointment_repository.dart';
-
 import '../../../../presentation/widgets/custom_snackbar.dart';
 
 import '../appointment_notifier.dart';
 
 import '../../../../presentation/widgets/appointment_card.dart';
+import '../../../../presentation/widgets/primary_button.dart';
 
 import 'package:uuid/uuid.dart';
 
@@ -44,7 +43,7 @@ import '../models/booking_route_args.dart';
 
 import '../../../../presentation/widgets/complaint_dialog.dart';
 
-import '../../../../presentation/widgets/app_text_field.dart';
+import '../../../menu/presentation/widgets/review_dialog.dart';
 
 import '../../../../core/network/network_notifier.dart';
 
@@ -58,36 +57,28 @@ class MyAppointmentsScreen extends StatefulWidget {
 class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   final Uuid _uuid = Uuid();
 
-  final _appointmentRepo = AppointmentRepository();
-
   final _appointmentNotifier = AppointmentNotifier.instance;
-  bool _hasProcessedRouteArgs = false;
+  AppointmentsRouteArgs? _lastProcessedArgs;
+
   @override
   void initState() {
     super.initState();
-
     _appointmentNotifier.initializeRealtime();
-
     _appointmentNotifier.fetchAppointments();
-
     _appointmentNotifier.addListener(_onNotifierChanged);
-
     NetworkNotifier.instance.addListener(_onNetworkChanged);
   }
 
   @override
   void dispose() {
     _appointmentNotifier.removeListener(_onNotifierChanged);
-
     NetworkNotifier.instance.removeListener(_onNetworkChanged);
-
     super.dispose();
   }
 
   void _onNetworkChanged() {
     if (mounted) {
       setState(() {});
-
       if (!NetworkNotifier.instance.isOffline) {
         // PRO FIX: Silent refresh when network is restored!
         _appointmentNotifier.fetchAppointments(isBackground: true);
@@ -103,31 +94,16 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // PRO FIX: Only process the GoRouter 'extra' arguments ONCE
-    if (!_hasProcessedRouteArgs) {
-      final extra = GoRouterState.of(context).extra;
-      if (extra is AppointmentsRouteArgs && extra.refresh) {
-        _appointmentNotifier.fetchAppointments();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          CustomSnackbar.showSuccess(context, "Appointment Successful!");
-        });
-      }
-      _hasProcessedRouteArgs =
-          true; // Lock it so it never runs again on resume!
-    }
-  }
-
-  Future<void> _cancelAppointment(int id) async {
-    try {
-      await _appointmentNotifier.cancelAppointment(id);
-
-      await AppointmentNotificationService.instance.cancelReminder(id);
-
-      if (mounted) {
-        CustomSnackbar.showSuccess(context, "Appointment Cancelled");
-      }
-    } catch (e) {
-      if (mounted) CustomSnackbar.showError(context, e.toString());
+    // PRO FIX: Route args are tracked by instance so returning to the app doesn't refire
+    final extra = GoRouterState.of(context).extra;
+    if (extra is AppointmentsRouteArgs &&
+        extra.refresh &&
+        extra != _lastProcessedArgs) {
+      _lastProcessedArgs = extra;
+      _appointmentNotifier.fetchAppointments();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        CustomSnackbar.showSuccess(context, "Appointment Successful!");
+      });
     }
   }
 
@@ -546,10 +522,10 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                               SizedBox(
                                 width: double.infinity,
 
-                                child: ElevatedButton.icon(
-                                  onPressed:
+                                child: PrimaryButton(
+                                  onTap:
                                       isProcessing
-                                          ? null
+                                          ? () {}
                                           : () async {
                                             setDialogState(
                                               () => isProcessing = true,
@@ -622,55 +598,25 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                                               }
                                             }
                                           },
-
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryGreen,
-
-                                    foregroundColor: Colors.white,
-
-                                    elevation: 0,
-
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                    ),
-
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                  ),
-
+                                  label:
+                                      isProcessing
+                                          ? "Generating..."
+                                          : "Share Receipt",
                                   icon:
+                                      isProcessing ? null : Icons.share_rounded,
+                                  customIcon:
                                       isProcessing
                                           ? const SizedBox(
                                             width: 18,
-
                                             height: 18,
-
-                                            child: CircularProgressIndicator(
+                                            child: AppLoader(
                                               color: Colors.white,
-
                                               strokeWidth: 2,
                                             ),
                                           )
-                                          : const Icon(
-                                            Icons.share_rounded,
-
-                                            size: 20,
-                                          ),
-
-                                  label: Text(
-                                    isProcessing
-                                        ? "Generating..."
-                                        : "Share Receipt",
-
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-
-                                      fontSize: 16,
-
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
+                                          : null,
+                                  backgroundColor: AppColors.primaryGreen,
+                                  borderRadius: 14,
                                 ),
                               ),
 
@@ -1138,390 +1084,84 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   void _confirmCancellation(Map<String, dynamic> appointment) {
     showDialog(
       context: context,
-
       useRootNavigator: true,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (dialogCtx) {
+        bool isCancelling = false;
 
-      barrierDismissible: true,
-
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-
-            backgroundColor: Theme.of(context).colorScheme.surface,
-
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AppFloatingDialog(
+              headerIcon: Icons.event_busy_rounded,
+              iconColor: AppColors.dangerRed,
+              title: "Cancel Appointment?",
+              description:
+                  "Are you sure you want to cancel this appointment? This action cannot be undone.",
+              isUpdating: isCancelling,
+              content: const SizedBox.shrink(),
+              actions: Row(
                 children: [
-                  Container(
-                    height: 80,
-
-                    width: 80,
-
-                    decoration: BoxDecoration(
-                      color: AppColors.dangerRed.withValues(alpha: 0.1),
-
-                      shape: BoxShape.circle,
-                    ),
-
-                    child: const Icon(
-                      Icons.warning_amber_rounded,
-
-                      color: AppColors.dangerRed,
-
-                      size: 40,
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  Text(
-                    "Cancel Appointment?",
-
-                    textAlign: TextAlign.center,
-
-                    style: TextStyle(
-                      fontSize: 20,
-
-                      fontWeight: FontWeight.bold,
-
-                      color: context.colorTextDark,
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Text(
-                    "Are you sure you want to cancel this appointment? This action cannot be undone.",
-
-                    textAlign: TextAlign.center,
-
-                    style: TextStyle(
-                      color: context.colorTextLight,
-
-                      fontSize: 14,
-
-                      height: 1.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-
-                          child: Text(
-                            "Back",
-
-                            style: TextStyle(
-                              color: context.colorTextLight,
-
-                              fontWeight: FontWeight.w600,
-
-                              fontSize: 16,
-                            ),
-                          ),
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isCancelling ? null : () => Navigator.pop(dialogCtx),
+                      child: const Text(
+                        "Back",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Yes, Cancel",
+                      backgroundColor: AppColors.dangerRed,
+                      onTap:
+                          isCancelling
+                              ? () {}
+                              : () async {
+                                setDialogState(() => isCancelling = true);
+                                try {
+                                  await _appointmentNotifier.cancelAppointment(
+                                    appointment['id'],
+                                  );
+                                  await AppointmentNotificationService.instance
+                                      .cancelReminder(appointment['id']);
 
-                      const SizedBox(width: 16),
-
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-
-                            _cancelAppointment(appointment['id']);
-                          },
-
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.dangerRed,
-
-                            elevation: 0,
-
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-
-                          child: const Text(
-                            "Yes, Cancel",
-
-                            style: TextStyle(
-                              color: Colors.white,
-
-                              fontSize: 16,
-
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                                  if (dialogCtx.mounted) {
+                                    Navigator.pop(dialogCtx);
+                                  }
+                                  if (mounted) {
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      "Appointment Cancelled",
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    CustomSnackbar.showError(
+                                      context,
+                                      "Failed to cancel: $e",
+                                    );
+                                  }
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setDialogState(() => isCancelling = false);
+                                  }
+                                }
+                              },
+                    ),
                   ),
                 ],
               ),
-            ),
-          ),
+            );
+          },
+        );
+      },
     );
-  }
-
-  void _showReviewDialog(
-    BuildContext context,
-
-    Map<String, dynamic> appointment,
-  ) {
-    int selectedRating = 0;
-
-    final commentController = TextEditingController();
-
-    bool isSubmitting = false;
-
-    showDialog(
-      context: context,
-
-      barrierDismissible: false,
-
-      builder:
-          (ctx) => StatefulBuilder(
-            builder: (context, setDialogState) {
-              return AnimatedPadding(
-                duration: const Duration(milliseconds: 200),
-
-                curve: Curves.easeOut,
-
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom,
-                ),
-
-                child: Dialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-
-                  backgroundColor: Theme.of(context).colorScheme.surface,
-
-                  insetPadding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-
-                    vertical: 24,
-                  ),
-
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-
-                      children: [
-                        Text(
-                          "Rate Your Experience",
-
-                          style: TextStyle(
-                            fontSize: 18,
-
-                            fontWeight: FontWeight.bold,
-
-                            color: context.colorTextDark,
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Text(
-                          "With ${appointment['doctors']?['full_name'] ?? 'Doctor'}",
-
-                          style: TextStyle(
-                            fontSize: 14,
-
-                            color: context.colorTextLight,
-                          ),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-
-                            children: List.generate(5, (index) {
-                              return IconButton(
-                                icon: Icon(
-                                  index < selectedRating
-                                      ? Icons.star_rounded
-                                      : Icons.star_border_rounded,
-
-                                  color: Colors.amber,
-
-                                  size: 40,
-                                ),
-
-                                onPressed:
-                                    () => setDialogState(
-                                      () => selectedRating = index + 1,
-                                    ),
-                              );
-                            }),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        AppTextField(
-                          controller: commentController,
-
-                          maxLines: 3,
-
-                          hintText: "Write your review here (optional)...",
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextButton(
-                                onPressed:
-                                    isSubmitting
-                                        ? null
-                                        : () => Navigator.pop(ctx),
-
-                                child: Text(
-                                  "Cancel",
-
-                                  style: TextStyle(
-                                    color: context.colorTextLight,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(width: 16),
-
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed:
-                                    (selectedRating == 0 || isSubmitting)
-                                        ? null
-                                        : () async {
-                                          setDialogState(
-                                            () => isSubmitting = true,
-                                          );
-
-                                          try {
-                                            await _appointmentRepo.submitReview(
-                                              appointmentId: appointment['id'],
-
-                                              doctorId:
-                                                  appointment['doctor_id'],
-
-                                              rating: selectedRating,
-
-                                              comment:
-                                                  commentController.text.trim(),
-                                            );
-
-                                            if (ctx.mounted) {
-                                              Navigator.pop(ctx);
-
-                                              CustomSnackbar.showSuccess(
-                                                ctx,
-
-                                                "Thank you! Your review has been submitted.",
-                                              );
-
-                                              _appointmentNotifier
-                                                  .removePendingReview(
-                                                    appointment['id'],
-                                                  );
-                                            }
-                                          } catch (e) {
-                                            setDialogState(
-                                              () => isSubmitting = false,
-                                            );
-
-                                            if (ctx.mounted) {
-                                              CustomSnackbar.showError(
-                                                ctx,
-
-                                                "Error: $e",
-                                              );
-                                            }
-                                          }
-                                        },
-
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryGreen,
-
-                                  foregroundColor: Colors.white,
-
-                                  disabledBackgroundColor: Colors.grey[300],
-
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                ),
-
-                                child:
-                                    isSubmitting
-                                        ? const SizedBox(
-                                          height: 20,
-
-                                          width: 20,
-
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white,
-
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                        : const Text(
-                                          "Submit",
-
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-    ).whenComplete(() => commentController.dispose());
   }
 
   Widget _buildActionRequiredCarousel() {
@@ -1531,54 +1171,35 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-
           child: Text(
             "Action Required",
-
             style: TextStyle(
               fontSize: 16,
-
               fontWeight: FontWeight.bold,
-
               color: context.colorTextDark,
-
               letterSpacing: 0.5,
             ),
           ),
         ),
-
         const SizedBox(height: 12),
-
         SizedBox(
           height: 150,
-
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-
             scrollDirection: Axis.horizontal,
-
             itemCount: pendingItems.length,
-
             separatorBuilder: (_, __) => const SizedBox(width: 16),
-
             itemBuilder: (context, index) {
               final appt = pendingItems[index];
-
               final doctor = appt['doctors'] ?? {};
-
               final isMissed = appt['status'] == 'missed';
-
               final themeColor = isMissed ? Colors.deepOrange : Colors.orange;
-
               final actionText =
                   isMissed ? "Appointment Missed" : "Rate your visit";
-
               final buttonText = isMissed ? "File Complaint" : "Leave a Review";
-
               final buttonIcon =
                   isMissed
                       ? Icons.report_problem_outlined
@@ -1586,35 +1207,27 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
               return Container(
                 width: 280,
-
                 padding: const EdgeInsets.all(16),
-
                 decoration: AppStyles.surfaceCard(
                   context,
-
                   borderRadius: BorderRadius.circular(16),
                 ).copyWith(
                   border: Border.all(
                     color: themeColor.withValues(alpha: 0.3),
-
                     width: 1.5,
                   ),
                 ),
-
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
                   children: [
                     Row(
                       children: [
                         CircleAvatar(
                           radius: 22,
-
                           backgroundColor:
                               Theme.of(context).brightness == Brightness.dark
                                   ? AppColors.darkBorder
                                   : Colors.grey[100],
-
                           backgroundImage:
                               doctor['profile_picture_url'] != null &&
                                       doctor['profile_picture_url'].isNotEmpty
@@ -1622,44 +1235,32 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                                     doctor['profile_picture_url'],
                                   )
                                   : null,
-
                           child:
                               (doctor['profile_picture_url'] == null ||
                                       doctor['profile_picture_url'].isEmpty)
                                   ? const Icon(Icons.person, color: Colors.grey)
                                   : null,
                         ),
-
                         const SizedBox(width: 12),
-
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-
                             children: [
                               Text(
                                 actionText,
-
                                 style: TextStyle(
                                   fontSize: 12,
-
                                   color: themeColor,
-
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-
                               Text(
                                 doctor['full_name'] ?? 'Doctor',
-
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-
                                   fontSize: 14,
-
                                   color: context.colorTextDark,
                                 ),
-
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ],
@@ -1667,24 +1268,18 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                         ),
                       ],
                     ),
-
                     SizedBox(
                       width: double.infinity,
-
                       height: 40,
-
                       child: OutlinedButton.icon(
                         onPressed: () {
                           if (isMissed) {
                             showDialog(
                               context: context,
-
                               barrierDismissible: false,
-
                               builder:
                                   (ctx) => ComplaintDialog(
                                     appointment: appt,
-
                                     onComplaintSubmitted: () {
                                       _appointmentNotifier
                                           .removePendingComplaint(appt['id']);
@@ -1692,23 +1287,31 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                                   ),
                             );
                           } else {
-                            _showReviewDialog(context, appt);
+                            // --- NEW GLOBAL DIALOG CALL ---
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              useRootNavigator: true,
+                              builder:
+                                  (ctx) => ReviewDialog(
+                                    appointment: appt,
+                                    onReviewSubmitted: () {
+                                      _appointmentNotifier.removePendingReview(
+                                        appt['id'],
+                                      );
+                                    },
+                                  ),
+                            );
                           }
                         },
-
                         icon: Icon(buttonIcon, size: 18),
-
                         label: Text(
                           buttonText,
-
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-
                         style: OutlinedButton.styleFrom(
                           foregroundColor: themeColor,
-
                           side: BorderSide(color: themeColor, width: 1.5),
-
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -1721,7 +1324,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
             },
           ),
         ),
-
         const SizedBox(height: 24),
       ],
     );
@@ -1749,11 +1351,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                 child:
                     (_appointmentNotifier.isLoading &&
                             _appointmentNotifier.appointments.isEmpty)
-                        ? const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryGreen,
-                          ),
-                        )
+                        ? const Center(child: AppLoader())
                         : _buildListView(),
               ),
             ],
@@ -1766,7 +1364,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   // --- PRO FIX: Clean Typographic Header with History Route ---
   Widget _buildAppBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
       child: Row(
@@ -1774,11 +1372,10 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            "Appointments", 
-            style: AppTextStyles.h1(context).copyWith(
-              fontSize: 26, 
-              letterSpacing: -0.5,
-            ),
+            "Appointments",
+            style: AppTextStyles.h1(
+              context,
+            ).copyWith(fontSize: 26, letterSpacing: -0.5),
           ),
           Container(
             width: 44,
@@ -1792,7 +1389,11 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               boxShadow: AppStyles.cardShadow(context),
             ),
             child: IconButton(
-              icon: Icon(Icons.history_rounded, color: context.colorTextDark, size: 22),
+              icon: Icon(
+                Icons.history_rounded,
+                color: context.colorTextDark,
+                size: 22,
+              ),
               onPressed: () => context.push(AppRoutes.accountActivity),
             ),
           ),

@@ -7,6 +7,7 @@ import '../../../../presentation/widgets/pessimistic_switch.dart';
 import '../screens/account_activity_screen.dart';
 import 'settings_section_header.dart';
 import 'settings_tile.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class SettingsAccountSecuritySection extends StatelessWidget {
   final bool hasEmailProvider;
@@ -91,7 +92,7 @@ class SettingsAccountSecuritySection extends StatelessWidget {
                           const SizedBox(
                             width: 12,
                             height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen),
+                            child: AppLoader(strokeWidth: 2, color: AppColors.primaryGreen),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -144,7 +145,7 @@ class SettingsAccountSecuritySection extends StatelessWidget {
                         const SizedBox(
                           width: 12,
                           height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen),
+                          child: AppLoader(strokeWidth: 2, color: AppColors.primaryGreen),
                         ),
                         const SizedBox(width: 8),
                         Expanded(

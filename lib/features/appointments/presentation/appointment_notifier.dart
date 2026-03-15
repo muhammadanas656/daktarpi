@@ -34,6 +34,7 @@ class AppointmentNotifier extends ChangeNotifier {
 
   bool _isLoading = false;
   String? _error;
+  DateTime? _lastBackgroundSync; // PRO FIX: Background throttle
 
   List<Appointment> get appointments => _appointments;
   bool get isLoading => _isLoading;
@@ -75,7 +76,7 @@ class AppointmentNotifier extends ChangeNotifier {
     _appointmentsSubscription = _appointmentRepo.subscribeToAppointments(
       userId: userId,
       onChange: (_) {
-        unawaited(fetchAppointments(isBackground: true));
+        unawaited(fetchAppointments(isBackground: true, bypassThrottle: true)); // DB updates ignore throttle
       },
     );
   }
@@ -92,7 +93,19 @@ class AppointmentNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchAppointments({bool isBackground = false}) async {
+  Future<void> fetchAppointments({
+    bool isBackground = false, 
+    bool bypassThrottle = false,
+  }) async {
+    
+    // PRO FIX: Silent Throttle for Background app-resumes (10 min)
+    if (isBackground && !bypassThrottle && _lastBackgroundSync != null) {
+      final diff = DateTime.now().difference(_lastBackgroundSync!);
+      if (diff.inMinutes < 10 && _appointments.isNotEmpty) {
+        return; // Skip silent fetch
+      }
+    }
+
     initializeRealtime();
     await _ensureRealtimeSubscription();
 
@@ -141,6 +154,7 @@ class AppointmentNotifier extends ChangeNotifier {
 
       _appointments = freshAppointments;
       await _cacheRepo.saveAppointments(_appointments);
+      _lastBackgroundSync = DateTime.now(); // PRO FIX: Mark fetch as fresh
     } catch (e) {
       if (!isBackground) _error = e.toString();
       debugPrint("AppointmentNotifier Error: $e");

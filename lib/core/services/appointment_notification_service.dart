@@ -3,6 +3,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+import '../../features/notifications/presentation/notification_notifier.dart';
+import '../../core/router/app_router.dart';
 
 /// Schedules strict appointment reminders on-device using absolute UTC time.
 class AppointmentNotificationService {
@@ -22,6 +24,7 @@ class AppointmentNotificationService {
         defaultTargetPlatform == TargetPlatform.iOS;
   }
 
+  // Inside AppointmentNotificationService
   Future<void> initialize() async {
     if (_initialized || !_isSupportedPlatform) {
       return;
@@ -42,12 +45,18 @@ class AppointmentNotificationService {
       iOS: iosSettings,
     );
 
-    await _plugin.initialize(settings);
-    // Removed `await _requestPermissions();` to prevent deadlocks in main()
+    // --- PRO FIX: Listen for physical taps on local notifications! ---
+    await _plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        // Import your router file at the top of this file to access handleNotificationTap!
+        handleNotificationTap(response.payload);
+      },
+    );
+
     _initialized = true;
   }
 
-  /// Triggers an immediate notification to confirm the booking was successful.
   Future<void> showBookingConfirmation({
     required int appointmentId,
     required String doctorName,
@@ -80,14 +89,12 @@ class AppointmentNotificationService {
       );
 
       final immediateId = appointmentId.abs() + 100000;
-
       await _plugin.show(immediateId, title, body, notificationDetails);
     } catch (e) {
       debugPrint("Failed to show immediate confirmation notification: $e");
     }
   }
 
-  /// Displays a generic push notification when the app is in the foreground.
   Future<void> showPushNotification({
     required String title,
     required String body,
@@ -114,15 +121,22 @@ class AppointmentNotificationService {
         ),
       );
 
-      final immediateId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      final immediateId = DateTime.now().millisecondsSinceEpoch.remainder(
+        100000,
+      );
 
-      await _plugin.show(immediateId, title, body, notificationDetails, payload: payload);
+      await _plugin.show(
+        immediateId,
+        title,
+        body,
+        notificationDetails,
+        payload: payload,
+      );
     } catch (e) {
       debugPrint("Failed to show foreground push notification: $e");
     }
   }
 
-  /// Helper method to cleanly schedule a notification with Android 14+ exact-alarm fallbacks.
   Future<void> _scheduleWithFallback({
     required int id,
     required String title,
@@ -177,12 +191,10 @@ class AppointmentNotificationService {
     }
   }
 
-  /// Schedules the complete lifecycle of appointment alerts.
   Future<void> scheduleReminder({
     required int appointmentId,
     required DateTime appointmentLocalDateTime,
-    DateTime?
-    appointmentEndDateTime, // NEW: Added to support timeout notifications
+    DateTime? appointmentEndDateTime,
     required int reminderMinutes,
     required String doctorName,
   }) async {
@@ -195,64 +207,140 @@ class AppointmentNotificationService {
     ).format(appointmentLocalDateTime);
     final payloadString = 'appointment:$safeId';
 
-    // 1. Standard Reminder (e.g., 30 or 60 minutes before)
     final nowUtc = DateTime.now().toUtc();
-    final desiredReminderUtc = appointmentLocalDateTime
-        .subtract(Duration(minutes: reminderMinutes))
-        .toUtc();
+    final desiredReminderUtc =
+        appointmentLocalDateTime
+            .subtract(Duration(minutes: reminderMinutes))
+            .toUtc();
     final appointmentTimeUtc = appointmentLocalDateTime.toUtc();
 
-    // PRO FIX: If the global reminder (say 60 mins) implies a time that ALREADY HAPPENED, 
-    // but the actual appointment is still in the future (say, starts in 5 mins),
-    // we fire the reminder IMMEDIATELY.
     DateTime finalReminderTimeUtc = desiredReminderUtc;
-    if (desiredReminderUtc.isBefore(nowUtc) && appointmentTimeUtc.isAfter(nowUtc)) {
+    if (desiredReminderUtc.isBefore(nowUtc) &&
+        appointmentTimeUtc.isAfter(nowUtc)) {
       finalReminderTimeUtc = nowUtc.add(const Duration(seconds: 5));
     }
 
+    // 1. Standard Reminder (OS)
     await _scheduleWithFallback(
       id: safeId,
       title: 'Appointment reminder',
-      body: 'You have an appointment with Dr. $doctorName at $appointmentTime.',
+      body: 'You have an appointment with $doctorName at $appointmentTime.',
       triggerUtc: finalReminderTimeUtc,
       payload: payloadString,
     );
 
-    // 2. The 5-Hour Cancellation Warning
+    // 2. The 5-Hour Cancellation Warning (OS)
+    final cancellationWarningUtc =
+        appointmentLocalDateTime.subtract(const Duration(hours: 5)).toUtc();
     await _scheduleWithFallback(
       id: safeId + 200000,
       title: 'Upcoming Appointment Reminder',
       body:
-          'Your visit with Dr. $doctorName is in 5 hours. Please note that cancellations cannot be made within 4 hours of your scheduled time.',
-      triggerUtc:
-          appointmentLocalDateTime.subtract(const Duration(hours: 5)).toUtc(),
+          'Your visit with $doctorName is in 5 hours. Please note that cancellations cannot be made within 4 hours of your scheduled time.',
+      triggerUtc: cancellationWarningUtc,
       payload: payloadString,
     );
 
-    // 3. The Time-Out / Resolution Notification
-    // If end time isn't explicitly provided, default to 30 minutes after start.
+    // 2.5 The Morning-of Notification (OS) - 8:00 AM on the day of the appointment
+    final morningOfLocal = DateTime(
+      appointmentLocalDateTime.year,
+      appointmentLocalDateTime.month,
+      appointmentLocalDateTime.day,
+      8, // 8:00 AM
+      0,
+    );
+    final morningOfUtc = morningOfLocal.toUtc();
+
+    // Only schedule if 8:00 AM is in the future AND it is strictly before the actual appointment
+    // (We don't want an 8:00 AM reminder for an 8:00 AM appointment)
+    if (morningOfUtc.isAfter(nowUtc) &&
+        morningOfLocal.isBefore(appointmentLocalDateTime)) {
+      await _scheduleWithFallback(
+        id: safeId + 100000,
+        title: 'Appointment Today',
+        body:
+            'You have a scheduled visit with $doctorName today at $appointmentTime.',
+        triggerUtc: morningOfUtc,
+        payload: payloadString,
+      );
+    }
+
+    // 3. The Time-Out / Resolution Notification (OS)
     final endDateTime =
         appointmentEndDateTime ??
         appointmentLocalDateTime.add(const Duration(minutes: 30));
+    final endDateTimeUtc = endDateTime.toUtc();
     await _scheduleWithFallback(
       id: safeId + 300000,
       title: 'Appointment Status Update',
       body:
           'Your scheduled visit time has passed. If this appointment was missed or not completed, please open the app to contact the clinic or file a report.',
-      triggerUtc: endDateTime.toUtc(),
+      triggerUtc: endDateTimeUtc,
       payload: payloadString,
     );
+
+    // --- PRO FIX: INBOX SYNC WITH METADATA ---
+    // We pass the appointmentId as 'payload' so we can find and delete these exact
+    // messages from the Hive database later if the appointment is canceled!
+
+    if (finalReminderTimeUtc.isAfter(nowUtc)) {
+      await NotificationNotifier.instance.addNotification(
+        title: 'Appointment reminder',
+        body: 'You have an appointment with $doctorName at $appointmentTime.',
+        scheduledTime: finalReminderTimeUtc.toLocal(),
+        payload: payloadString,
+      );
+    }
+
+    if (cancellationWarningUtc.isAfter(nowUtc)) {
+      await NotificationNotifier.instance.addNotification(
+        title: 'Upcoming Appointment Reminder',
+        body:
+            'Your visit with $doctorName is in 5 hours. Please note that cancellations cannot be made within 4 hours of your scheduled time.',
+        scheduledTime: cancellationWarningUtc.toLocal(),
+        payload: payloadString,
+      );
+    }
+
+    if (morningOfUtc.isAfter(nowUtc) &&
+        morningOfLocal.isBefore(appointmentLocalDateTime)) {
+      await NotificationNotifier.instance.addNotification(
+        title: 'Appointment Today',
+        body:
+            'You have a scheduled visit with $doctorName today at $appointmentTime.',
+        scheduledTime: morningOfUtc.toLocal(),
+        payload: payloadString,
+      );
+    }
+
+    if (endDateTimeUtc.isAfter(nowUtc)) {
+      await NotificationNotifier.instance.addNotification(
+        title: 'Appointment Status Update',
+        body:
+            'Your scheduled visit time has passed. If this appointment was missed or not completed, please open the app to contact the clinic or file a report.',
+        scheduledTime: endDateTime.toLocal(),
+        payload: payloadString,
+      );
+    }
   }
 
-  /// Cancels all scheduled alerts tied to a specific appointment ID.
+  /// Cancels all scheduled alerts tied to a specific appointment ID AND scrubs them from the inbox!
   Future<void> cancelReminder(int appointmentId) async {
     if (!_isSupportedPlatform) return;
     await initialize();
 
     final safeId = appointmentId.abs();
+
+    // 1. Stop the OS from vibrating the phone
     await _plugin.cancel(safeId); // Standard Reminder
+    await _plugin.cancel(safeId + 100000); // Morning-of Reminder
     await _plugin.cancel(safeId + 200000); // Cancellation Warning
     await _plugin.cancel(safeId + 300000); // Time-Out Notification
+
+    // 2. PRO FIX: Scrub the future-dated "ghost" messages from the local Hive inbox!
+    await NotificationNotifier.instance.deleteNotificationsByPayload(
+      'appointment:$safeId',
+    );
   }
 
   Future<void> cancelAllReminders() async {

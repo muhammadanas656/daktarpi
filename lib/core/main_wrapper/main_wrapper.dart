@@ -54,7 +54,9 @@ class _MainWrapperState extends State<MainWrapper>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // PRO FIX: Silent refresh on resume!
-      unawaited(AppointmentNotifier.instance.fetchAppointments(isBackground: true));
+      unawaited(
+        AppointmentNotifier.instance.fetchAppointments(isBackground: true),
+      );
       unawaited(ProfileNotifier.instance.loadProfile());
     }
   }
@@ -217,6 +219,7 @@ class _MainWrapperState extends State<MainWrapper>
               AnimatedBuilder(
                 animation: _drawerController,
                 builder: (context, child) {
+                  // Controls how far right it slides and how much it shrinks
                   double slide = 265 * _drawerController.value;
                   double scale = 1 - (_drawerController.value * 0.45);
 
@@ -227,7 +230,8 @@ class _MainWrapperState extends State<MainWrapper>
                           ..scale(scale),
                     alignment: Alignment.centerLeft,
                     child: AbsorbPointer(
-                      absorbing: true,
+                      absorbing:
+                          true, // Prevents users from interacting with the background
                       child: Container(
                         width: size.width,
                         height: size.height,
@@ -244,11 +248,13 @@ class _MainWrapperState extends State<MainWrapper>
                                 color:
                                     Theme.of(context).scaffoldBackgroundColor,
                               ),
+                              // THIS IS THE DUMMY PAGE
                               const RepaintBoundary(
                                 child: IgnorePointer(
                                   child: DoctorsScreen(isBackgroundLayer: true),
                                 ),
                               ),
+                              // Adds a darkening tint as the drawer opens
                               Container(
                                 color: dynamicDrawerBg.withValues(
                                   alpha: (0.8 * _drawerController.value).clamp(

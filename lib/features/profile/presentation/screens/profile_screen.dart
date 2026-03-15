@@ -15,6 +15,7 @@ import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_loader.dart';
 import '../profile_notifier.dart';
 import '../../data/profile_repository.dart';
 import '../../data/user_profile.dart';
@@ -306,7 +307,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
 
         await Future.delayed(Duration(milliseconds: 500));
-        await ProfileNotifier.instance.loadProfile();
+        await ProfileNotifier.instance.loadProfile(forceRefresh: true);
 
         if (mounted) {
           if (_isEditing && context.canPop()) {
@@ -367,9 +368,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isInitialLoad) {
       return Scaffold(
         backgroundColor: context.colorScaffoldBackground,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryGreen),
-        ),
+        body: const AppLoader(),
       );
     }
 
@@ -592,7 +591,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ? SizedBox(
                                         width: 18,
                                         height: 18,
-                                        child: CircularProgressIndicator(
+                                        child: const AppLoader(
                                           strokeWidth: 2,
                                         ),
                                       )

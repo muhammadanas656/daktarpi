@@ -1,18 +1,19 @@
 import 'dart:async';
-import '../../../../core/constants/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../favorites_notifier.dart';
-import '../../data/doctor_repository.dart';
-import '../models/doctors_route_args.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
-import 'package:geolocator/geolocator.dart';
+
+import '../favorites_notifier.dart';
+import '../doctors_notifier.dart'; // PRO FIX: Imported the new central Notifier!
+import '../models/doctors_route_args.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../notifications/presentation/notification_notifier.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class DoctorsScreen extends StatefulWidget {
   final bool isBackgroundLayer; // PRO FIX: Flag for 3D Drawer background mode
@@ -24,15 +25,12 @@ class DoctorsScreen extends StatefulWidget {
 }
 
 class _DoctorsScreenState extends State<DoctorsScreen> {
-  final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
   final _profileNotifier = ProfileNotifier.instance;
+  final _docsNotifier = DoctorsNotifier.instance;
 
   final TextEditingController _searchController = TextEditingController();
-  List<Map<String, dynamic>> _doctors = [];
-  List<Map<String, dynamic>> _hospitals = [];
-  List<Map<String, dynamic>> _clinics = [];
-  bool _isLoading = true;
+  
   String _selectedFilter = 'All';
   Timer? _debounce;
 
@@ -47,12 +45,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   @override
   void initState() {
     super.initState();
-    // PRO FIX: Instantly ready if background layer to prevent "wavy" shimmers
-    if (!widget.isBackgroundLayer) {
-      _fetchDoctors();
-    } else {
-      _isLoading = false;
-    }
+    // PRO FIX: We tell the notifier to load. If it already has data in RAM, 
+    // it skips the network call instantly! The Drawer background can just piggyback.
+    _docsNotifier.fetchDoctors();
+
     _searchController.addListener(_onSearchChanged);
     _favNotifier.addListener(_onFavoritesChanged);
     _profileNotifier.addListener(_onProfileChanged);
@@ -74,8 +70,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (mounted && !widget.isBackgroundLayer) {
-        setState(() => _isLoading = true);
-        _fetchDoctors();
+        _docsNotifier.fetchDoctors(
+          query: _searchController.text.trim(),
+          filter: _selectedFilter,
+        );
       }
     });
   }
@@ -86,58 +84,15 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   }
 
   Future<void> _fetchDoctors() async {
-    final query = _searchController.text.trim();
-    try {
-      double? userLat;
-      double? userLng;
-
-      if (_selectedFilter == 'Nearest') {
-        Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium,
-        );
-        userLat = position.latitude;
-        userLng = position.longitude;
-      }
-
-      final userLocation = _profileNotifier.profile?.location;
-      final countryIso = _profileNotifier.profile?.countryIso;
-
-      final doctors = await _doctorRepo.fetchAllDoctors(
-        query: query,
-        userLat: userLat,
-        userLng: userLng,
-        userLocation: userLocation,
-        countryIso: countryIso,
-      );
-
-      final hospitals = await _doctorRepo.fetchHospitals(query: query);
-      final clinics = await _doctorRepo.fetchClinicsList(query: query);
-
-      // PRO FIX: The Match Guard
-      // This ensures that if the user cleared the search bar while the network
-      // was downloading, the app throws away the old search results instead of showing them.
-      if (mounted && _searchController.text.trim() == query) {
-        setState(() {
-          _doctors = doctors;
-          _hospitals = hospitals;
-          _clinics = clinics;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted && _searchController.text.trim() == query) {
-        setState(() => _isLoading = false);
-      }
-    }
+    await _docsNotifier.fetchDoctors(
+      query: _searchController.text.trim(),
+      filter: _selectedFilter,
+      forceRefresh: true, // Pull-to-refresh forces a true global network fetch
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // PRO FIX: If this is the 3D drawer background, render the text-free skeleton
-    // This entirely prevents the TextField overlay from glitching into "random characters"
-    if (widget.isBackgroundLayer) {
-      return _buildBackgroundSkeleton(context);
-    }
 
     return Scaffold(
       body: Container(
@@ -149,25 +104,28 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               _buildSearchBar(),
               _buildFilterChips(),
               Expanded(
-                child:
-                    widget.isBackgroundLayer
-                        ? _buildDummyBackgroundList() // PRO FIX: Clean UI structure for the 3D drawer
-                        : _isLoading
-                        ? const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryGreen,
-                          ),
-                        )
-                        : RefreshIndicator(
-                          onRefresh: _fetchDoctors,
+                child: ListenableBuilder(
+                  listenable: _docsNotifier,
+                  builder: (context, _) {
+                    if (_docsNotifier.isLoading && _docsNotifier.doctors.isEmpty) {
+                      return const Center(
+                        child: AppLoader(
                           color: AppColors.primaryGreen,
-                          child:
-                              _selectedFilter == 'Hospital'
-                                  ? _buildHospitalGrid()
-                                  : _selectedFilter == 'Clinic'
-                                  ? _buildClinicGrid()
-                                  : _buildDoctorList(),
                         ),
+                      );
+                    }
+                    
+                    return RefreshIndicator(
+                      onRefresh: _fetchDoctors,
+                      color: AppColors.primaryGreen,
+                      child: _selectedFilter == 'Hospital'
+                          ? _buildHospitalGrid()
+                          : _selectedFilter == 'Clinic'
+                              ? _buildClinicGrid()
+                              : _buildDoctorList(),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -176,22 +134,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-  Widget _buildDummyBackgroundList() {
-    return ListView.separated(
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      itemCount: 4,
-      separatorBuilder: (_, __) => const SizedBox(height: 16),
-      itemBuilder:
-          (context, index) => Container(
-            height: 110,
-            decoration: AppStyles.surfaceCard(
-              context,
-              borderRadius: BorderRadius.circular(20),
-            ),
-          ),
-    );
-  }
+
 
   // --- PRO FIX: Signature Surface Header for Doctors ---
   // --- PRO FIX: Premium Editorial Glass Header ---
@@ -276,6 +219,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         hintText: "Search doctor, specialty...",
         showClearIcon: _searchController.text.isNotEmpty,
         onClear: _clearSearch,
+        readOnly: widget.isBackgroundLayer, // PRO FIX: Read-only prevents TextField rendering glitches on overlaid repainted canvases
       ),
     );
   }
@@ -354,13 +298,16 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     if (widget.isBackgroundLayer) return;
     setState(() {
       _selectedFilter = filter;
-      _isLoading = true;
     });
-    _fetchDoctors();
+    _docsNotifier.fetchDoctors(
+      query: _searchController.text.trim(),
+      filter: filter,
+    );
   }
 
   Widget _buildDoctorList() {
-    if (_doctors.isEmpty) {
+    final doctors = _docsNotifier.doctors; // Read mapped data from the Singleton Vault
+    if (doctors.isEmpty) {
       return Center(
         child: Text(
           "No doctors found",
@@ -370,10 +317,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      itemCount: _doctors.length,
+      itemCount: doctors.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
-        final doctor = _doctors[index];
+        final doctor = doctors[index];
         return DoctorListCard(
           id: doctor['id'],
           name: doctor['full_name'] ?? 'Unknown',
@@ -394,8 +341,8 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   }
 
   // Facility Grid Builders
-  Widget _buildHospitalGrid() => _buildFacilityGrid(_hospitals);
-  Widget _buildClinicGrid() => _buildFacilityGrid(_clinics);
+  Widget _buildHospitalGrid() => _buildFacilityGrid(_docsNotifier.hospitals);
+  Widget _buildClinicGrid() => _buildFacilityGrid(_docsNotifier.clinics);
 
   Widget _buildFacilityGrid(List<Map<String, dynamic>> items) {
     return GridView.builder(
@@ -453,99 +400,5 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-  // --- PRO FIX: The Glitch-Free Background Skeleton ---
-  Widget _buildBackgroundSkeleton(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final skeletonColor =
-        isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.04);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Dummy Clean Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 160,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: skeletonColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: skeletonColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // 2. Dummy Search Bar (Eliminates the "random white text" bug!)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                height: 54,
-                decoration: BoxDecoration(
-                  color: skeletonColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-
-              // 3. Dummy Filter Chips
-              Container(
-                height: 40,
-                margin: const EdgeInsets.only(top: 16, bottom: 16),
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: List.generate(
-                    4,
-                    (index) => Container(
-                      width: index == 0 ? 60 : 90,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: skeletonColor,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // 4. Dummy Cards
-              Expanded(
-                child: ListView.separated(
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                  itemCount: 4,
-                  separatorBuilder: (_, __) => const SizedBox(height: 16),
-                  itemBuilder:
-                      (context, index) => Container(
-                        height: 110,
-                        decoration: AppStyles.surfaceCard(
-                          context,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

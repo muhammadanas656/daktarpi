@@ -1,13 +1,36 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../data/notification_repository.dart';
 
-class NotificationNotifier extends ChangeNotifier {
-  NotificationNotifier._();
+class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
+  NotificationNotifier._() {
+    WidgetsBinding.instance.addObserver(this);
+    // Periodically refresh listeners so time-released notifications appear automatically
+    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      notifyListeners();
+    });
+  }
   static final NotificationNotifier instance = NotificationNotifier._();
 
   final NotificationRepository _repo = NotificationRepository();
   List<Map<String, dynamic>> _notifications = [];
+  Timer? _autoRefreshTimer;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh UI to reveal any newly matured time-released notifications
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   // PRO FIX: Getter now filters out future notifications for the unread count!
   List<Map<String, dynamic>> get notifications => _notifications;
@@ -30,11 +53,12 @@ class NotificationNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  // PRO FIX: Added optional scheduledTime parameter
+  // PRO FIX: Added optional payload to link notifications directly to appointment IDs
   Future<void> addNotification({
     required String title,
     required String body,
     DateTime? scheduledTime,
+    String? payload,
   }) async {
     final newNotif = {
       'id': const Uuid().v4(),
@@ -43,6 +67,7 @@ class NotificationNotifier extends ChangeNotifier {
       // Use the scheduled time if provided, otherwise use now
       'timestamp': (scheduledTime ?? DateTime.now()).toIso8601String(),
       'is_read': false,
+      'payload': payload, // Store the payload so we can find it later!
     };
 
     _notifications.insert(0, newNotif);
@@ -82,5 +107,19 @@ class NotificationNotifier extends ChangeNotifier {
     _notifications.removeWhere((n) => n['id'] == id);
     await _repo.saveNotifications(_notifications);
     notifyListeners();
+  }
+
+  // PRO FIX: Scrubber function to delete "ghost" notifications when an appointment is canceled
+  Future<void> deleteNotificationsByPayload(String payload) async {
+    final initialLength = _notifications.length;
+
+    // Remove any future or current notification that carries this specific payload
+    _notifications.removeWhere((n) => n['payload'] == payload);
+
+    // Only save and update the UI if we actually deleted something
+    if (_notifications.length != initialLength) {
+      await _repo.saveNotifications(_notifications);
+      notifyListeners();
+    }
   }
 }

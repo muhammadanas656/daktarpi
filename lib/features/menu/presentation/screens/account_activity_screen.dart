@@ -6,7 +6,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../presentation/widgets/review_dialog.dart';
 import '../../../../core/network/network_notifier.dart';
-import '../../../../features/appointments/presentation/appointment_notifier.dart'; // PRO FIX: Imported Notifier
+import '../../../../features/appointments/presentation/appointment_notifier.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class AccountActivityScreen extends StatefulWidget {
   const AccountActivityScreen({super.key});
@@ -100,7 +101,14 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       builder:
           (ctx) => ReviewDialog(
             appointment: appointment,
-            onReviewSubmitted: () {}, // Handled silently by the Vault now!
+            onReviewSubmitted: () {
+              // PRO FIX: Instantly mutate the local RAM state and redraw
+              if (mounted) {
+                setState(() {
+                  appointment['has_review'] = true;
+                });
+              }
+            },
           ),
     );
   }
@@ -148,7 +156,7 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       body:
           (isLoading && activities.isEmpty)
               ? const Center(
-                child: CircularProgressIndicator(color: AppColors.primaryGreen),
+                child: AppLoader(color: AppColors.primaryGreen),
               )
               : activities.isEmpty
               ? _buildEmptyState()
@@ -236,37 +244,73 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                                   ),
                                 ),
 
-                              if (action == 'COMPLETED' &&
-                                  item['has_review'] != true) ...[
+                              if (action == 'COMPLETED') ...[
                                 const SizedBox(height: 16),
-                                OutlinedButton.icon(
-                                  onPressed:
-                                      () => _showReviewDialog(context, item),
-                                  icon: const Icon(
-                                    Icons.star_rate_rounded,
-                                    size: 18,
-                                  ),
-                                  label: const Text(
-                                    "Leave a Review",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                if (item['has_review'] == true)
+                                  // PRO FIX: Added the "Review Submitted" unclickable state
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                      horizontal: 12,
                                     ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppColors.primaryGreen,
-                                    side: const BorderSide(
-                                      color: AppColors.primaryGreen,
-                                      width: 1.5,
-                                    ),
-                                    minimumSize: const Size(
-                                      double.infinity,
-                                      40,
-                                    ),
-                                    shape: RoundedRectangleBorder(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: Colors.grey.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle_outline,
+                                          color: Colors.grey,
+                                          size: 16,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          "Review Submitted",
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  OutlinedButton.icon(
+                                    onPressed:
+                                        () => _showReviewDialog(context, item),
+                                    icon: const Icon(
+                                      Icons.star_rate_rounded,
+                                      size: 18,
+                                    ),
+                                    label: const Text(
+                                      "Leave a Review",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppColors.primaryGreen,
+                                      side: const BorderSide(
+                                        color: AppColors.primaryGreen,
+                                        width: 1.5,
+                                      ),
+                                      minimumSize: const Size(
+                                        double.infinity,
+                                        40,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
                                   ),
-                                ),
                               ],
 
                               if (action == 'MISSED') ...[

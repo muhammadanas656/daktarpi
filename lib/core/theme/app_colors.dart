@@ -21,6 +21,7 @@ class AppColors {
     0xFF1E293B,
   ); // Slate 800 (Elevated cards)
   static const Color darkBorder = Color(0xFF334155); // Slate 700
+  static const Color deepMedicalSlate = Color(0xFF1E2833);
   static const Color darkTextPrimary = Color(
     0xFFF8FAFC,
   ); // Slate 50 (Off-white, no glare)

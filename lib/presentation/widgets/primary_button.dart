@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
+import '../../core/widgets/app_loader.dart';
 import '../../core/theme/app_shapes.dart';
 import '../../core/theme/app_text_styles.dart';
 
@@ -12,6 +13,8 @@ class PrimaryButton extends StatelessWidget {
   final double height;
   final double borderRadius;
   final double fontSize;
+  final IconData? icon;
+  final Widget? customIcon;
 
   const PrimaryButton({
     super.key,
@@ -22,6 +25,8 @@ class PrimaryButton extends StatelessWidget {
     this.height = AppDimens.buttonHeight,
     this.borderRadius = AppShapes.radiusLg,
     this.fontSize = 16,
+    this.icon,
+    this.customIcon,
   });
 
   @override
@@ -47,22 +52,42 @@ class PrimaryButton extends StatelessWidget {
                 ? SizedBox(
                   width: 24,
                   height: 24,
-                  child: CircularProgressIndicator(
+                  child: const AppLoader(
                     color: Colors.white,
                     strokeWidth: 2,
                   ),
                 )
-                : FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    label,
-                    style: AppTextStyles.button(context).copyWith(
-                      fontSize: fontSize,
-                      // PRO FIX: Ensures contrast is always maintained
-                      color: Colors.white, 
-                    ),
-                  ),
-                ),
+                : (icon != null || customIcon != null)
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          customIcon ?? Icon(icon, color: Colors.white, size: 20),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                label,
+                                style: AppTextStyles.button(context).copyWith(
+                                  fontSize: fontSize,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          label,
+                          style: AppTextStyles.button(context).copyWith(
+                            fontSize: fontSize,
+                            color: Colors.white, 
+                          ),
+                        ),
+                      ),
       ),
     );
   }

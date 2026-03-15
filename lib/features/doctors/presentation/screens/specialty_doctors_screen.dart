@@ -10,6 +10,7 @@ import '../../../profile/presentation/profile_notifier.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../data/doctor_repository.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class SpecialtyDoctorsScreen extends StatefulWidget {
   final String specialtyId;
@@ -71,7 +72,8 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      setState(() => _isLoading = true);
+      // PRO FIX: Removed setState(() => _isLoading = true);
+      // Let the list update transparently in the background instead of flashing
       _fetchData(query: _searchController.text);
     });
   }
@@ -184,7 +186,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
                 child:
                     _isLoading
                         ? const Center(
-                          child: CircularProgressIndicator(
+                          child: AppLoader(
                             color: AppColors.primaryGreen,
                           ),
                         )

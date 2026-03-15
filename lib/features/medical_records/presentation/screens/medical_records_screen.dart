@@ -14,6 +14,7 @@ import '../../../../core/security/biometric_auth_service.dart';
 import '../../../../features/auth/data/trusted_device_repository.dart';
 import '../../../../features/medical_records/data/medical_record.dart';
 import '../../../../features/medical_records/data/medical_record_repository.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
 import '../models/medical_record_route_args.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
@@ -21,6 +22,8 @@ import '../../../settings/presentation/settings_notifier.dart'; // IMPORTED
 import '../widgets/record_card.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../../core/network/network_notifier.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -138,71 +141,133 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     }
   }
 
-  void _showSetupSuggestion() {
-    showDialog(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text("Secure Your Records"),
-            content: Text(
-              "Protect your medical records for extra security by enabling 2FA or Biometrics in Settings.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text("Later"),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  context.push(AppRoutes.settings);
-                },
-                child: Text("Go to Settings"),
-              ),
-            ],
-          ),
-    );
-  }
-
   String _getCleanFileName(String path) {
     return path.split('/').last.replaceFirst(RegExp(r'^\d+_'), '');
   }
 
   Future<void> _deleteRecord(MedicalRecord record) async {
-    final confirm = await showDialog<bool>(
+    await showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text("Delete Record?"),
-            content: Text(
-              "Are you sure you want to delete this record? This action cannot be undone.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text("Cancel"),
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (dialogCtx) {
+        bool isDeleting = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AppFloatingDialog(
+              headerIcon: Icons.delete_forever_rounded,
+              iconColor: AppColors.dangerRed,
+              title: "Delete Record?",
+              description:
+                  "Are you sure you want to delete this record? This action cannot be undone.",
+              isUpdating: isDeleting,
+              content: const SizedBox.shrink(),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isDeleting ? null : () => Navigator.pop(dialogCtx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Delete",
+                      backgroundColor: AppColors.dangerRed,
+                      onTap:
+                          isDeleting
+                              ? () {}
+                              : () async {
+                                setDialogState(() => isDeleting = true);
+                                try {
+                                  await _repository.deleteRecord(
+                                    record.id,
+                                    record.fileUrls,
+                                  );
+                                  if (dialogCtx.mounted) {
+                                    Navigator.pop(dialogCtx);
+                                  }
+                                  if (mounted) {
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      "Record deleted successfully",
+                                    );
+                                    _fetchRecords();
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    CustomSnackbar.showError(
+                                      context,
+                                      "Failed to delete: $e",
+                                    );
+                                  }
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setDialogState(() => isDeleting = false);
+                                  }
+                                }
+                              },
+                    ),
+                  ),
+                ],
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text("Delete", style: TextStyle(color: Colors.red)),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showSetupSuggestion() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (dialogCtx) {
+        return AppFloatingDialog(
+          headerIcon: Icons.security_rounded,
+          iconColor: AppColors.primaryGreen,
+          title: "Secure Your Records",
+          description:
+              "Protect your medical records for extra security by enabling 2FA or Biometrics in Settings.",
+          isUpdating: false,
+          content: const SizedBox.shrink(),
+          actions: Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text(
+                    "Later",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: PrimaryButton(
+                  label: "Settings",
+                  onTap: () {
+                    Navigator.pop(dialogCtx);
+                    context.push(AppRoutes.settings);
+                  },
+                ),
               ),
             ],
           ),
+        );
+      },
     );
-
-    if (confirm == true) {
-      try {
-        await _repository.deleteRecord(record.id, record.fileUrls);
-        if (mounted) {
-          CustomSnackbar.showSuccess(context, "Record deleted successfully");
-          _fetchRecords();
-        }
-      } catch (e) {
-        if (mounted) {
-          CustomSnackbar.showError(context, "Failed to delete: $e");
-        }
-      }
-    }
   }
 
   void _editRecord(MedicalRecord record) async {
@@ -480,16 +545,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
         return Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          appBar: AppBar(
-            title: Text("Medical Records", style: AppTextStyles.h2(context)),
-            centerTitle: true,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: Icon(Icons.arrow_back_ios_new_rounded),
-              onPressed: () => context.pop(),
-              color: context.colorTextDark,
-            ),
+          appBar: CustomAppBar(
+            title: "Medical Records",
+            onBackPressed: () => context.pop(),
             actions: [
               if (_hasSecurityConfigured)
                 IconButton(
@@ -531,9 +589,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
   Widget _buildBody(bool isLocked) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.primaryGreen),
-      );
+      return const AppLoader();
     }
     if (_errorMessage != null) {
       return Center(child: Text(_errorMessage!));

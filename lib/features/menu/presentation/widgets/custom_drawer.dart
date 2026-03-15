@@ -6,6 +6,8 @@ import '../../../profile/presentation/profile_notifier.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../../core/theme/app_styles.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
+import '../../../../presentation/widgets/primary_button.dart';
 
 class CustomDrawer extends StatefulWidget {
   final VoidCallback onClose;
@@ -47,63 +49,68 @@ class _CustomDrawerState extends State<CustomDrawer> {
   }
 
   Future<void> _showLogoutDialog(BuildContext parentContext) async {
-    final isDark = Theme.of(parentContext).brightness == Brightness.dark;
-
     return showDialog<void>(
       context: parentContext,
-      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          backgroundColor: Theme.of(parentContext).colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            'Log Out',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-              color: isDark ? Colors.white : Colors.black,
-            ),
-          ),
-          content: const Text(
-            'Are you sure you want to logout?',
-            style: TextStyle(color: Colors.grey, fontSize: 16),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  color: AppColors.primaryGreen,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+        bool isLoggingOut = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AppFloatingDialog(
+              headerIcon: Icons.logout_rounded,
+              iconColor: Colors.redAccent,
+              title: "Log Out",
+              description: "Are you sure you want to log out of your account?",
+              isUpdating: isLoggingOut,
+              content: const SizedBox.shrink(),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          isLoggingOut
+                              ? null
+                              : () => Navigator.pop(dialogContext),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Log Out",
+                      backgroundColor: Colors.redAccent,
+                      onTap:
+                          isLoggingOut
+                              ? () {}
+                              : () async {
+                                setDialogState(() => isLoggingOut = true);
+                                try {
+                                  _profileNotifier.clear();
+                                  await _profileRepo.signOut();
+                                  if (parentContext.mounted) {
+                                    parentContext.go('/login');
+                                  }
+                                } catch (e) {
+                                  // Silent catch for logout failure
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setDialogState(() => isLoggingOut = false);
+                                  }
+                                }
+                              },
+                    ),
+                  ),
+                ],
               ),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                // Clear notifier state
-                _profileNotifier.clear();
-                await _profileRepo.signOut();
-                if (parentContext.mounted) {
-                  parentContext.go('/login');
-                }
-              },
-              child: const Text(
-                'Ok',
-                style: TextStyle(
-                  color: AppColors.primaryGreen,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ],
+            );
+          },
         );
       },
     );

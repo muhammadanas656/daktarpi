@@ -1,0 +1,162 @@
+
+  error - Target of 
+URI doesn't exist: 'pac
+kage:provider/provider.
+dart' - lib\features\ap
+pointments\presentation
+\screens\my_appointment
+s_screen.dart:21:8 - 
+uri_does_not_exist
+  error - The method 
+'AppLoader' isn't 
+defined for the type '_
+ClinicLocationMapSectio
+nState' - lib\features\
+doctors\presentation\wi
+dgets\clinic_location_m
+ap_section.dart:623:36 
+- undefined_method
+  error - The name 
+'AppLoader' isn't a 
+class - lib\features\do
+ctors\presentation\widg
+ets\clinic_location_map
+_section.dart:705:68 - 
+creation_with_non_type
+  error - Missing 
+concrete 
+implementation of 
+'State.build' - lib\fea
+tures\menu\presentation
+\screens\linked_account
+s_screen.dart:32:7 - no
+n_abstract_class_inheri
+ts_abstract_member
+  error - The named 
+parameter 'child' is 
+required, but there's 
+no corresponding 
+argument - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:453:40 - missi
+ng_required_argument
+  error - A try block 
+must be followed by an 
+'on', 'catch', or 
+'finally' clause - lib\
+features\menu\presentat
+ion\screens\linked_acco
+unts_screen.dart:477:37
+ - missing_catch_or_fin
+ally
+  error - Expected to 
+find ';' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:520:38 - 
+expected_token
+  error - Expected an 
+identifier - lib\featur
+es\menu\presentation\sc
+reens\linked_accounts_s
+creen.dart:520:52 - 
+missing_identifier
+  error - Unexpected 
+text ',' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:520:52 - 
+unexpected_token
+  error - Expected to 
+find ';' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:521:31 - 
+expected_token
+  error - Expected an 
+identifier - lib\featur
+es\menu\presentation\sc
+reens\linked_accounts_s
+creen.dart:521:34 - 
+missing_identifier
+  error - Unexpected 
+text ',' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:521:34 - 
+unexpected_token
+  error - Expected to 
+find '}' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:522:21 - 
+expected_token
+  error - The method 
+'_buildProviderTile' 
+isn't defined for the 
+type '_LinkedAccountsSc
+reenState' - lib\featur
+es\menu\presentation\sc
+reens\linked_accounts_s
+creen.dart:525:19 - 
+undefined_method
+  error - The method 
+'_buildProviderTile' 
+isn't defined for the 
+type '_LinkedAccountsSc
+reenState' - lib\featur
+es\menu\presentation\sc
+reens\linked_accounts_s
+creen.dart:530:19 - 
+undefined_method
+  error - Expected to 
+find ']' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:537:5 - 
+expected_token
+  error - Expected to 
+find ')' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:537:6 - 
+expected_token
+  error - Expected to 
+find ']' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:537:6 - 
+expected_token
+  error - Expected to 
+find ';' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:538:3 - 
+expected_token
+  error - Expected to 
+find ')' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:539:1 - 
+expected_token
+  error - Expected to 
+find ';' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:539:1 - 
+expected_token
+  error - Expected to 
+find ')' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:540:1 - 
+expected_token
+  error - Expected to 
+find '}' - lib\features
+\menu\presentation\scre
+ens\linked_accounts_scr
+een.dart:540:1 - 
+expected_token
+
+

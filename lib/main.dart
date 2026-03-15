@@ -26,35 +26,44 @@ import 'features/settings/presentation/settings_notifier.dart';
 // 1. Add this TOP-LEVEL function (must be outside any class)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // This code runs when the app is in the background or terminated
-  try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  } catch (e) {
-    debugPrint('Firebase not initialized for this platform: $e');
-    return;
-  }
+  // A. Initialize the core engines for this isolated background worker
+  await Firebase.initializeApp();
+  await Hive.initFlutter();
 
+  debugPrint('🌙 Background Isolate Woke Up: Processing FCM Message');
+
+  // B. Check if it's a visible notification
   if (message.notification != null) {
-    await Hive.initFlutter();
-    final repo = NotificationRepository();
-    final notifications = await repo.getNotifications();
-    
+    final title = message.notification!.title ?? 'New Notification';
+    final body = message.notification!.body ?? '';
+    final payload = message.data.toString();
+
+    // C. Create the raw data map (mirroring what the Notifier does)
     final newNotif = {
       'id': const Uuid().v4(),
-      'title': message.notification!.title ?? 'New Notification',
-      'body': message.notification!.body ?? '',
+      'title': title,
+      'body': body,
       'timestamp': DateTime.now().toIso8601String(),
       'is_read': false,
+      'payload': payload,
     };
-    
+
+    // D. Talk directly to the physical database (bypassing the UI Notifier)
+    final repo = NotificationRepository();
+
+    // Fetch, insert, sort, and save
+    final notifications = await repo.getNotifications();
     notifications.insert(0, newNotif);
     notifications.sort(
       (a, b) => DateTime.parse(
         b['timestamp'],
       ).compareTo(DateTime.parse(a['timestamp'])),
     );
-    
+
     await repo.saveNotifications(notifications);
+    debugPrint(
+      '✅ Background Isolate: Successfully saved ghost notification to Hive!',
+    );
   }
 }
 
@@ -63,11 +72,15 @@ Future<void> main() async {
 
   // 1. Initialize Firebase
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     // 2. Add this line right after Firebase.initializeApp
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
-    debugPrint('Firebase not initialized for this platform (usually missing android firebase_options.dart): $e');
+    debugPrint(
+      'Firebase not initialized for this platform (usually missing android firebase_options.dart): $e',
+    );
   }
   await dotenv.load(fileName: ".env");
   await Hive.initFlutter();

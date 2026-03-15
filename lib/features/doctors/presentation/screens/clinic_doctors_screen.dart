@@ -9,6 +9,7 @@ import '../../data/doctor_repository.dart';
 import '../../presentation/favorites_notifier.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class ClinicDoctorsScreen extends StatefulWidget {
   final int clinicId;
@@ -136,7 +137,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(
+                        child: AppLoader(
                           color: AppColors.primaryGreen,
                         ),
                       );

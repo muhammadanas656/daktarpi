@@ -7,7 +7,8 @@ import '../../../../presentation/widgets/primary_button.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../settings/presentation/settings_notifier.dart';
 import 'settings_section_header.dart';
-import 'settings_tile.dart';
+import '../widgets/settings_tile.dart';
+import '../../../../core/widgets/app_loader.dart';
 
 class SettingsPreferencesSection extends StatefulWidget {
   final bool isBiometricEnabled;
@@ -24,6 +25,13 @@ class SettingsPreferencesSection extends StatefulWidget {
 
 class _SettingsPreferencesSectionState
     extends State<SettingsPreferencesSection> {
+  Future<void> _openNotificationSettingsDialog() async {
+    FocusScope.of(context).unfocus();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    _showNotificationSettingsDialog();
+  }
+
   String _getThemeName(ThemeMode mode) {
     switch (mode) {
       case ThemeMode.system:
@@ -63,11 +71,20 @@ class _SettingsPreferencesSectionState
   }
 
   // --- PRO FIX: Premium Adaptive Glass Floating Dialog ---
+  // --- PRO FIX: Premium Adaptive Glass Floating Dialog ---
   void _showNotificationSettingsDialog() {
+    // 1. Read the state ONCE before the dialog opens.
+    // This detaches it from instant offline background updates.
+    bool localGlobalEnabled = SettingsNotifier.instance.notificationsEnabled;
+    bool localBookingEnabled = SettingsNotifier.instance.bookingAlertsEnabled;
+    bool localReminderEnabled = SettingsNotifier.instance.reminderAlertsEnabled;
+    bool localAppUpdatesEnabled = SettingsNotifier.instance.appUpdatesEnabled;
+    bool isUpdating = false;
+
     showDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6), // Rich backdrop
-      builder: (context) {
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (dialogContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -75,300 +92,444 @@ class _SettingsPreferencesSectionState
             horizontal: 20,
             vertical: 24,
           ),
-          child: AnimatedBuilder(
-            animation: SettingsNotifier.instance,
-            builder: (context, child) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              final isGlobalEnabled =
-                  SettingsNotifier.instance.notificationsEnabled;
+          // 2. ONLY StatefulBuilder. AnimatedBuilder is completely removed!
+          child: StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              final isDark = Theme.of(ctx).brightness == Brightness.dark;
 
-              return Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color:
-                        isDark
-                            ? AppColors.darkBorder
-                            : Colors.grey.withValues(alpha: 0.2),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.15),
-                      blurRadius: 50,
-                      offset: const Offset(0, 15),
-                    ),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Header Icon
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
+              return RepaintBoundary(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
                           color:
-                              isGlobalEnabled
-                                  ? AppColors.primaryGreen.withValues(
-                                    alpha: 0.1,
-                                  )
-                                  : Colors.grey.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
+                              isDark
+                                  ? AppColors.darkBorder
+                                  : Colors.grey.withValues(alpha: 0.2),
+                          width: 1.5,
                         ),
-                        child: Icon(
-                          isGlobalEnabled
-                              ? Icons.notifications_active_rounded
-                              : Icons.notifications_off_rounded,
-                          color:
-                              isGlobalEnabled
-                                  ? AppColors.primaryGreen
-                                  : Colors.grey,
-                          size: 32,
-                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primaryGreen.withValues(
+                              alpha: 0.15,
+                            ),
+                            blurRadius: 50,
+                            offset: const Offset(0, 15),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        "Notifications",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        isGlobalEnabled
-                            ? "DaktarPai alerts are active."
-                            : "All alerts are currently muted.",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      // Content Container
-                      Container(
-                        decoration: AppStyles.surfaceCard(
-                          context,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        // PRO FIX: Move clipping to a child ClipRRect. This protects the outer border from getting "shaved" or cut off.
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
+                      child: AbsorbPointer(
+                        absorbing: isUpdating,
+                        child: SingleChildScrollView(
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              // 1. Master Toggle
-                              SwitchListTile(
-                                value: isGlobalEnabled,
-                                onChanged: (val) async {
-                                  await SettingsNotifier.instance
-                                      .updateNotificationsEnabled(val);
-                                  if (!val) {
-                                    await AppointmentNotificationService
-                                        .instance
-                                        .cancelAllReminders();
-                                  }
-                                },
-                                activeColor: AppColors.primaryGreen,
-                                // PRO FIX: Explicit padding ensures perfect alignment with the sub-toggles below
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 4,
+                              // Header Icon
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color:
+                                      localGlobalEnabled
+                                          ? AppColors.primaryGreen.withValues(
+                                            alpha: 0.1,
+                                          )
+                                          : Colors.grey.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
                                 ),
-                                title: Text(
-                                  "Allow Notifications",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: context.colorTextDark,
+                                child: Icon(
+                                  localGlobalEnabled
+                                      ? Icons.notifications_active_rounded
+                                      : Icons.notifications_off_rounded,
+                                  color:
+                                      localGlobalEnabled
+                                          ? AppColors.primaryGreen
+                                          : Colors.grey,
+                                  size: 32,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                "Notifications",
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                localGlobalEnabled
+                                    ? "DaktarPai alerts are active."
+                                    : "All alerts are currently muted.",
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Content Container
+                              Container(
+                                decoration: AppStyles.surfaceCard(
+                                  context,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Column(
+                                    children: [
+                                      // 1. Master Toggle
+                                      SwitchListTile(
+                                        value: localGlobalEnabled,
+                                        onChanged: (val) async {
+                                          setDialogState(
+                                            () => isUpdating = true,
+                                          );
+                                          try {
+                                            await SettingsNotifier.instance
+                                                .updateNotificationsEnabled(
+                                                  val,
+                                                );
+                                            if (!val) {
+                                              await AppointmentNotificationService
+                                                  .instance
+                                                  .cancelAllReminders();
+                                            }
+                                            if (ctx.mounted) {
+                                              setDialogState(
+                                                () => localGlobalEnabled = val,
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              CustomSnackbar.showError(
+                                                context,
+                                                "Network error: Couldn't update",
+                                              );
+                                            }
+                                          } finally {
+                                            if (ctx.mounted) {
+                                              setDialogState(
+                                                () => isUpdating = false,
+                                              );
+                                            }
+                                          }
+                                        },
+                                        activeColor: AppColors.primaryGreen,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 4,
+                                            ),
+                                        title: Text(
+                                          "Allow Notifications",
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: context.colorTextDark,
+                                          ),
+                                        ),
+                                      ),
+
+                                      // 2. Sub-Toggles (Animated Expansion)
+                                      AnimatedSize(
+                                        duration: const Duration(
+                                          milliseconds: 300,
+                                        ),
+                                        curve: Curves.easeOutCubic,
+                                        child:
+                                            localGlobalEnabled
+                                                ? Container(
+                                                  color:
+                                                      isDark
+                                                          ? Colors.black
+                                                              .withValues(
+                                                                alpha: 0.2,
+                                                              )
+                                                          : Colors.grey[50],
+                                                  child: Column(
+                                                    children: [
+                                                      Divider(
+                                                        height: 1,
+                                                        color: context
+                                                            .colorBorder
+                                                            .withValues(
+                                                              alpha: 0.5,
+                                                            ),
+                                                      ),
+                                                      _buildDialogToggle(
+                                                        context: ctx,
+                                                        title:
+                                                            "Booking Confirmations",
+                                                        value:
+                                                            localBookingEnabled,
+                                                        onChanged: (val) async {
+                                                          setDialogState(
+                                                            () =>
+                                                                isUpdating =
+                                                                    true,
+                                                          );
+                                                          try {
+                                                            await SettingsNotifier
+                                                                .instance
+                                                                .updateBookingAlertsEnabled(
+                                                                  val,
+                                                                );
+                                                            if (ctx.mounted) {
+                                                              setDialogState(
+                                                                () =>
+                                                                    localBookingEnabled =
+                                                                        val,
+                                                              );
+                                                            }
+                                                          } catch (e) {
+                                                            if (mounted) {
+                                                              CustomSnackbar.showError(
+                                                                context,
+                                                                "Network error: Couldn't update",
+                                                              );
+                                                            }
+                                                          } finally {
+                                                            if (ctx.mounted) {
+                                                              setDialogState(
+                                                                () =>
+                                                                    isUpdating =
+                                                                        false,
+                                                              );
+                                                            }
+                                                          }
+                                                        },
+                                                      ),
+                                                      Divider(
+                                                        height: 1,
+                                                        indent: 16,
+                                                        endIndent: 16,
+                                                        color: context
+                                                            .colorBorder
+                                                            .withValues(
+                                                              alpha: 0.3,
+                                                            ),
+                                                      ),
+                                                      _buildDialogToggle(
+                                                        context: ctx,
+                                                        title:
+                                                            "Appointment Reminders",
+                                                        value:
+                                                            localReminderEnabled,
+                                                        onChanged: (val) async {
+                                                          setDialogState(
+                                                            () =>
+                                                                isUpdating =
+                                                                    true,
+                                                          );
+                                                          try {
+                                                            await SettingsNotifier
+                                                                .instance
+                                                                .updateReminderAlertsEnabled(
+                                                                  val,
+                                                                );
+                                                            if (!val) {
+                                                              await AppointmentNotificationService
+                                                                  .instance
+                                                                  .cancelAllReminders();
+                                                            }
+                                                            if (ctx.mounted) {
+                                                              setDialogState(
+                                                                () =>
+                                                                    localReminderEnabled =
+                                                                        val,
+                                                              );
+                                                            }
+                                                          } catch (e) {
+                                                            if (mounted) {
+                                                              CustomSnackbar.showError(
+                                                                context,
+                                                                "Network error: Couldn't update",
+                                                              );
+                                                            }
+                                                          } finally {
+                                                            if (ctx.mounted) {
+                                                              setDialogState(
+                                                                () =>
+                                                                    isUpdating =
+                                                                        false,
+                                                              );
+                                                            }
+                                                          }
+                                                        },
+                                                      ),
+
+                                                      // Inline Time Selector
+                                                      AnimatedSize(
+                                                        duration:
+                                                            const Duration(
+                                                              milliseconds: 250,
+                                                            ),
+                                                        child:
+                                                            localReminderEnabled
+                                                                ? InkWell(
+                                                                  onTap: () async {
+                                                                    await _showReminderTimeSelectionDialog();
+                                                                    if (ctx
+                                                                        .mounted) {
+                                                                      setDialogState(
+                                                                        () {},
+                                                                      );
+                                                                    }
+                                                                  },
+                                                                  child: Padding(
+                                                                    padding: const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          16,
+                                                                      vertical:
+                                                                          12,
+                                                                    ),
+                                                                    child: Row(
+                                                                      mainAxisAlignment:
+                                                                          MainAxisAlignment
+                                                                              .spaceBetween,
+                                                                      children: [
+                                                                        const Text(
+                                                                          "Alert Time",
+                                                                          style: TextStyle(
+                                                                            fontSize:
+                                                                                14,
+                                                                            color:
+                                                                                Colors.grey,
+                                                                            fontWeight:
+                                                                                FontWeight.w600,
+                                                                          ),
+                                                                        ),
+                                                                        Row(
+                                                                          children: [
+                                                                            Text(
+                                                                              _getReminderTimeName(
+                                                                                SettingsNotifier.instance.globalReminderMinutes,
+                                                                              ),
+                                                                              style: const TextStyle(
+                                                                                fontSize:
+                                                                                    14,
+                                                                                color:
+                                                                                    AppColors.primaryGreen,
+                                                                                fontWeight:
+                                                                                    FontWeight.bold,
+                                                                              ),
+                                                                            ),
+                                                                            const SizedBox(
+                                                                              width:
+                                                                                  4,
+                                                                            ),
+                                                                            const Icon(
+                                                                              Icons.arrow_drop_down_rounded,
+                                                                              color:
+                                                                                  AppColors.primaryGreen,
+                                                                              size:
+                                                                                  18,
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                )
+                                                                : const SizedBox.shrink(),
+                                                      ),
+
+                                                      Divider(
+                                                        height: 1,
+                                                        indent: 16,
+                                                        endIndent: 16,
+                                                        color: context
+                                                            .colorBorder
+                                                            .withValues(
+                                                              alpha: 0.3,
+                                                            ),
+                                                      ),
+                                                      _buildDialogToggle(
+                                                        context: ctx,
+                                                        title: "App Updates",
+                                                        value:
+                                                            localAppUpdatesEnabled,
+                                                        onChanged: (val) async {
+                                                          setDialogState(
+                                                            () =>
+                                                                isUpdating =
+                                                                    true,
+                                                          );
+                                                          try {
+                                                            await SettingsNotifier
+                                                                .instance
+                                                                .updateAppUpdatesEnabled(
+                                                                  val,
+                                                                );
+                                                            if (ctx.mounted) {
+                                                              setDialogState(
+                                                                () =>
+                                                                    localAppUpdatesEnabled =
+                                                                        val,
+                                                              );
+                                                            }
+                                                          } catch (e) {
+                                                            if (mounted) {
+                                                              CustomSnackbar.showError(
+                                                                context,
+                                                                "Network error: Couldn't update",
+                                                              );
+                                                            }
+                                                          } finally {
+                                                            if (ctx.mounted) {
+                                                              setDialogState(
+                                                                () =>
+                                                                    isUpdating =
+                                                                        false,
+                                                              );
+                                                            }
+                                                          }
+                                                        },
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                    ],
+                                                  ),
+                                                )
+                                                : const SizedBox.shrink(),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-
-                              // 2. Sub-Toggles (Animated Expansion)
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOutCubic,
-                                child:
-                                    isGlobalEnabled
-                                        ? Container(
-                                          color:
-                                              isDark
-                                                  ? Colors.black.withValues(
-                                                    alpha: 0.2,
-                                                  )
-                                                  : Colors.grey[50],
-                                          child: Column(
-                                            children: [
-                                              Divider(
-                                                height: 1,
-                                                color: context.colorBorder
-                                                    .withValues(alpha: 0.5),
-                                              ),
-                                              _buildDialogToggle(
-                                                context: context,
-                                                title: "Booking Confirmations",
-                                                value:
-                                                    SettingsNotifier
-                                                        .instance
-                                                        .bookingAlertsEnabled,
-                                                onChanged:
-                                                    (val) => SettingsNotifier
-                                                        .instance
-                                                        .updateBookingAlertsEnabled(
-                                                          val,
-                                                        ),
-                                              ),
-                                              Divider(
-                                                height: 1,
-                                                indent: 16,
-                                                endIndent: 16,
-                                                color: context.colorBorder
-                                                    .withValues(alpha: 0.3),
-                                              ),
-                                              _buildDialogToggle(
-                                                context: context,
-                                                title: "Appointment Reminders",
-                                                value:
-                                                    SettingsNotifier
-                                                        .instance
-                                                        .reminderAlertsEnabled,
-                                                onChanged: (val) {
-                                                  SettingsNotifier.instance
-                                                      .updateReminderAlertsEnabled(
-                                                        val,
-                                                      );
-                                                  if (!val) {
-                                                    AppointmentNotificationService
-                                                        .instance
-                                                        .cancelAllReminders();
-                                                  }
-                                                },
-                                              ),
-
-                                              // Inline Time Selector
-                                              AnimatedSize(
-                                                duration: const Duration(
-                                                  milliseconds: 250,
-                                                ),
-                                                child:
-                                                    SettingsNotifier
-                                                            .instance
-                                                            .reminderAlertsEnabled
-                                                        ? InkWell(
-                                                          onTap:
-                                                              _showReminderTimeSelectionDialog,
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      16,
-                                                                  vertical: 12,
-                                                                ),
-                                                            child: Row(
-                                                              mainAxisAlignment:
-                                                                  MainAxisAlignment
-                                                                      .spaceBetween,
-                                                              children: [
-                                                                const Text(
-                                                                  "Alert Time",
-                                                                  style: TextStyle(
-                                                                    fontSize:
-                                                                        14,
-                                                                    color:
-                                                                        Colors
-                                                                            .grey,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w600,
-                                                                  ),
-                                                                ),
-                                                                Row(
-                                                                  children: [
-                                                                    Text(
-                                                                      _getReminderTimeName(
-                                                                        SettingsNotifier
-                                                                            .instance
-                                                                            .globalReminderMinutes,
-                                                                      ),
-                                                                      style: const TextStyle(
-                                                                        fontSize:
-                                                                            14,
-                                                                        color:
-                                                                            AppColors.primaryGreen,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 4,
-                                                                    ),
-                                                                    const Icon(
-                                                                      Icons
-                                                                          .arrow_drop_down_rounded,
-                                                                      color:
-                                                                          AppColors
-                                                                              .primaryGreen,
-                                                                      size: 18,
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        )
-                                                        : const SizedBox.shrink(),
-                                              ),
-
-                                              Divider(
-                                                height: 1,
-                                                indent: 16,
-                                                endIndent: 16,
-                                                color: context.colorBorder
-                                                    .withValues(alpha: 0.3),
-                                              ),
-                                              _buildDialogToggle(
-                                                context: context,
-                                                title: "App Updates",
-                                                value:
-                                                    SettingsNotifier
-                                                        .instance
-                                                        .appUpdatesEnabled,
-                                                onChanged:
-                                                    (val) => SettingsNotifier
-                                                        .instance
-                                                        .updateAppUpdatesEnabled(
-                                                          val,
-                                                        ),
-                                              ),
-
-                                              // PRO FIX: Added a tiny padding bumper so the bottom-most list item
-                                              // doesn't look cramped against the bottom curve
-                                              const SizedBox(height: 4),
-                                            ],
-                                          ),
-                                        )
-                                        : const SizedBox.shrink(),
+                              const SizedBox(height: 28),
+                              SizedBox(
+                                width: double.infinity,
+                                child: PrimaryButton(
+                                  label: "Done",
+                                  onTap: () => Navigator.pop(dialogContext),
+                                ),
                               ),
                             ],
                           ),
                         ),
                       ),
+                    ),
 
-                      const SizedBox(height: 28),
-                      SizedBox(
-                        width: double.infinity,
-                        child: PrimaryButton(
-                          label: "Done",
-                          onTap: () => Navigator.pop(context),
+                    if (isUpdating)
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.black54 : Colors.white54,
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        child: const AppLoader(
+                          color: AppColors.primaryGreen,
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               );
             },
@@ -402,8 +563,9 @@ class _SettingsPreferencesSectionState
   }
 
   // --- TIME SELECTION BOTTOM SHEET ---
-  void _showReminderTimeSelectionDialog() {
-    showModalBottomSheet(
+  Future<void> _showReminderTimeSelectionDialog() async {
+    // <--- Added Future<void> and async
+    await showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       isScrollControlled: true,
@@ -583,11 +745,15 @@ class _SettingsPreferencesSectionState
               ),
               child: Material(
                 color: Colors.transparent,
+                type: MaterialType.transparency,
                 child: InkWell(
+                  splashFactory: NoSplash.splashFactory,
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  overlayColor: WidgetStateProperty.all(Colors.transparent),
                   borderRadius: BorderRadius.circular(16),
                   onTap:
-                      () =>
-                          _showNotificationSettingsDialog(), // Triggers the Floating Window
+                      _openNotificationSettingsDialog, // Opens after the tap frame settles
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
