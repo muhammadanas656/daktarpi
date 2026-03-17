@@ -11,10 +11,21 @@ class AppointmentNotificationService {
   AppointmentNotificationService._();
   static final AppointmentNotificationService instance =
       AppointmentNotificationService._();
+  static const String _standardReminderTitle = 'Appointment reminder';
+  static const String _fiveHourWarningTitle = 'Upcoming Appointment Reminder';
+  static const String _morningOfReminderTitle = 'Appointment Today';
+  static const String _statusUpdateTitle = 'Appointment Status Update';
+  static const Set<String> _nonMissedReminderTitles = {
+    _standardReminderTitle,
+    _fiveHourWarningTitle,
+    _morningOfReminderTitle,
+  };
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  bool _permissionsRequested = false;
+  Future<void>? _permissionRequestFuture;
 
   bool get _isSupportedPlatform {
     if (kIsWeb) {
@@ -57,6 +68,47 @@ class AppointmentNotificationService {
     _initialized = true;
   }
 
+  Future<void> _ensurePermissions() async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
+    if (_permissionsRequested) {
+      return;
+    }
+    if (_permissionRequestFuture != null) {
+      await _permissionRequestFuture;
+      return;
+    }
+
+    final future = () async {
+      await initialize();
+
+      final androidImpl =
+          _plugin
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >();
+      await androidImpl?.requestNotificationsPermission();
+      await androidImpl?.requestExactAlarmsPermission();
+
+      final iosImpl =
+          _plugin
+              .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin
+              >();
+      await iosImpl?.requestPermissions(alert: true, badge: true, sound: true);
+
+      _permissionsRequested = true;
+    }();
+
+    _permissionRequestFuture = future;
+    try {
+      await future;
+    } finally {
+      _permissionRequestFuture = null;
+    }
+  }
+
   Future<void> showBookingConfirmation({
     required int appointmentId,
     required String doctorName,
@@ -65,6 +117,7 @@ class AppointmentNotificationService {
     if (!_isSupportedPlatform) return;
 
     try {
+      await _ensurePermissions();
       await initialize();
 
       const title = 'Booking Confirmed! ✅';
@@ -88,7 +141,9 @@ class AppointmentNotificationService {
         ),
       );
 
-      final immediateId = appointmentId.abs() + 100000;
+      // Keep the immediate confirmation on its own ID range so it cannot
+      // overwrite the morning-of appointment reminder for the same booking.
+      final immediateId = appointmentId.abs() + 400000;
       await _plugin.show(immediateId, title, body, notificationDetails);
     } catch (e) {
       debugPrint("Failed to show immediate confirmation notification: $e");
@@ -103,6 +158,7 @@ class AppointmentNotificationService {
     if (!_isSupportedPlatform) return;
 
     try {
+      await _ensurePermissions();
       await initialize();
 
       const notificationDetails = NotificationDetails(
@@ -123,7 +179,7 @@ class AppointmentNotificationService {
 
       final immediateId = DateTime.now().millisecondsSinceEpoch.remainder(
         100000,
-      );
+      ) + 500000;
 
       await _plugin.show(
         immediateId,
@@ -197,8 +253,11 @@ class AppointmentNotificationService {
     DateTime? appointmentEndDateTime,
     required int reminderMinutes,
     required String doctorName,
+    bool includeFiveHourWarning = true,
+    bool includeMissedStatusUpdate = true,
   }) async {
     if (!_isSupportedPlatform) return;
+    await _ensurePermissions();
     await initialize();
 
     final safeId = appointmentId.abs();
@@ -223,7 +282,7 @@ class AppointmentNotificationService {
     // 1. Standard Reminder (OS)
     await _scheduleWithFallback(
       id: safeId,
-      title: 'Appointment reminder',
+      title: _standardReminderTitle,
       body: 'You have an appointment with $doctorName at $appointmentTime.',
       triggerUtc: finalReminderTimeUtc,
       payload: payloadString,
@@ -232,14 +291,18 @@ class AppointmentNotificationService {
     // 2. The 5-Hour Cancellation Warning (OS)
     final cancellationWarningUtc =
         appointmentLocalDateTime.subtract(const Duration(hours: 5)).toUtc();
-    await _scheduleWithFallback(
-      id: safeId + 200000,
-      title: 'Upcoming Appointment Reminder',
-      body:
-          'Your visit with $doctorName is in 5 hours. Please note that cancellations cannot be made within 4 hours of your scheduled time.',
-      triggerUtc: cancellationWarningUtc,
-      payload: payloadString,
-    );
+    if (includeFiveHourWarning) {
+      await _scheduleWithFallback(
+        id: safeId + 200000,
+        title: _fiveHourWarningTitle,
+        body:
+            'Your visit with $doctorName is in 5 hours. Please note that cancellations cannot be made within 4 hours of your scheduled time.',
+        triggerUtc: cancellationWarningUtc,
+        payload: payloadString,
+      );
+    } else {
+      await _plugin.cancel(safeId + 200000);
+    }
 
     // 2.5 The Morning-of Notification (OS) - 8:00 AM on the day of the appointment
     final morningOfLocal = DateTime(
@@ -257,7 +320,7 @@ class AppointmentNotificationService {
         morningOfLocal.isBefore(appointmentLocalDateTime)) {
       await _scheduleWithFallback(
         id: safeId + 100000,
-        title: 'Appointment Today',
+        title: _morningOfReminderTitle,
         body:
             'You have a scheduled visit with $doctorName today at $appointmentTime.',
         triggerUtc: morningOfUtc,
@@ -270,14 +333,22 @@ class AppointmentNotificationService {
         appointmentEndDateTime ??
         appointmentLocalDateTime.add(const Duration(minutes: 30));
     final endDateTimeUtc = endDateTime.toUtc();
-    await _scheduleWithFallback(
-      id: safeId + 300000,
-      title: 'Appointment Status Update',
-      body:
-          'Your scheduled visit time has passed. If this appointment was missed or not completed, please open the app to contact the clinic or file a report.',
-      triggerUtc: endDateTimeUtc,
-      payload: payloadString,
-    );
+    if (includeMissedStatusUpdate) {
+      await _scheduleWithFallback(
+        id: safeId + 300000,
+        title: _statusUpdateTitle,
+        body:
+            'Your scheduled visit time has passed. If this appointment was missed or not completed, please open the app to contact the clinic or file a report.',
+        triggerUtc: endDateTimeUtc,
+        payload: payloadString,
+      );
+    } else {
+      await _plugin.cancel(safeId + 300000);
+      await NotificationNotifier.instance.deleteNotificationsByPayload(
+        payloadString,
+        excludedTitles: _nonMissedReminderTitles,
+      );
+    }
 
     // --- PRO FIX: INBOX SYNC WITH METADATA ---
     // We pass the appointmentId as 'payload' so we can find and delete these exact
@@ -285,16 +356,16 @@ class AppointmentNotificationService {
 
     if (finalReminderTimeUtc.isAfter(nowUtc)) {
       await NotificationNotifier.instance.addNotification(
-        title: 'Appointment reminder',
+        title: _standardReminderTitle,
         body: 'You have an appointment with $doctorName at $appointmentTime.',
         scheduledTime: finalReminderTimeUtc.toLocal(),
         payload: payloadString,
       );
     }
 
-    if (cancellationWarningUtc.isAfter(nowUtc)) {
+    if (includeFiveHourWarning && cancellationWarningUtc.isAfter(nowUtc)) {
       await NotificationNotifier.instance.addNotification(
-        title: 'Upcoming Appointment Reminder',
+        title: _fiveHourWarningTitle,
         body:
             'Your visit with $doctorName is in 5 hours. Please note that cancellations cannot be made within 4 hours of your scheduled time.',
         scheduledTime: cancellationWarningUtc.toLocal(),
@@ -305,7 +376,7 @@ class AppointmentNotificationService {
     if (morningOfUtc.isAfter(nowUtc) &&
         morningOfLocal.isBefore(appointmentLocalDateTime)) {
       await NotificationNotifier.instance.addNotification(
-        title: 'Appointment Today',
+        title: _morningOfReminderTitle,
         body:
             'You have a scheduled visit with $doctorName today at $appointmentTime.',
         scheduledTime: morningOfUtc.toLocal(),
@@ -313,9 +384,9 @@ class AppointmentNotificationService {
       );
     }
 
-    if (endDateTimeUtc.isAfter(nowUtc)) {
+    if (includeMissedStatusUpdate && endDateTimeUtc.isAfter(nowUtc)) {
       await NotificationNotifier.instance.addNotification(
-        title: 'Appointment Status Update',
+        title: _statusUpdateTitle,
         body:
             'Your scheduled visit time has passed. If this appointment was missed or not completed, please open the app to contact the clinic or file a report.',
         scheduledTime: endDateTime.toLocal(),
@@ -325,7 +396,10 @@ class AppointmentNotificationService {
   }
 
   /// Cancels all scheduled alerts tied to a specific appointment ID AND scrubs them from the inbox!
-  Future<void> cancelReminder(int appointmentId) async {
+  Future<void> cancelReminder(
+    int appointmentId, {
+    bool preserveMissedStatusUpdate = false,
+  }) async {
     if (!_isSupportedPlatform) return;
     await initialize();
 
@@ -335,11 +409,15 @@ class AppointmentNotificationService {
     await _plugin.cancel(safeId); // Standard Reminder
     await _plugin.cancel(safeId + 100000); // Morning-of Reminder
     await _plugin.cancel(safeId + 200000); // Cancellation Warning
-    await _plugin.cancel(safeId + 300000); // Time-Out Notification
+    if (!preserveMissedStatusUpdate) {
+      await _plugin.cancel(safeId + 300000); // Time-Out Notification
+    }
 
     // 2. PRO FIX: Scrub the future-dated "ghost" messages from the local Hive inbox!
     await NotificationNotifier.instance.deleteNotificationsByPayload(
       'appointment:$safeId',
+      excludedTitles:
+          preserveMissedStatusUpdate ? {_statusUpdateTitle} : const {},
     );
   }
 
@@ -350,19 +428,6 @@ class AppointmentNotificationService {
   }
 
   Future<void> requestPermissions() async {
-    final androidImpl =
-        _plugin
-            .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin
-            >();
-    await androidImpl?.requestNotificationsPermission();
-    await androidImpl?.requestExactAlarmsPermission();
-
-    final iosImpl =
-        _plugin
-            .resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin
-            >();
-    await iosImpl?.requestPermissions(alert: true, badge: true, sound: true);
+    await _ensurePermissions();
   }
 }

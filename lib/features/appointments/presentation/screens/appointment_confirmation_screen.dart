@@ -146,8 +146,10 @@ class _AppointmentConfirmationScreenState
           bool isBooked = _bookedSlots.contains(slotStr);
           bool isPast = false;
           if (isToday) {
-            if ((startMin / 60) < now.hour ||
-                ((startMin / 60) == now.hour && (startMin % 60) < now.minute)) {
+            final startHour = startMin ~/ 60;
+            final startMinute = startMin % 60;
+            if (startHour < now.hour ||
+                (startHour == now.hour && startMinute < now.minute)) {
               isPast = true;
             }
           }
@@ -188,6 +190,10 @@ class _AppointmentConfirmationScreenState
       'yyyy-MM-dd HH:mm',
     ).parse('$formattedDate ${times[0]}');
 
+    // --- PRO FIX: Extract the IDs from the attached records ---
+    final rawAttachedRecords = widget.patientDetails['attachedRecords'] as List<dynamic>? ?? [];
+    final attachedRecordIds = rawAttachedRecords.map((r) => r['id']).toList();
+
     // Prepare the final payload for the database
     final data = {
       'user_id': userId,
@@ -202,7 +208,11 @@ class _AppointmentConfirmationScreenState
       'patient_email': widget.patientDetails['email'],
       'patient_gender': widget.patientDetails['gender'],
       'patient_dob': widget.patientDetails['dob'],
+      // --- PRO FIX: Add the Image URL here so it saves to Supabase! ---
+      'patient_image_url': widget.patientDetails['imagePath'], 
+      
       'idempotency_key': widget.idempotencyKey,
+      'attached_record_ids': attachedRecordIds,
     };
 
     // Format display strings for the success popup later

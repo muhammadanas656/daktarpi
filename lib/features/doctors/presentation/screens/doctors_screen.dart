@@ -115,14 +115,29 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                       );
                     }
                     
-                    return RefreshIndicator(
-                      onRefresh: _fetchDoctors,
-                      color: AppColors.primaryGreen,
-                      child: _selectedFilter == 'Hospital'
-                          ? _buildHospitalGrid()
-                          : _selectedFilter == 'Clinic'
-                              ? _buildClinicGrid()
-                              : _buildDoctorList(),
+                    return Stack(
+                      children: [
+                        RefreshIndicator(
+                          onRefresh: _fetchDoctors,
+                          color: AppColors.primaryGreen,
+                          child: _selectedFilter == 'Hospital'
+                              ? _buildHospitalGrid()
+                              : _selectedFilter == 'Clinic'
+                                  ? _buildClinicGrid()
+                                  : _buildDoctorList(),
+                        ),
+                        if (_docsNotifier.isLoading && _docsNotifier.doctors.isNotEmpty)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: LinearProgressIndicator(
+                              color: AppColors.primaryGreen,
+                              backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.1),
+                              minHeight: 3,
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),

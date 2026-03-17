@@ -385,7 +385,6 @@ class ProfileRepository {
       return;
     }
 
-    // --- PRO FIX: SYNC GUARD ---
     await NetworkNotifier.instance.waitForSync();
 
     try {
@@ -394,6 +393,18 @@ class ProfileRepository {
           .delete()
           .eq('user_id', userId)
           .eq('relation', relation);
+          
+      // --- PRO FIX: Instant Cache Invalidation ---
+      // This stops the "Zombie Category" from reappearing when you go back and forth!
+      final cacheKey = 'saved_patients_$userId';
+      final box = await _getCacheBox();
+      final cachedData = box.get(cacheKey);
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        decoded.removeWhere((item) => item['relation'] == relation);
+        await box.put(cacheKey, jsonEncode(decoded));
+      }
+      
     } catch (e) {
       throw AppFailure.fromError(
         e,

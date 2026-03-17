@@ -6,7 +6,6 @@ import '../data/notification_repository.dart';
 class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
   NotificationNotifier._() {
     WidgetsBinding.instance.addObserver(this);
-    // Periodically refresh listeners so time-released notifications appear automatically
     _autoRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       notifyListeners();
     });
@@ -16,12 +15,13 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
   final NotificationRepository _repo = NotificationRepository();
   List<Map<String, dynamic>> _notifications = [];
   Timer? _autoRefreshTimer;
+  bool _hasLoaded = false;
+  Future<void>? _loadFuture;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Refresh UI to reveal any newly matured time-released notifications
-      notifyListeners();
+      unawaited(load(force: true));
     }
   }
 
@@ -32,7 +32,6 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // PRO FIX: Getter now filters out future notifications for the unread count!
   List<Map<String, dynamic>> get notifications => _notifications;
 
   int get unreadCount {
@@ -43,82 +42,126 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
     }).length;
   }
 
-  Future<void> load() async {
-    _notifications = await _repo.getNotifications();
-    _notifications.sort(
-      (a, b) => DateTime.parse(
-        b['timestamp'],
-      ).compareTo(DateTime.parse(a['timestamp'])),
+  void _sortNotifications(List<Map<String, dynamic>> notifications) {
+    notifications.sort(
+      (a, b) => DateTime.parse(b['timestamp']).compareTo(DateTime.parse(a['timestamp'])),
     );
-    notifyListeners();
   }
 
-  // PRO FIX: Added optional payload to link notifications directly to appointment IDs
+  Future<void> load({bool force = false}) async {
+    if (_hasLoaded && !force) return;
+    if (_loadFuture != null) {
+      await _loadFuture;
+      return;
+    }
+
+    final future = () async {
+      final loadedNotifications = await _repo.getNotifications();
+      _sortNotifications(loadedNotifications);
+      _notifications = loadedNotifications;
+      _hasLoaded = true;
+      notifyListeners();
+    }();
+
+    _loadFuture = future;
+    try {
+      await future;
+    } finally {
+      _loadFuture = null;
+    }
+  }
+
   Future<void> addNotification({
     required String title,
     required String body,
     DateTime? scheduledTime,
     String? payload,
+    String? messageId,
   }) async {
-    final newNotif = {
-      'id': const Uuid().v4(),
-      'title': title,
-      'body': body,
-      // Use the scheduled time if provided, otherwise use now
-      'timestamp': (scheduledTime ?? DateTime.now()).toIso8601String(),
-      'is_read': false,
-      'payload': payload, // Store the payload so we can find it later!
-    };
+    try {
+      await load();
 
-    _notifications.insert(0, newNotif);
-    // Re-sort so future ones stay at the top of the raw list until they unlock
-    _notifications.sort(
-      (a, b) => DateTime.parse(
-        b['timestamp'],
-      ).compareTo(DateTime.parse(a['timestamp'])),
-    );
+      if (messageId != null && messageId.isNotEmpty) {
+        final alreadyExists = _notifications.any((n) => n['message_id'] == messageId);
+        if (alreadyExists) return;
+      }
 
-    await _repo.saveNotifications(_notifications);
-    notifyListeners();
+      final newNotif = {
+        'id': const Uuid().v4(),
+        'title': title,
+        'body': body,
+        'timestamp': (scheduledTime ?? DateTime.now()).toIso8601String(),
+        'is_read': false,
+        'payload': payload,
+        if (messageId != null) 'message_id': messageId,
+      };
+
+      _notifications.insert(0, newNotif);
+      _sortNotifications(_notifications);
+
+      // Save locally for instant UI update, then push to Supabase
+      await _repo.saveLocalCache(_notifications);
+      await _repo.insertRemote(newNotif);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to add notification: $e');
+    }
   }
 
   Future<void> markAsRead(String id) async {
+    await load();
     final index = _notifications.indexWhere((n) => n['id'] == id);
     if (index != -1 && _notifications[index]['is_read'] == false) {
       _notifications[index]['is_read'] = true;
-      await _repo.saveNotifications(_notifications);
+      
+      await _repo.saveLocalCache(_notifications);
+      await _repo.updateReadStatusRemote(id, true);
       notifyListeners();
     }
   }
 
   Future<void> markAllAsRead() async {
+    await load();
     final now = DateTime.now();
     for (var n in _notifications) {
-      // Only mark visible ones as read
       if (DateTime.parse(n['timestamp']).isBefore(now)) {
         n['is_read'] = true;
       }
     }
-    await _repo.saveNotifications(_notifications);
+    await _repo.saveLocalCache(_notifications);
+    await _repo.markAllReadRemote();
     notifyListeners();
   }
 
   Future<void> deleteNotification(String id) async {
+    await load();
     _notifications.removeWhere((n) => n['id'] == id);
-    await _repo.saveNotifications(_notifications);
+    
+    await _repo.saveLocalCache(_notifications);
+    await _repo.deleteRemote(id);
     notifyListeners();
   }
 
-  // PRO FIX: Scrubber function to delete "ghost" notifications when an appointment is canceled
-  Future<void> deleteNotificationsByPayload(String payload) async {
+  Future<void> deleteNotificationsByPayload(
+    String payload, {
+    Set<String> excludedTitles = const {},
+  }) async {
+    await load();
     final initialLength = _notifications.length;
 
-    // Remove any future or current notification that carries this specific payload
-    _notifications.removeWhere((n) => n['payload'] == payload);
+    // Find the IDs we are about to delete so we can remove them from Supabase
+    final toDelete = _notifications.where(
+      (n) => n['payload'] == payload && !excludedTitles.contains(n['title']?.toString())
+    ).toList();
 
-    // Only save and update the UI if we actually deleted something
+    for (var n in toDelete) {
+      await _repo.deleteRemote(n['id']);
+    }
+
+    _notifications.removeWhere((n) => toDelete.contains(n));
+
     if (_notifications.length != initialLength) {
-      await _repo.saveNotifications(_notifications);
+      await _repo.saveLocalCache(_notifications);
       notifyListeners();
     }
   }

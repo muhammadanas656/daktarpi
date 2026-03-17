@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -19,6 +21,165 @@ class MedicalRecordRepository {
     : _client = client ?? Supabase.instance.client;
 
   String? get currentUserId => _client.auth.currentUser?.id;
+
+  String _normalizePath(String path) {
+    if (path.startsWith('file://')) {
+      return Uri.parse(path).toFilePath();
+    }
+    return path;
+  }
+
+  bool isLocalFilePath(String path) {
+    final normalizedPath = _normalizePath(path);
+    return normalizedPath.startsWith('/') ||
+        RegExp(r'^[A-Za-z]:[\\/]').hasMatch(normalizedPath);
+  }
+
+  String _fileExtension(String path) {
+    final normalizedPath = _normalizePath(path);
+    final fileName = normalizedPath.split(RegExp(r'[\\/]')).last;
+    final dotIndex = fileName.lastIndexOf('.');
+    if (dotIndex == -1) {
+      return '';
+    }
+    return fileName.substring(dotIndex);
+  }
+
+  String _displayFileName(String path) {
+    final normalizedPath = _normalizePath(path);
+    return normalizedPath.split(RegExp(r'[\\/]')).last;
+  }
+
+  String _cachedAttachmentName(String path) {
+    final encodedPath = base64Url.encode(utf8.encode(path)).replaceAll('=', '');
+    return '$encodedPath${_fileExtension(path)}';
+  }
+
+  Future<Directory> _getAttachmentDirectory() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final attachmentDir = Directory(
+      '${appDir.path}${Platform.pathSeparator}medical_record_attachments',
+    );
+    if (!await attachmentDir.exists()) {
+      await attachmentDir.create(recursive: true);
+    }
+    return attachmentDir;
+  }
+
+  Future<File> _getCachedAttachmentTarget(String path) async {
+    final attachmentDir = await _getAttachmentDirectory();
+    return File(
+      '${attachmentDir.path}${Platform.pathSeparator}${_cachedAttachmentName(path)}',
+    );
+  }
+
+  Future<File?> getLocalAttachmentFile(String path) async {
+    final normalizedPath = _normalizePath(path);
+    if (normalizedPath.isEmpty) {
+      return null;
+    }
+
+    if (isLocalFilePath(normalizedPath)) {
+      final localFile = File(normalizedPath);
+      if (await localFile.exists()) {
+        return localFile;
+      }
+      return null;
+    }
+
+    final cachedFile = await _getCachedAttachmentTarget(normalizedPath);
+    if (await cachedFile.exists()) {
+      return cachedFile;
+    }
+
+    // Backward compatibility with the previous cache location in the app root.
+    final appDir = await getApplicationDocumentsDirectory();
+    final legacyFile = File(
+      '${appDir.path}${Platform.pathSeparator}${_displayFileName(normalizedPath)}',
+    );
+    if (await legacyFile.exists()) {
+      return legacyFile;
+    }
+
+    return null;
+  }
+
+  Future<File?> cacheRemoteFile(String path, {String? signedUrl}) async {
+    if (isLocalFilePath(path)) {
+      return getLocalAttachmentFile(path);
+    }
+
+    final existingFile = await getLocalAttachmentFile(path);
+    if (existingFile != null) {
+      return existingFile;
+    }
+
+    final resolvedUrl = signedUrl ?? await getSignedUrl(path);
+    final response = await http.get(Uri.parse(resolvedUrl));
+    if (response.statusCode != 200) {
+      return null;
+    }
+
+    final targetFile = await _getCachedAttachmentTarget(path);
+    await targetFile.writeAsBytes(response.bodyBytes, flush: true);
+    return targetFile;
+  }
+
+  Future<List<String>> prepareFilesForSave(List<File> files) async {
+    if (!NetworkNotifier.instance.isOffline) {
+      return uploadFiles(files);
+    }
+
+    final attachmentDir = await _getAttachmentDirectory();
+    final stagedPaths = <String>[];
+
+    for (final file in files) {
+      final originalName = _displayFileName(file.path);
+      final stagedName =
+          'offline_${DateTime.now().microsecondsSinceEpoch}_$originalName';
+      final stagedFile = File(
+        '${attachmentDir.path}${Platform.pathSeparator}$stagedName',
+      );
+      final copiedFile = await file.copy(stagedFile.path);
+      stagedPaths.add(copiedFile.path);
+    }
+
+    return stagedPaths;
+  }
+
+  Future<String> _uploadLocalAttachment(String localPath) async {
+    final userId = currentUserId;
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing user.',
+        code: 'not_authenticated',
+      );
+    }
+
+    final file = File(_normalizePath(localPath));
+    final fileName =
+        '${DateTime.now().millisecondsSinceEpoch}_${_displayFileName(localPath)}';
+    final storagePath = '$userId/$fileName';
+    await _client.storage.from('medical_docs').upload(storagePath, file);
+    return storagePath;
+  }
+
+  Future<List<String>> _resolveFileUrlsForSync(List<dynamic> rawPaths) async {
+    final resolvedPaths = <String>[];
+
+    for (final rawPath in rawPaths) {
+      final path = rawPath.toString();
+      if (isLocalFilePath(path)) {
+        resolvedPaths.add(await _uploadLocalAttachment(path));
+      } else {
+        resolvedPaths.add(path);
+      }
+    }
+
+    return resolvedPaths;
+  }
 
   Future<Box> _getCacheBox() async {
     if (Hive.isBoxOpen(_cacheBoxName)) return Hive.box(_cacheBoxName);
@@ -63,9 +224,15 @@ class MedicalRecordRepository {
 
           switch (action) {
             case 'add_record':
+              payload['file_urls'] = await _resolveFileUrlsForSync(
+                payload['file_urls'] as List<dynamic>,
+              );
               await _client.from('medical_records').insert(payload);
               break;
             case 'update_record':
+              payload['data']['file_urls'] = await _resolveFileUrlsForSync(
+                payload['data']['file_urls'] as List<dynamic>,
+              );
               await _client
                   .from('medical_records')
                   .update(payload['data'])
@@ -75,9 +242,14 @@ class MedicalRecordRepository {
             case 'delete_record':
               if (payload['filePaths'] != null &&
                   (payload['filePaths'] as List).isNotEmpty) {
-                await _client.storage
-                    .from('medical_docs')
-                    .remove(List<String>.from(payload['filePaths']));
+                final remotePaths =
+                    (payload['filePaths'] as List)
+                        .map((path) => path.toString())
+                        .where((path) => !isLocalFilePath(path))
+                        .toList();
+                if (remotePaths.isNotEmpty) {
+                  await _client.storage.from('medical_docs').remove(remotePaths);
+                }
               }
               await _client
                   .from('medical_records')
@@ -228,15 +400,13 @@ class MedicalRecordRepository {
       final box = await _getCacheBox();
       final cacheKey = 'medical_records_$userId';
       final cachedData = box.get(cacheKey);
-
-      if (cachedData != null) {
-        final List<dynamic> decoded = jsonDecode(cachedData);
-        payload['id'] =
-            -DateTime.now().millisecondsSinceEpoch.remainder(100000);
-        payload['created_at'] = DateTime.now().toIso8601String();
-        decoded.insert(0, payload);
-        await box.put(cacheKey, jsonEncode(decoded));
-      }
+      final List<dynamic> decoded =
+          cachedData != null ? jsonDecode(cachedData) : <dynamic>[];
+      final offlineRecord = Map<String, dynamic>.from(payload)
+        ..['id'] = -DateTime.now().millisecondsSinceEpoch.remainder(100000)
+        ..['created_at'] = DateTime.now().toIso8601String();
+      decoded.insert(0, offlineRecord);
+      await box.put(cacheKey, jsonEncode(decoded));
       return;
     }
 
@@ -262,6 +432,14 @@ class MedicalRecordRepository {
         'user_id': userId,
         'filePaths': filePaths,
       });
+      final box = await _getCacheBox();
+      final cacheKey = 'medical_records_$userId';
+      final cachedData = box.get(cacheKey);
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        decoded.removeWhere((item) => item['id'] == id);
+        await box.put(cacheKey, jsonEncode(decoded));
+      }
       return;
     }
 
@@ -307,6 +485,20 @@ class MedicalRecordRepository {
         'user_id': userId,
         'data': payload,
       });
+      final box = await _getCacheBox();
+      final cacheKey = 'medical_records_$userId';
+      final cachedData = box.get(cacheKey);
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        final index = decoded.indexWhere((item) => item['id'] == id);
+        if (index != -1) {
+          decoded[index] = {
+            ...Map<String, dynamic>.from(decoded[index] as Map),
+            ...payload,
+          };
+          await box.put(cacheKey, jsonEncode(decoded));
+        }
+      }
       return;
     }
 

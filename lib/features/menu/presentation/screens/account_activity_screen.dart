@@ -22,11 +22,9 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
   @override
   void initState() {
     super.initState();
-    // PRO FIX: Instantly listen to the RAM Vault instead of fetching from DB
     _appointmentNotifier.addListener(_onNotifierChanged);
     NetworkNotifier.instance.addListener(_onNetworkChanged);
 
-    // Ensure data is loaded if they navigated here first
     if (_appointmentNotifier.activityLog.isEmpty) {
       _appointmentNotifier.fetchAppointments(isBackground: true);
     }
@@ -47,7 +45,6 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
     if (mounted) {
       setState(() {});
       if (!NetworkNotifier.instance.isOffline) {
-        // Silently sync in background when internet returns
         _appointmentNotifier.fetchAppointments(isBackground: true);
       }
     }
@@ -102,7 +99,6 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
           (ctx) => ReviewDialog(
             appointment: appointment,
             onReviewSubmitted: () {
-              // PRO FIX: Instantly mutate the local RAM state and redraw
               if (mounted) {
                 setState(() {
                   appointment['has_review'] = true;
@@ -123,14 +119,13 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       builder:
           (ctx) => ComplaintDialog(
             appointment: appointment,
-            onComplaintSubmitted: () {}, // Handled silently by the Vault now!
+            onComplaintSubmitted: () {},
           ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // PRO FIX: Read directly from the central Vault
     final activities = _appointmentNotifier.activityLog;
     final isLoading = _appointmentNotifier.isLoading;
 
@@ -155,21 +150,23 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
       ),
       body:
           (isLoading && activities.isEmpty)
-              ? const Center(
-                child: AppLoader(color: AppColors.primaryGreen),
-              )
+              ? const Center(child: AppLoader(color: AppColors.primaryGreen))
+              // PRO FIX: If there are no activities, immediately return the empty state without the banner!
               : activities.isEmpty
               ? _buildEmptyState()
               : ListView.builder(
                 padding: const EdgeInsets.all(24),
+                // Only add +1 to the list count for the banner if we are offline AND we have data
                 itemCount:
                     activities.length +
                     (NetworkNotifier.instance.isOffline ? 1 : 0),
                 itemBuilder: (context, index) {
+                  // Show banner only at the top of the list if offline
                   if (NetworkNotifier.instance.isOffline && index == 0) {
                     return _buildOfflineWarningBanner();
                   }
 
+                  // Shift index down by 1 if the banner is present
                   final actualIndex =
                       NetworkNotifier.instance.isOffline ? index - 1 : index;
                   final item = activities[actualIndex];
@@ -247,7 +244,6 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> {
                               if (action == 'COMPLETED') ...[
                                 const SizedBox(height: 16),
                                 if (item['has_review'] == true)
-                                  // PRO FIX: Added the "Review Submitted" unclickable state
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 8,

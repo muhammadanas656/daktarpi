@@ -11,11 +11,16 @@ import 'package:intl/intl.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../presentation/widgets/primary_button.dart';
-import '../../../../features/profile/presentation/profile_notifier.dart'; // PRO FIX: Added notifier
+import '../../../../features/profile/presentation/profile_notifier.dart'; 
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../models/booking_route_args.dart';
 import '../../../../presentation/widgets/app_floating_dialog.dart';
+import '../../../../presentation/widgets/app_network_image.dart'; 
+import '../../../../core/widgets/app_loader.dart';
+
+import '../../../../features/medical_records/data/medical_record.dart';
+import '../../../../features/medical_records/data/medical_record_repository.dart';
 
 class PatientDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
@@ -48,10 +53,16 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
   final _profileRepo = ProfileRepository();
   final _draftRepo = BookingDraftRepository();
+  final _medicalRecordRepo = MedicalRecordRepository(); 
+  
   Timer? _draftDebounce;
   bool _restoringDraft = false;
+  bool _isSavingCategory = false;
+  
+  List<MedicalRecord> _availableRecords = [];
+  List<MedicalRecord> _selectedRecords = [];
+  bool _recordsFetched = false;
 
-  // --- TYPOGRAPHY ---
   TextStyle get _labelStyle =>
       TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textDark);
 
@@ -69,23 +80,19 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     height: 1.1,
   );
 
-  // Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
 
-  // State
   String _selectedGender = "Male";
   String? _selectedDay;
   String? _selectedMonth;
   String? _selectedYear;
 
-  // Dynamic Category State
   List<Map<String, dynamic>> _savedPatients = [];
   String? _newPendingCategory;
   String _selectedCategoryName = "My Self";
 
-  // Images
   String? _userProfileUrl;
   File? _newPatientImage;
   final ImagePicker _picker = ImagePicker();
@@ -121,10 +128,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     }
   }
 
-  // --- LOGIC ---
   Future<void> _bootstrapForm() async {
-    await _fetchUserProfile();
     await _restoreDraftIfMatchingContext();
+    await _fetchUserProfile();
   }
 
   void _onFormFieldChanged() {
@@ -134,7 +140,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
   void _scheduleDraftSave() {
     _draftDebounce?.cancel();
-    _draftDebounce = Timer(Duration(milliseconds: 350), _persistDraftNow);
+    _draftDebounce = Timer(const Duration(milliseconds: 350), _persistDraftNow);
   }
 
   Future<void> _persistDraftNow() async {
@@ -159,10 +165,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
         'patient_image_path': _newPatientImage?.path,
         'time_slot': widget.timeSlot,
         'appointment_date': widget.initialDate.toIso8601String(),
+        'attached_record_ids': _selectedRecords.map((e) => e.id).toList(),
       });
-    } catch (_) {
-      // Draft save should never block booking flow.
-    }
+    } catch (_) {}
   }
 
   Future<void> _restoreDraftIfMatchingContext() async {
@@ -196,26 +201,42 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           _newPatientImage = File(imagePath);
         }
       });
+      
+      final attachedIdsRaw = draft['attached_record_ids'];
+      if (attachedIdsRaw != null && attachedIdsRaw is List && attachedIdsRaw.isNotEmpty) {
+         _fetchAndMapDraftRecords(attachedIdsRaw);
+      }
+      
     } catch (_) {
-      // Ignore draft restore failures and continue with live profile defaults.
     } finally {
       _restoringDraft = false;
+    }
+  }
+
+  Future<void> _fetchAndMapDraftRecords(List<dynamic> ids) async {
+    try {
+      _availableRecords = await _medicalRecordRepo.fetchRecords();
+      _recordsFetched = true;
+      if (mounted) {
+        setState(() {
+          _selectedRecords = _availableRecords.where((r) => ids.contains(r.id)).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("Failed to load draft medical records: $e");
     }
   }
 
   Future<void> _clearDraft() async {
     try {
       await _draftRepo.clearDraft();
-    } catch (_) {
-      // Ignore clear failures.
-    }
+    } catch (_) {}
   }
 
   Future<void> _fetchUserProfile() async {
     final userId = _profileRepo.currentUserId;
     if (userId != null) {
       try {
-        // 1. Fetch saved patients (fetches instantly if cached natively)
         final patients = await _profileRepo.getSavedPatients(userId);
 
         if (mounted) {
@@ -224,7 +245,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           });
         }
 
-        // 2. Fetch the logged-in user's profile INSTANTLY from the Notifier
         final notifier = ProfileNotifier.instance;
         final profile = notifier.profile;
         if (!notifier.isLoaded) {
@@ -235,18 +255,14 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           setState(() {
             _userProfileUrl = profile.profilePictureUrl;
 
-            // Only auto-fill if "My Self" is currently selected.
-            // (If the user switched to a saved category during load, don't overwrite).
-            if (_selectedCategoryName == "My Self") {
+            if (_selectedCategoryName == "My Self" && _nameController.text.isEmpty) {
               _nameController.text = profile.fullName;
               _phoneController.text = notifier.phoneNumber ?? "";
               _emailController.text = _profileRepo.currentUserEmail ?? "";
 
               if (profile.dateOfBirth != null) {
                 _selectedDay = profile.dateOfBirth!.day.toString();
-                _selectedMonth = DateFormat(
-                  'MMMM',
-                ).format(profile.dateOfBirth!);
+                _selectedMonth = DateFormat('MMMM').format(profile.dateOfBirth!);
                 _selectedYear = profile.dateOfBirth!.year.toString();
               }
             }
@@ -272,7 +288,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     }
   }
 
-  // --- CUSTOM DIALOG: Add Category ---
   Future<void> _showAddCategoryDialog() async {
     final TextEditingController categoryController = TextEditingController();
 
@@ -339,60 +354,158 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     }
   }
 
+  Future<void> _saveCategoryLocally() async {
+    if (_nameController.text.isEmpty ||
+        _phoneController.text.isEmpty ||
+        _selectedDay == null ||
+        _selectedMonth == null ||
+        _selectedYear == null) {
+      CustomSnackbar.showError(context, "Please fill all fields to save");
+      return;
+    }
+
+    setState(() => _isSavingCategory = true);
+
+    try {
+      final catToSave = _newPendingCategory ?? _selectedCategoryName;
+      String? finalImagePath;
+
+      if (_newPatientImage != null && _newPatientImage!.existsSync()) {
+        final userId = _profileRepo.currentUserId;
+        if (userId != null) {
+          final uploadedUrl = await _profileRepo.uploadPatientPicture(
+            userId,
+            catToSave,
+            _newPatientImage!,
+          );
+          finalImagePath = uploadedUrl;
+        }
+      } else {
+        // First try local cache
+        final existingPatient = _savedPatients.where((p) => p['relation'] == catToSave).firstOrNull;
+        finalImagePath = existingPatient?['image_path'];
+
+        // Defensive: If local cache didn't have it, query DB directly
+        if (finalImagePath == null || finalImagePath.isEmpty) {
+          try {
+            final userId = _profileRepo.currentUserId;
+            if (userId != null) {
+              final freshPatients = await _profileRepo.getSavedPatients(userId, forceRefresh: true);
+              final freshMatch = freshPatients.where((p) => p['relation'] == catToSave).firstOrNull;
+              finalImagePath = freshMatch?['image_path'];
+            }
+          } catch (_) {}
+        }
+      }
+
+      final monthInt = _monthStringToInt(_selectedMonth!);
+      final dobString = DateTime(
+        int.parse(_selectedYear!),
+        monthInt,
+        int.parse(_selectedDay!),
+      ).toIso8601String().split('T')[0];
+
+      await _profileRepo.savePatientDetails({
+        'relation': catToSave,
+        'full_name': _nameController.text,
+        'gender': _selectedGender,
+        'date_of_birth': dobString,
+        'image_path': finalImagePath,
+      });
+
+      await _profileRepo.getSavedPatients(
+        _profileRepo.currentUserId ?? '',
+        forceRefresh: true,
+      );
+      await _fetchUserProfile();
+      
+      setState(() {
+        _newPendingCategory = null;
+        _newPatientImage = null;
+      });
+
+      if (mounted) CustomSnackbar.showSuccess(context, "Profile saved successfully!");
+    } catch (e) {
+      if (mounted) CustomSnackbar.showError(context, "Failed to save profile");
+    } finally {
+      if (mounted) setState(() => _isSavingCategory = false);
+    }
+  }
+
   Future<void> _deleteCategory(String category) async {
-    final confirm = await showDialog<bool>(
+    await showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.6),
-      builder:
-          (ctx) => AppFloatingDialog(
-            headerIcon: Icons.delete_forever_rounded,
-            iconColor: AppColors.dangerRed,
-            title: "Delete Category?",
-            description: "Are you sure you want to remove '$category'?",
-            isUpdating: false,
-            content: const SizedBox.shrink(),
-            actions: Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontWeight: FontWeight.bold,
+      builder: (dialogCtx) {
+        bool isDeleting = false;
+        
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AppFloatingDialog(
+              headerIcon: Icons.delete_forever_rounded,
+              iconColor: AppColors.dangerRed,
+              title: "Delete Category?",
+              description: "Are you sure you want to remove '$category'?",
+              isUpdating: isDeleting,
+              content: const SizedBox.shrink(),
+              actions: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: isDeleting ? null : () => Navigator.pop(dialogCtx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: PrimaryButton(
-                    label: "Delete",
-                    backgroundColor: AppColors.dangerRed,
-                    onTap: () => Navigator.pop(ctx, true),
-                  ),
-                ),
-              ],
-            ),
-          ),
-    );
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: "Delete",
+                      backgroundColor: AppColors.dangerRed,
+                      onTap: isDeleting 
+                          ? () {} 
+                          : () async {
+                              setDialogState(() => isDeleting = true);
+                              await Future.delayed(const Duration(milliseconds: 150));
+                              
+                              if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                              
+                              final backupPatients = List<Map<String, dynamic>>.from(_savedPatients);
+                              final backupSelected = _selectedCategoryName;
 
-    if (confirm == true) {
-      try {
-        await _profileRepo.removePatientCategory(category);
-        setState(() {
-          _savedPatients.removeWhere((p) => p['relation'] == category);
-          if (_selectedCategoryName == category) {
-            _selectedCategoryName = "My Self";
-            _fetchUserProfile();
+                              setState(() {
+                                _savedPatients.removeWhere((p) => p['relation'] == category);
+                                if (_selectedCategoryName == category) {
+                                  _selectedCategoryName = "My Self";
+                                  _nameController.clear();
+                                  _fetchUserProfile();
+                                }
+                              });
+
+                              try {
+                                await _profileRepo.removePatientCategory(category);
+                                if (mounted) CustomSnackbar.showSuccess(context, "Category removed");
+                              } catch (e) {
+                                if (mounted) {
+                                  setState(() {
+                                    _savedPatients = backupPatients;
+                                    _selectedCategoryName = backupSelected;
+                                  });
+                                  CustomSnackbar.showError(context, "Failed to delete: $e");
+                                }
+                              }
+                            },
+                    ),
+                  ),
+                ],
+              ),
+            );
           }
-        });
-        if (mounted) CustomSnackbar.showSuccess(context, "Category removed");
-      } catch (e) {
-        if (mounted) CustomSnackbar.showError(context, e.toString());
-      }
-    }
+        );
+      },
+    );
   }
 
   void _handleContinue() async {
@@ -412,17 +525,13 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       int.parse(_selectedDay!),
     );
 
-    // --- SAVE TO NEW DATABASE TABLE & UPLOAD IMAGE ---
     final catToSave = _newPendingCategory ?? _selectedCategoryName;
     String? finalImagePath;
 
     if (catToSave == "My Self") {
       finalImagePath = _userProfileUrl;
     } else {
-      // It's a custom category
-      finalImagePath = _newPatientImage?.path; // Fallback to local path
-
-      // If we have a fresh new file picked, upload it instantly
+      // PRO FIX: Safely check for new image OR keep existing image
       if (_newPatientImage != null && _newPatientImage!.existsSync()) {
         try {
           final userId = _profileRepo.currentUserId;
@@ -436,19 +545,32 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           }
         } catch (e) {
           debugPrint("Failed to upload category picture: $e");
-          // Continue anyway, it will just lack the avatar for now
+        }
+      } else {
+        // If no new image was picked, preserve the existing one!
+        final existingPatient = _savedPatients.where((p) => p['relation'] == catToSave).firstOrNull;
+        finalImagePath = existingPatient?['image_path'];
+
+        // Defensive: If local cache didn't have it, query DB directly
+        if (finalImagePath == null || finalImagePath.isEmpty) {
+          try {
+            final userId = _profileRepo.currentUserId;
+            if (userId != null) {
+              final freshPatients = await _profileRepo.getSavedPatients(userId, forceRefresh: true);
+              final freshMatch = freshPatients.where((p) => p['relation'] == catToSave).firstOrNull;
+              finalImagePath = freshMatch?['image_path'];
+            }
+          } catch (_) {}
         }
       }
 
       final monthInt = _monthStringToInt(_selectedMonth!);
-      final dobString =
-          DateTime(
-            int.parse(_selectedYear!),
-            monthInt,
-            int.parse(_selectedDay!),
-          ).toIso8601String().split('T')[0];
-
-      // Re-fetch patients silently after saving so the queue refreshes
+      final dobString = DateTime(
+        int.parse(_selectedYear!),
+        monthInt,
+        int.parse(_selectedDay!),
+      ).toIso8601String().split('T')[0];
+      
       unawaited(
         _profileRepo
             .savePatientDetails({
@@ -466,7 +588,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
             ),
       );
     }
-    // ----------------------------------
 
     unawaited(_clearDraft());
 
@@ -485,9 +606,15 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           'email': _emailController.text,
           'gender': _selectedGender,
           'dob': dob.toIso8601String(),
-          'imagePath': finalImagePath, // Pass the newly uploaded secure URL
+          'imagePath': finalImagePath, 
           'patientType': _selectedCategoryName,
           'newCategoryToSave': _newPendingCategory,
+          'attachedRecords': _selectedRecords.map((r) => {
+            'id': r.id,
+            'recordFor': r.recordFor,
+            'recordType': r.recordType,
+            'fileUrls': r.fileUrls,
+          }).toList(),
         },
       ),
     );
@@ -495,529 +622,723 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
   int _monthStringToInt(String month) {
     switch (month) {
-      case 'January':
-        return 1;
-      case 'February':
-        return 2;
-      case 'March':
-        return 3;
-      case 'April':
-        return 4;
-      case 'May':
-        return 5;
-      case 'June':
-        return 6;
-      case 'July':
-        return 7;
-      case 'August':
-        return 8;
-      case 'September':
-        return 9;
-      case 'October':
-        return 10;
-      case 'November':
-        return 11;
-      case 'December':
-        return 12;
-      default:
-        return 1;
+      case 'January': return 1;
+      case 'February': return 2;
+      case 'March': return 3;
+      case 'April': return 4;
+      case 'May': return 5;
+      case 'June': return 6;
+      case 'July': return 7;
+      case 'August': return 8;
+      case 'September': return 9;
+      case 'October': return 10;
+      case 'November': return 11;
+      case 'December': return 12;
+      default: return 1;
     }
   }
 
-  // --- UI BUILD ---
+  void _showMedicalRecordsBottomSheet() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_recordsFetched) {
+      setState(() => _isSavingCategory = true); 
+      try {
+        _availableRecords = await _medicalRecordRepo.fetchRecords();
+        _recordsFetched = true;
+      } catch (e) {
+        if (mounted) CustomSnackbar.showError(context, "Failed to load records from vault.");
+        setState(() => _isSavingCategory = false);
+        return;
+      }
+      setState(() => _isSavingCategory = false);
+    }
+
+    List<MedicalRecord> tempSelected = List.from(_selectedRecords);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.75, 
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, 
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text("Your Medical Vault", style: AppTextStyles.h3(context).copyWith(fontSize: 20)),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Select past records or lab reports to attach.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
+
+                    if (_availableRecords.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: Text("No records found in your vault.", style: TextStyle(color: Colors.grey)),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true, 
+                          itemCount: _availableRecords.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final record = _availableRecords[index];
+                            final isSelected = tempSelected.any((r) => r.id == record.id);
+                            
+                            return InkWell(
+                              onTap: () {
+                                setSheetState(() {
+                                  if (isSelected) {
+                                    tempSelected.removeWhere((r) => r.id == record.id);
+                                  } else {
+                                    tempSelected.add(record);
+                                  }
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppColors.primaryGreen.withValues(alpha: 0.1) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected ? AppColors.primaryGreen : context.colorBorder,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        record.recordType == 'Prescription' ? Icons.medical_services_outlined : Icons.analytics_outlined,
+                                        color: AppColors.primaryGreen,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            record.recordType,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                          ),
+                                          Text(
+                                            "For: ${record.recordFor} • ${DateFormat('dd MMM yyyy').format(record.recordDate)}",
+                                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isSelected)
+                                      const Icon(Icons.check_circle_rounded, color: AppColors.primaryGreen, size: 28)
+                                    else
+                                      Icon(Icons.radio_button_unchecked, color: Colors.grey[400], size: 28),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: PrimaryButton(
+                        label: "Done",
+                        onTap: () {
+                          setState(() {
+                            _selectedRecords = tempSelected;
+                          });
+                          _scheduleDraftSave();
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        );
+      },
+    );
+  }
+
+  Widget _buildMedicalRecordsSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Medical Records (Optional)", style: _labelStyle),
+        const SizedBox(height: 10),
+        if (_selectedRecords.isNotEmpty) ...[
+          SizedBox(
+            height: 60,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              itemCount: _selectedRecords.length + 1,
+              itemBuilder: (context, index) {
+                if (index == _selectedRecords.length) {
+                  return GestureDetector(
+                    onTap: _showMedicalRecordsBottomSheet,
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
+                      ),
+                      child: const Icon(Icons.add, color: AppColors.primaryGreen),
+                    ),
+                  );
+                }
+                final record = _selectedRecords[index];
+                return Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        record.recordType == 'Prescription' ? Icons.medical_services_outlined : Icons.analytics_outlined,
+                        size: 18,
+                        color: AppColors.primaryGreen,
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(record.recordType, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textDark)),
+                          Text(DateFormat('dd MMM yyyy').format(record.recordDate), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => _selectedRecords.removeAt(index));
+                          _scheduleDraftSave();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), shape: BoxShape.circle),
+                          child: const Icon(Icons.close, size: 14, color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ] else ...[
+          GestureDetector(
+            onTap: _showMedicalRecordsBottomSheet,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.primaryGreen.withValues(alpha: 0.5)
+                      : AppColors.primaryGreen,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                color: isDark
+                    ? AppColors.primaryGreen.withValues(alpha: 0.1)
+                    : context.colorLightGreenBg.withValues(alpha: 0.3),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.folder_shared_outlined, color: AppColors.primaryGreen),
+                  SizedBox(width: 8),
+                  Text(
+                    "Attach from Vault",
+                    style: TextStyle(
+                      color: AppColors.primaryGreen,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final int currentYear = DateTime.now().year;
 
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false, 
+        body: Container(
+          decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
+          child: SafeArea(
+            child: Column(
+              children: [
+                _buildAppBar(),
 
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(24, 10, 24, 160),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 1. Progress Bar
-                      Row(
-                        children: [
-                          Text("Step 1/2", style: _labelStyle),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: 0.5,
-                                backgroundColor: primaryGreen.withValues(
-                                  alpha: 0.1,
+                Expanded(
+                  child: SingleChildScrollView(
+                    // PRO FIX: Replaced `160 + ...` with a tight `24 + ...` padding!
+                    padding: EdgeInsets.fromLTRB(24, 10, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text("Step 1/2", style: _labelStyle),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: 0.5,
+                                  backgroundColor: primaryGreen.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    primaryGreen,
+                                  ),
+                                  minHeight: 6,
                                 ),
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  primaryGreen,
-                                ),
-                                minHeight: 6,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 32),
-
-                      // 2. Patient Selector
-                      Text(
-                        "Who is this patient?",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: textDark,
+                          ],
                         ),
-                      ),
-                      SizedBox(height: 16),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        clipBehavior: Clip.none,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // --- MY SELF OPTION (Always present, not draggable) ---
-                            _buildOptionItem(
-                              isSelected: _selectedCategoryName == "My Self",
-                              label: "My Self",
-                              content:
-                                  _userProfileUrl != null
-                                      ? Image.network(
-                                        _userProfileUrl!,
-                                        fit: BoxFit.cover,
-                                      )
-                                      : Icon(
-                                        Icons.person,
-                                        color: Colors.grey[400],
-                                        size: 30,
-                                      ),
-                              onTap: () {
-                                setState(() {
-                                  _selectedCategoryName = "My Self";
-                                  _newPatientImage = null;
-                                });
-                                _fetchUserProfile();
-                                _scheduleDraftSave();
-                              },
-                            ),
-                            SizedBox(width: 16),
+                        const SizedBox(height: 32),
 
-                            ..._savedPatients.map((patientMap) {
-                              final category = patientMap['relation'] as String;
-                              final savedImagePath =
-                                  patientMap['image_path'] as String?;
-
-                              // Check if it's a web URL (Uploaded) or a local file
-                              final isNetworkImg =
-                                  savedImagePath != null &&
-                                  savedImagePath.startsWith('http');
-                              final hasValidLocalFile =
-                                  !isNetworkImg &&
-                                  savedImagePath != null &&
-                                  savedImagePath.isNotEmpty &&
-                                  File(savedImagePath).existsSync();
-
-                              Widget renderCategoryAvatar() {
-                                if (isNetworkImg) {
-                                  return Image.network(
-                                    savedImagePath,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (_, __, ___) => Icon(
-                                          Icons.person_outline,
+                        Text(
+                          "Who is this patient?",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          clipBehavior: Clip.none,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // --- MY SELF OPTION ---
+                              _buildOptionItem(
+                                isSelected: _selectedCategoryName == "My Self",
+                                label: "My Self",
+                                content:
+                                    _userProfileUrl != null
+                                        ? AppNetworkImage(
+                                            imageUrl: _userProfileUrl!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Icon(
+                                          Icons.person,
                                           color: Colors.grey[400],
                                           size: 30,
                                         ),
-                                  );
-                                } else if (hasValidLocalFile) {
-                                  return Image.file(
-                                    File(savedImagePath),
-                                    fit: BoxFit.cover,
-                                    gaplessPlayback: true,
-                                    cacheWidth: 100,
-                                  );
-                                } else {
-                                  return Icon(
-                                    Icons.person_outline,
-                                    color: Colors.grey[400],
-                                    size: 30,
-                                  );
-                                }
-                              }
+                                onTap: () {
+                                  setState(() {
+                                    _selectedCategoryName = "My Self";
+                                    _newPatientImage = null;
+                                    _nameController.clear();
+                                  });
+                                  _fetchUserProfile();
+                                  _scheduleDraftSave();
+                                },
+                              ),
+                              const SizedBox(width: 16),
 
-                              return Padding(
-                                padding: EdgeInsets.only(right: 16),
-                                child: Draggable<String>(
-                                  data: category,
-                                  feedback: Material(
-                                    color: Colors.transparent,
-                                    child: Opacity(
-                                      opacity: 0.8,
+                              ..._savedPatients.map((patientMap) {
+                                final category = patientMap['relation'] as String;
+                                final savedImagePath = patientMap['image_path'] as String?;
+
+                                Widget renderCategoryAvatar() {
+                                  if (savedImagePath != null && savedImagePath.isNotEmpty) {
+                                    return AppNetworkImage(
+                                      imageUrl: savedImagePath,
+                                      fit: BoxFit.cover,
+                                    );
+                                  } else {
+                                    return Icon(
+                                      Icons.person_outline,
+                                      color: Colors.grey[400],
+                                      size: 30,
+                                    );
+                                  }
+                                }
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 16),
+                                  child: LongPressDraggable<String>(
+                                    data: category,
+                                    delay: const Duration(milliseconds: 200),
+                                    dragAnchorStrategy: childDragAnchorStrategy, 
+                                    feedback: Material(
+                                      color: Colors.transparent,
+                                      child: Opacity(
+                                        opacity: 0.9,
+                                        child: SizedBox(
+                                          width: 80,
+                                          child: _buildOptionItem(
+                                            isSelected: true,
+                                            label: category,
+                                            content: renderCategoryAvatar(),
+                                            onTap: () {},
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    childWhenDragging: Opacity(
+                                      opacity: 0.3,
                                       child: _buildOptionItem(
-                                        isSelected:
-                                            _selectedCategoryName == category,
+                                        isSelected: _selectedCategoryName == category,
                                         label: category,
                                         content: renderCategoryAvatar(),
                                         onTap: () {},
                                       ),
                                     ),
-                                  ),
-                                  childWhenDragging: Opacity(
-                                    opacity: 0.3,
                                     child: _buildOptionItem(
-                                      isSelected:
-                                          _selectedCategoryName == category,
+                                      isSelected: _selectedCategoryName == category,
                                       label: category,
                                       content: renderCategoryAvatar(),
-                                      onTap: () {},
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedCategoryName = category;
+                                          _nameController.text = patientMap['full_name'] ?? '';
+                                          _selectedGender = patientMap['gender'] ?? 'Male';
+
+                                          if (patientMap['date_of_birth'] != null) {
+                                            final dob = DateTime.parse(patientMap['date_of_birth']);
+                                            _selectedDay = dob.day.toString();
+                                            _selectedMonth = DateFormat('MMMM').format(dob);
+                                            _selectedYear = dob.year.toString();
+                                          }
+
+                                          if (savedImagePath != null && savedImagePath.isNotEmpty && !savedImagePath.startsWith('http')) {
+                                            _newPatientImage = File(savedImagePath);
+                                          } else {
+                                            _newPatientImage = null;
+                                          }
+                                        });
+                                        _scheduleDraftSave();
+                                      },
                                     ),
                                   ),
-                                  child: _buildOptionItem(
-                                    isSelected:
-                                        _selectedCategoryName == category,
-                                    label: category,
-                                    content: renderCategoryAvatar(),
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedCategoryName = category;
+                                );
+                              }),
 
-                                        // Auto-Fill the fields from DB
-                                        _nameController.text =
-                                            patientMap['full_name'] ?? '';
-                                        _selectedGender =
-                                            patientMap['gender'] ?? 'Male';
-
-                                        if (patientMap['date_of_birth'] !=
-                                            null) {
-                                          final dob = DateTime.parse(
-                                            patientMap['date_of_birth'],
-                                          );
-                                          _selectedDay = dob.day.toString();
-                                          _selectedMonth = DateFormat(
-                                            'MMMM',
-                                          ).format(dob);
-                                          _selectedYear = dob.year.toString();
-                                        }
-
-                                        // Only repopulate _newPatientImage if it's a LOCAL file
-                                        // (Network images don't need to be manipulated via File picks anymore)
-                                        if (hasValidLocalFile) {
-                                          _newPatientImage = File(
-                                            savedImagePath,
-                                          );
-                                        } else {
-                                          _newPatientImage = null;
-                                        }
-                                      });
-                                      _scheduleDraftSave();
-                                    },
-                                  ),
-                                ),
-                              );
-                            }),
-
-                            // --- NEW PENDING CATEGORY ---
-                            if (_newPendingCategory != null) ...[
-                              _buildOptionItem(
-                                isSelected:
-                                    _selectedCategoryName ==
-                                    _newPendingCategory,
-                                label: _newPendingCategory!,
-                                content:
-                                    _newPatientImage != null
-                                        ? Image.file(
-                                          _newPatientImage!,
-                                          fit: BoxFit.cover,
-                                        )
-                                        : Icon(
-                                          Icons.person_add,
-                                          color: primaryGreen,
-                                          size: 30,
-                                        ),
-                                bgColor: lightGreenBg,
-                                showDeleteIcon:
-                                    true, // Keep standard delete for un-saved pending item
-                                onDeleteTap: () {
-                                  setState(() {
-                                    _newPendingCategory = null;
-                                    _selectedCategoryName = "My Self";
-                                  });
-                                  _fetchUserProfile();
-                                },
-                                onTap:
-                                    () => setState(
-                                      () =>
-                                          _selectedCategoryName =
-                                              _newPendingCategory!,
-                                    ),
-                                onAvatarTap: _pickImage,
-                                showEditIcon:
-                                    _selectedCategoryName ==
-                                    _newPendingCategory,
-                              ),
-                              SizedBox(width: 16),
-                            ],
-
-                            // --- ADD BUTTON ---
-                            // --- ADD BUTTON ---
-                            _buildOptionItem(
-                              isSelected: false,
-                              label: "Add",
-                              content: Icon(
-                                Icons.add,
-                                color: textDark,
-                                size: 30,
-                              ),
-                              // PRO FIX: Dynamic background for the Add category button
-                              bgColor:
-                                  Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? AppColors.darkSurface
-                                      : const Color(0xFFF5F6F8),
-                              onTap: _showAddCategoryDialog,
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: 16),
-
-                      // --- DRAG TO DELETE BUCKET ---
-                      AnimatedSize(
-                        duration: Duration(milliseconds: 300),
-                        child:
-                            _savedPatients.isNotEmpty
-                                ? DragTarget<String>(
-                                  onAcceptWithDetails: (details) {
-                                    // Triggers the exact same delete function when dropped!
-                                    _deleteCategory(details.data);
-                                  },
-                                  builder: (
-                                    context,
-                                    candidateData,
-                                    rejectedData,
-                                  ) {
-                                    // candidateData contains the category name when hovered over the bucket
-                                    final isHovering = candidateData.isNotEmpty;
-
-                                    return AnimatedContainer(
-                                      duration: Duration(milliseconds: 200),
-                                      width: double.infinity,
-                                      margin: EdgeInsets.only(bottom: 16),
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 16,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            isHovering
-                                                ? Colors.red.withValues(
-                                                  alpha: 0.1,
-                                                )
-                                                : Colors.grey.withValues(
-                                                  alpha: 0.03,
-                                                ),
-                                        border: Border.all(
-                                          color:
-                                              isHovering
-                                                  ? Colors.red
-                                                  : Colors.grey.withValues(
-                                                    alpha: 0.3,
-                                                  ),
-                                          width: isHovering ? 2 : 1,
-                                        ),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Icon(
-                                            isHovering
-                                                ? Icons.delete_forever
-                                                : Icons.delete_outline,
-                                            color:
-                                                isHovering
-                                                    ? Colors.red
-                                                    : Colors.grey,
+                              // --- NEW PENDING CATEGORY ---
+                              if (_newPendingCategory != null) ...[
+                                _buildOptionItem(
+                                  isSelected: _selectedCategoryName == _newPendingCategory,
+                                  label: _newPendingCategory!,
+                                  content: _newPatientImage != null
+                                      ? AppNetworkImage(imageUrl: _newPatientImage!.path, fit: BoxFit.cover)
+                                      : Container(
+                                          color: Theme.of(context).brightness == Brightness.dark 
+                                              ? AppColors.darkSurface 
+                                              : const Color(0xFFEAF2F8),
+                                          child: Icon(
+                                            Icons.add_a_photo_rounded, 
+                                            color: AppColors.primaryGreen.withValues(alpha: 0.6), 
                                             size: 28,
                                           ),
-                                          SizedBox(height: 8),
-                                          Text(
-                                            isHovering
-                                                ? "Drop to Delete '${candidateData.first}'!"
-                                                : "Drag a category here to delete",
-                                            style: TextStyle(
-                                              color:
-                                                  isHovering
-                                                      ? Colors.red
-                                                      : Colors.grey,
-                                              fontSize: 13,
-                                              fontWeight:
-                                                  isHovering
-                                                      ? FontWeight.bold
-                                                      : FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
+                                        ),
+                                  bgColor: lightGreenBg,
+                                  showDeleteIcon: true, 
+                                  onDeleteTap: () {
+                                    setState(() {
+                                      _newPendingCategory = null;
+                                      _selectedCategoryName = "My Self";
+                                      _nameController.clear();
+                                    });
+                                    _fetchUserProfile();
                                   },
-                                )
-                                : SizedBox.shrink(),
-                      ),
-                      SizedBox(height: 16),
-                      // 3. Form Fields
-                      Container(
-                        padding: EdgeInsets.all(20),
-                        decoration: AppStyles.surfaceCard(
-                          context,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AppTextField(
-                              controller: _nameController,
-                              hintText: "Name",
-                              label: "Patient's Name",
-                            ),
-                            SizedBox(height: 16),
-
-                            Text("Age", style: _labelStyle),
-                            SizedBox(height: 10),
-                            Row(
-                              children: [
-                                // DAY
-                                Expanded(
-                                  flex: 3,
-                                  child: _buildDropdown(
-                                    "Day",
-                                    List.generate(
-                                      31,
-                                      (i) => (i + 1).toString(),
-                                    ),
-                                    _selectedDay,
-                                    (val) {
-                                      setState(() => _selectedDay = val);
-                                      _scheduleDraftSave();
-                                    },
-                                  ),
+                                  onTap: () => setState(() => _selectedCategoryName = _newPendingCategory!),
+                                  onAvatarTap: _pickImage,
+                                  showEditIcon: _selectedCategoryName == _newPendingCategory,
                                 ),
-                                SizedBox(width: 12),
-                                // MONTH
-                                Expanded(
-                                  flex: 4,
-                                  child: _buildDropdown(
-                                    "Month",
-                                    [
-                                      'January',
-                                      'February',
-                                      'March',
-                                      'April',
-                                      'May',
-                                      'June',
-                                      'July',
-                                      'August',
-                                      'September',
-                                      'October',
-                                      'November',
-                                      'December',
-                                    ],
-                                    _selectedMonth,
-                                    (val) {
-                                      setState(() => _selectedMonth = val);
-                                      _scheduleDraftSave();
-                                    },
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                // YEAR
-                                Expanded(
-                                  flex: 3,
-                                  child: _buildDropdown(
-                                    "Year",
-                                    List.generate(
-                                      100,
-                                      (i) => (currentYear - i).toString(),
-                                    ),
-                                    _selectedYear,
-                                    (val) {
-                                      setState(() => _selectedYear = val);
-                                      _scheduleDraftSave();
-                                    },
-                                  ),
-                                ),
+                                const SizedBox(width: 16),
                               ],
-                            ),
 
-                            SizedBox(height: 16),
-                            Text("Gender", style: _labelStyle),
-                            SizedBox(height: 10),
-                            Row(
-                              children: [
-                                _buildRadio("Male"),
-                                SizedBox(width: 24),
-                                _buildRadio("Female"),
-                                SizedBox(width: 24),
-                                _buildRadio("Others"),
-                              ],
-                            ),
-                            SizedBox(height: 16),
-
-                            AppTextField(
-                              controller: _phoneController,
-                              hintText: "+8801000000000",
-                              isPhone: true,
-                              label: "Mobile Number",
-                            ),
-                            SizedBox(height: 16),
-
-                            AppTextField(
-                              controller: _emailController,
-                              hintText: "email@example.com",
-                              label: "Email",
-                            ),
-                          ],
+                              // --- ADD BUTTON ---
+                              _buildOptionItem(
+                                isSelected: false,
+                                label: "Add",
+                                content: Icon(Icons.add, color: textDark, size: 30),
+                                bgColor: Theme.of(context).brightness == Brightness.dark
+                                        ? AppColors.darkSurface
+                                        : const Color(0xFFF5F6F8),
+                                onTap: _showAddCategoryDialog,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 300),
+                          child:
+                              _savedPatients.isNotEmpty
+                                  ? DragTarget<String>(
+                                    onAcceptWithDetails: (details) {
+                                      _deleteCategory(details.data);
+                                    },
+                                    builder: (context, candidateData, rejectedData) {
+                                      final isHovering = candidateData.isNotEmpty;
+                                      return AnimatedContainer(
+                                        duration: const Duration(milliseconds: 200),
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.only(bottom: 16),
+                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                        decoration: BoxDecoration(
+                                          color: isHovering
+                                                  ? Colors.red.withValues(alpha: 0.1)
+                                                  : Colors.grey.withValues(alpha: 0.03),
+                                          border: Border.all(
+                                            color: isHovering
+                                                    ? Colors.red
+                                                    : Colors.grey.withValues(alpha: 0.3),
+                                            width: isHovering ? 2 : 1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Icon(
+                                              isHovering ? Icons.delete_forever : Icons.delete_outline,
+                                              color: isHovering ? Colors.red : Colors.grey,
+                                              size: 28,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              isHovering
+                                                  ? "Drop to Delete '${candidateData.first}'!"
+                                                  : "Hold & drag a category here to delete",
+                                              style: TextStyle(
+                                                color: isHovering ? Colors.red : Colors.grey,
+                                                fontSize: 13,
+                                                fontWeight: isHovering ? FontWeight.bold : FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  )
+                                  : const SizedBox.shrink(),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 3. Form Fields
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: AppStyles.surfaceCard(
+                            context,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AppTextField(
+                                controller: _nameController,
+                                hintText: "Name",
+                                label: "Patient's Name",
+                              ),
+                              const SizedBox(height: 16),
+
+                              Text("Age", style: _labelStyle),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: _buildDropdown(
+                                      "Day",
+                                      List.generate(31, (i) => (i + 1).toString()),
+                                      _selectedDay,
+                                      (val) {
+                                        setState(() => _selectedDay = val);
+                                        _scheduleDraftSave();
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    flex: 4,
+                                    child: _buildDropdown(
+                                      "Month",
+                                      [
+                                        'January', 'February', 'March', 'April', 'May', 'June',
+                                        'July', 'August', 'September', 'October', 'November', 'December',
+                                      ],
+                                      _selectedMonth,
+                                      (val) {
+                                        setState(() => _selectedMonth = val);
+                                        _scheduleDraftSave();
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    flex: 3,
+                                    child: _buildDropdown(
+                                      "Year",
+                                      List.generate(100, (i) => (currentYear - i).toString()),
+                                      _selectedYear,
+                                      (val) {
+                                        setState(() => _selectedYear = val);
+                                        _scheduleDraftSave();
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 16),
+                              Text("Gender", style: _labelStyle),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  _buildRadio("Male"),
+                                  const SizedBox(width: 24),
+                                  _buildRadio("Female"),
+                                  const SizedBox(width: 24),
+                                  _buildRadio("Others"),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              AppTextField(
+                                controller: _phoneController,
+                                hintText: "+8801000000000",
+                                isPhone: true,
+                                label: "Mobile Number",
+                              ),
+                              const SizedBox(height: 16),
+
+                              AppTextField(
+                                controller: _emailController,
+                                hintText: "email@example.com",
+                                label: "Email",
+                              ),
+                              
+                              const SizedBox(height: 24),
+                              _buildMedicalRecordsSection(),
+
+                              if (_newPendingCategory != null || (_selectedCategoryName != "My Self" && _savedPatients.isNotEmpty)) ...[
+                                const SizedBox(height: 24),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _isSavingCategory ? null : _saveCategoryLocally,
+                                    icon: _isSavingCategory
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppColors.primaryGreen,
+                                            ),
+                                          )
+                                        : const Icon(Icons.save_rounded, color: AppColors.primaryGreen),
+                                    label: Text(
+                                      _isSavingCategory ? "Saving..." : "Save Patient Profile",
+                                      style: const TextStyle(
+                                        color: AppColors.primaryGreen,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ]
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      bottomSheet: Container(
-        decoration: BoxDecoration(
-          // PRO FIX: Dynamic surface and border
-          color: Theme.of(context).colorScheme.surface,
-          border: Border(
-            top: BorderSide(
-              color:
-                  Theme.of(context).brightness == Brightness.dark
-                      ? AppColors.darkBorder
-                      : const Color(0xFFF0F0F0),
+              ],
             ),
           ),
         ),
-        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: PrimaryButton(
-                label: "Continue",
-                onTap: _handleContinue,
-                borderRadius: 16,
-                height: 54,
+        bottomNavigationBar: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(
+              top: BorderSide(
+                color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.darkBorder
+                        : const Color(0xFFF0F0F0),
               ),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: PrimaryButton(
+              label: "Continue",
+              onTap: _handleContinue,
+              borderRadius: 16,
+              height: 54,
             ),
           ),
         ),
@@ -1025,11 +1346,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     );
   }
 
-  // --- WIDGETS ---
-
   Widget _buildAppBar() {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1039,7 +1358,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
             child: Container(
               width: 44,
               height: 44,
-              // PRO FIX: Dynamic surface and adaptive shadow
               decoration: AppStyles.surfaceCard(
                 context,
                 borderRadius: BorderRadius.circular(12),
@@ -1051,7 +1369,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
             "Patient Details",
             style: AppTextStyles.h3(context).copyWith(fontSize: 20),
           ),
-          SizedBox(width: 44),
+          const SizedBox(width: 44),
         ],
       ),
     );
@@ -1086,7 +1404,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  // PRO FIX: Dynamic background for unselected options
                   color: bgColor ?? Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
@@ -1097,7 +1414,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
-                      offset: Offset(0, 4),
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -1107,39 +1424,33 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                 ),
               ),
             ),
-
-            // Edit Icon
             if (showEditIcon)
               Positioned(
-                bottom: -2,
-                right: -2,
+                bottom: -4,
+                right: -4,
                 child: GestureDetector(
                   onTap: () {
                     onTap();
                     onAvatarTap?.call();
                   },
                   child: Container(
-                    padding: EdgeInsets.all(5),
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.add_a_photo,
-                      size: 14,
                       color: primaryGreen,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.surface,
+                        width: 2.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_rounded,
+                      size: 14,
+                      color: Colors.white,
                     ),
                   ),
                 ),
               ),
-
-            // Delete Icon
             if (showDeleteIcon)
               Positioned(
                 top: -6,
@@ -1147,18 +1458,26 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                 child: GestureDetector(
                   onTap: onDeleteTap,
                   child: Container(
-                    padding: EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent,
+                      color: AppColors.dangerRed,
                       shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.surface,
+                        width: 2.5,
+                      ),
                     ),
-                    child: Icon(Icons.close, size: 12, color: Colors.white),
+                    child: const Icon(
+                      Icons.close_rounded, 
+                      size: 12, 
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
           ],
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Text(
           label,
           style: TextStyle(
@@ -1177,47 +1496,114 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     String? value,
     ValueChanged<String?> onChanged,
   ) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      isExpanded: true,
-      icon: Icon(Icons.keyboard_arrow_down_rounded, color: textGrey, size: 22),
-      style: _inputStyle,
-      menuMaxHeight: 240,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: _hintStyle,
-        filled: true,
-        // PRO FIX: Dynamic dropdown fill
-        fillColor: Theme.of(context).colorScheme.surface,
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-        border: OutlineInputBorder(
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus(); 
+        _showBottomSheetSelection(hint, items, value, onChanged);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: context.colorBorder),
+          border: Border.all(
+            color: context.colorBorder,
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: context.colorBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: AppColors.primaryGreen),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                value ?? hint,
+                style: value == null ? _hintStyle : _inputStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down_rounded, color: textGrey, size: 22),
+          ],
         ),
       ),
-      dropdownColor: Colors.white,
-      items:
-          items
-              .map(
-                (e) => DropdownMenuItem<String>(
-                  value: e,
-                  child: Text(
-                    e,
-                    style: _inputStyle,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    );
+  }
+
+  void _showBottomSheetSelection(String title, List<String> items, String? currentValue, ValueChanged<String?> onChanged) {
+    showModalBottomSheet(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.4), 
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              Container(
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(10),
                 ),
-              )
-              .toList(),
-      onChanged: onChanged,
+              ),
+              const SizedBox(height: 24),
+              Text(title, style: AppTextStyles.h3(context).copyWith(fontSize: 18)),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final isSelected = item == currentValue;
+                    
+                    return InkWell(
+                      onTap: () {
+                        onChanged(item);
+                        Navigator.pop(ctx);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppColors.primaryGreen.withValues(alpha: 0.1) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected ? AppColors.primaryGreen.withValues(alpha: 0.5) : context.colorBorder.withValues(alpha: 0.3),
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              item,
+                              style: TextStyle(
+                                color: isSelected ? AppColors.primaryGreen : context.colorTextDark,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check_circle_rounded, color: AppColors.primaryGreen, size: 22),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1231,7 +1617,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
       child: Row(
         children: [
           AnimatedContainer(
-            duration: Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 200),
             width: 22,
             height: 22,
             decoration: BoxDecoration(
@@ -1241,8 +1627,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                 width: 2,
               ),
             ),
-            child:
-                isSelected
+            child: isSelected
                     ? Center(
                       child: Container(
                         width: 12,
@@ -1255,7 +1640,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                     )
                     : null,
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Text(
             value,
             style: TextStyle(

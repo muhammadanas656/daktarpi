@@ -19,6 +19,9 @@ class SettingsNotifier extends ChangeNotifier {
   // NEW: Granular Notification Toggles
   static const String keyBookingAlertsEnabled = 'booking_alerts_enabled';
   static const String keyReminderAlertsEnabled = 'reminder_alerts_enabled';
+  static const String keyFiveHourWarningEnabled = 'five_hour_warning_enabled';
+  static const String keyMissedAppointmentAlertEnabled =
+      'missed_appointment_alert_enabled';
   static const String keyAppUpdatesEnabled = 'app_updates_enabled';
   static const String keyGlobalReminderMinutes = 'global_reminder_minutes';
 
@@ -36,6 +39,8 @@ class SettingsNotifier extends ChangeNotifier {
   bool _notificationsEnabled = true;
   bool _bookingAlertsEnabled = true;
   bool _reminderAlertsEnabled = true;
+  bool _fiveHourWarningEnabled = true;
+  bool _missedAppointmentAlertEnabled = true;
   bool _appUpdatesEnabled = true;
   int _globalReminderMinutes = 60; // Default: 1 hour before
 
@@ -52,6 +57,8 @@ class SettingsNotifier extends ChangeNotifier {
   bool get notificationsEnabled => _notificationsEnabled;
   bool get bookingAlertsEnabled => _bookingAlertsEnabled;
   bool get reminderAlertsEnabled => _reminderAlertsEnabled;
+  bool get fiveHourWarningEnabled => _fiveHourWarningEnabled;
+  bool get missedAppointmentAlertEnabled => _missedAppointmentAlertEnabled;
   bool get appUpdatesEnabled => _appUpdatesEnabled;
   int get globalReminderMinutes => _globalReminderMinutes;
 
@@ -75,6 +82,10 @@ class SettingsNotifier extends ChangeNotifier {
       _notificationsEnabled = prefs.getBool(keyNotificationsEnabled) ?? true;
       _bookingAlertsEnabled = prefs.getBool(keyBookingAlertsEnabled) ?? true;
       _reminderAlertsEnabled = prefs.getBool(keyReminderAlertsEnabled) ?? true;
+      _fiveHourWarningEnabled =
+          prefs.getBool(keyFiveHourWarningEnabled) ?? true;
+      _missedAppointmentAlertEnabled =
+          prefs.getBool(keyMissedAppointmentAlertEnabled) ?? true;
       _appUpdatesEnabled = prefs.getBool(keyAppUpdatesEnabled) ?? true;
       _globalReminderMinutes = prefs.getInt(keyGlobalReminderMinutes) ?? 60;
 
@@ -202,6 +213,30 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
+  Future<void> updateFiveHourWarningEnabled(bool enabled) async {
+    _fiveHourWarningEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyFiveHourWarningEnabled, enabled);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save 5-hour warning toggle: $e");
+    }
+  }
+
+  Future<void> updateMissedAppointmentAlertEnabled(bool enabled) async {
+    _missedAppointmentAlertEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyMissedAppointmentAlertEnabled, enabled);
+    } catch (e) {
+      debugPrint(
+        "SettingsNotifier: Failed to save missed appointment alert toggle: $e",
+      );
+    }
+  }
+
   Future<void> updateAppUpdatesEnabled(bool enabled) async {
     _appUpdatesEnabled = enabled;
     notifyListeners();
@@ -249,6 +284,8 @@ class SettingsNotifier extends ChangeNotifier {
     _notificationsEnabled = true;
     _bookingAlertsEnabled = true;
     _reminderAlertsEnabled = true;
+    _fiveHourWarningEnabled = true;
+    _missedAppointmentAlertEnabled = true;
     _appUpdatesEnabled = true;
     _globalReminderMinutes = 60;
 

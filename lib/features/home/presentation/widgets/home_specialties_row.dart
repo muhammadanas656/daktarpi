@@ -24,7 +24,6 @@ class HomeSpecialtiesRow extends StatelessWidget {
       iconData = Icons.remove_red_eye_rounded;
     }
 
-    // Fixed exactly to your original 28 size
     return Icon(iconData, color: const Color(0xFF008FA0), size: 28);
   }
 
@@ -38,70 +37,75 @@ class HomeSpecialtiesRow extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 115,
+      height: 115, 
       child: ListView.separated(
         clipBehavior: Clip.none,
         padding: const EdgeInsets.symmetric(horizontal: 24),
         scrollDirection: Axis.horizontal,
         itemCount: specialties.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 24),
+        // The uniform visual gap between items
+        separatorBuilder: (_, __) => const SizedBox(width: 16), 
         itemBuilder: (context, index) {
           final item = specialties[index];
           final name = item['name'] ?? '';
+
           return GestureDetector(
             onTap: () => onSpecialtyTap(item['id'], name),
-            child: Column(
-              children: [
-                Container(
-                  // Restored completely to your original 60x60 dimensions
-                  width: 60,
-                  height: 60,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    shape: BoxShape.circle,
-                    border:
-                        Theme.of(context).brightness == Brightness.dark
-                            ? Border.all(color: AppColors.darkBorder)
-                            : null,
-                    boxShadow: AppStyles.cardShadow(context),
-                  ),
-                  child:
-                      item['icon_url'] != null &&
-                              item['icon_url'].toString().isNotEmpty
-                          // YOUR FIX: The invisible container turned into a circle
-                          // with diameter 50 (equal to the diagonal of the 35px square)
-                          ? Container(
-                            width: 80,
-                            height: 50,
-                            alignment: Alignment.center,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                            ),
-                            clipBehavior:
-                                Clip.hardEdge, // Forces the circular mask
-                            child: SizedBox(
-                              width: 85,
-                              height: 35,
-                              child: AppNetworkImage(
-                                imageUrl: item['icon_url'],
-                                circular:
-                                    true, // Switched to true to match the circle requirement
-                                fit: BoxFit.contain,
-                              ),
+            child: SizedBox(
+              // 1. PHYSICAL LAYOUT: Locks the circles so they never spread apart awkwardly
+              width: 83, 
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      shape: BoxShape.circle,
+                      border: Theme.of(context).brightness == Brightness.dark
+                          ? Border.all(color: AppColors.darkBorder)
+                          : null,
+                      boxShadow: AppStyles.cardShadow(context),
+                    ),
+                    child: item['icon_url'] != null &&
+                            item['icon_url'].toString().isNotEmpty
+                        ? SizedBox(
+                            width: 35,
+                            height: 35,
+                            child: AppNetworkImage(
+                              imageUrl: item['icon_url'],
+                              circular: false,
+                              fit: BoxFit.contain,
                             ),
                           )
-                          : _getFallbackIcon(name),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  name,
-                  style: AppTextStyles.bodySmall(context).copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: context.colorTextDark,
+                        : _getFallbackIcon(name),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  
+                  // 2. DYNAMIC OVERFLOW: Text stays full size and naturally bleeds into 
+                  // the invisible margins without disrupting the circle layout!
+                  SizedBox(
+                    height: 36, // Explicit height for exactly 2 lines of text
+                    child: OverflowBox(
+                      maxWidth: 92, // Text gets 92px of breathing room (no shrinking!)
+                      maxHeight: 36,
+                      child: Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis, // Softly adds "..." if it's absurdly long
+                        style: AppTextStyles.bodySmall(context).copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: context.colorTextDark,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },

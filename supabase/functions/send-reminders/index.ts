@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import admin from 'npm:firebase-admin' // Removed the '*' to fix the 'length' error
+import admin from 'npm:firebase-admin'
 
 // 1. Initialize Firebase outside the serve function to keep it "Warm"
 const serviceAccount = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT') || '{}');
@@ -12,14 +12,14 @@ if (!admin.apps || admin.apps.length === 0) {
   });
 }
 
-serve(async (req: Request) => {// Added ': Request' to fix error 7006
+serve(async (req: Request) => {
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 2. Fetch all appointments where reminder hasn't been sent
+    // 2. Fetch only active appointments where reminder hasn't been sent
     const { data: appointments, error } = await supabase
       .from('appointments')
       .select(`
@@ -29,17 +29,21 @@ serve(async (req: Request) => {// Added ': Request' to fix error 7006
         doctors (full_name),
         profiles (fcm_token, utc_offset)
       `)
-      .eq('reminder_sent', false);
+      .eq('reminder_sent', false)
+      .in('status', ['confirmed', 'waiting']);  // FIX: Skip canceled/completed
 
     if (error) throw error;
     if (!appointments || appointments.length === 0) return new Response("No reminders due.");
 
     let sentCount = 0;
+    const errors: string[] = [];
 
     for (const appt of appointments) {
-      // 3. Time Zone Math
+      // 3. Time Zone Math — robust offset parsing
       const offsetStr = (appt.profiles as any)?.utc_offset || '05:00:00';
-      const hoursOffset = parseInt(offsetStr.split(':')[0]);
+      const parts = offsetStr.replace(/^[+-]/, '').split(':');
+      const sign = offsetStr.startsWith('-') ? -1 : 1;
+      const hoursOffset = sign * (parseInt(parts[0]) || 0);
       
       const localNow = new Date(Date.now() + (hoursOffset * 3600000));
       const oneHourFromLocal = new Date(localNow.getTime() + (60 * 60 * 1000));
@@ -49,22 +53,45 @@ serve(async (req: Request) => {// Added ': Request' to fix error 7006
       if (apptTime >= localNow && apptTime <= oneHourFromLocal) {
         const token = (appt.profiles as any)?.fcm_token;
         if (token) {
-          await admin.messaging().send({
-            token: token,
-            notification: {
-              title: 'Upcoming Appointment',
-              body: `Reminder: ${(appt.doctors as any)?.full_name} is expecting you soon.`
+          try {
+            await admin.messaging().send({
+              token: token,
+              notification: {
+                title: 'Upcoming Appointment',
+                body: `Reminder: ${(appt.doctors as any)?.full_name} is expecting you soon.`
+              }
+            });
+            await supabase.from('appointments').update({ reminder_sent: true }).eq('id', appt.id);
+            sentCount++;
+          } catch (sendError: any) {
+            // FIX: Don't let one bad token kill reminders for everyone else
+            const errorCode = sendError?.code || sendError?.errorInfo?.code || '';
+            errors.push(`Appt ${appt.id}: ${sendError.message}`);
+
+            // If the token is invalid/unregistered, clear it so we don't retry forever
+            if (
+              errorCode === 'messaging/invalid-registration-token' ||
+              errorCode === 'messaging/registration-token-not-registered'
+            ) {
+              await supabase
+                .from('profiles')
+                .update({ fcm_token: null })
+                .eq('fcm_token', token);
             }
-          });
-          await supabase.from('appointments').update({ reminder_sent: true }).eq('id', appt.id);
-          sentCount++;
+
+            // Still mark reminder_sent to avoid infinite retries on permanent failures
+            await supabase.from('appointments').update({ reminder_sent: true }).eq('id', appt.id);
+          }
         }
       }
     }
 
-    return new Response(JSON.stringify({ sent: sentCount }), { status: 200 });
+    return new Response(
+      JSON.stringify({ sent: sentCount, errors: errors.length > 0 ? errors : undefined }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
 
-  } catch (e: any) { // Added ': any' to fix error 18046
+  } catch (e: any) {
     return new Response(e.message, { status: 500 });
   }
 })

@@ -8,7 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/network/network_notifier.dart'; // PRO FIX: Network listener added
+import '../../../../core/network/network_notifier.dart'; 
 import '../../../../core/widgets/app_loader.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../favorites_notifier.dart';
@@ -30,7 +30,7 @@ import '../../../appointments/presentation/models/booking_route_args.dart';
 
 class DoctorDetailsScreen extends StatefulWidget {
   final String doctorId;
-  final Map<String, dynamic>? doctorData; // PRO FIX: Accepts Hand-off data!
+  final Map<String, dynamic>? doctorData; 
 
   const DoctorDetailsScreen({
     super.key,
@@ -51,7 +51,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   final _appointmentRepo = AppointmentRepository();
   final _favNotifier = FavoritesNotifier.instance;
 
-  // PRO FIX: Separated loading states for top and bottom half
   bool _isHeavyDataLoading = true;
   bool _isOfflineState = false;
   String? _errorMessage;
@@ -73,7 +72,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    // PRO FIX: Instantly load the hand-off data so the top half renders in 0ms!
     if (widget.doctorData != null) {
       _doctor = widget.doctorData;
     }
@@ -95,13 +93,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   void _onNetworkChanged() {
     if (mounted) {
       setState(() {
-        // Instantly update the UI flag to hide the offline card when internet returns
         _isOfflineState = NetworkNotifier.instance.isOffline;
       });
 
       if (!NetworkNotifier.instance.isOffline) {
-        // The millisecond internet returns, automatically fetch the clinics & schedules
-        // The UI will show the loading spinner in the bottom half and then render the data smoothly!
         _isHeavyDataLoading = true;
         _fetchInitialData();
       }
@@ -149,7 +144,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   Future<void> _fetchInitialData() async {
     try {
-      // 1. Fetch full details silently in background to update any missing stats
       final doctor = await _doctorRepo.fetchDoctorDetails(widget.doctorId);
       if (mounted) {
         setState(() {
@@ -157,7 +151,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         });
       }
 
-      // 2. Fetch the heavy data (clinics & schedules)
       final results = await Future.wait([
         _doctorRepo.fetchClinics(widget.doctorId),
         _doctorRepo.fetchSchedules(widget.doctorId),
@@ -191,7 +184,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       if (mounted) {
         setState(() {
           _isHeavyDataLoading = false;
-          // PRO FIX: Handle offline state gracefully!
           if (NetworkNotifier.instance.isOffline) {
             _isOfflineState = true;
           } else {
@@ -366,7 +358,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // If we have ZERO data (no hand-off and no network fetch yet), show full loading.
     if (_doctor == null && _isHeavyDataLoading) {
       return Scaffold(
         backgroundColor: bgColor,
@@ -410,7 +401,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --- TOP HALF: Instantly loads! ---
                       DoctorDetailsHeader(
                         doctor: _doctor!,
                         onFavoriteTap: _toggleFavorite,
@@ -424,23 +414,22 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         onBookNowTap: _handleBooking,
                       ),
                       const SizedBox(height: 14),
+
+                      // --- PRO FIX: Swap to the new unique patients column ---
                       DoctorStatsRow(
-                        patients:
-                            _doctor!['patients_served']?.toString() ?? '100+',
-                        experience:
-                            _doctor!['experience_years']?.toString() ?? '5',
+                        patients: _doctor!['patients_served']?.toString() ?? '0',
+                        experience: _doctor!['experience_years']?.toString() ?? '0',
                         rating: _doctor!['rating']?.toString() ?? '0.0',
                       ),
+
                       const SizedBox(height: 24),
 
-                      // --- BOTTOM HALF: Graceful Loading & Offline States ---
                       if (_isHeavyDataLoading) ...[
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 40),
                           child: AppLoader(),
                         ),
                       ] else if (_isOfflineState) ...[
-                        // PRO FIX: Beautiful Offline Fallback Card
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(24),
@@ -481,7 +470,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                           ),
                         ),
                       ] else ...[
-                        // Success! Render the heavy data
                         if (_errorMessage != null) ...[
                           Container(
                             width: double.infinity,
@@ -582,8 +570,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
               ),
             ),
 
-            // --- BOTTOM BUTTON ---
-            // Hide booking button if offline or still loading clinics
             if (!_isHeavyDataLoading && !_isOfflineState)
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),

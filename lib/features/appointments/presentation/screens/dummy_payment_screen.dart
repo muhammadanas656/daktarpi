@@ -90,6 +90,10 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
             appointmentEndDateTime: timeoutDateTime,
             reminderMinutes: globalMins,
             doctorName: widget.args.doctorName,
+            includeFiveHourWarning:
+                SettingsNotifier.instance.fiveHourWarningEnabled,
+            includeMissedStatusUpdate:
+                SettingsNotifier.instance.missedAppointmentAlertEnabled,
           );
         } else {
           await _notificationService.cancelReminder(persistedAppointmentId);

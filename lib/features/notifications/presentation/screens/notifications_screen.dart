@@ -126,11 +126,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
       body: Container(
         decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child:
-            notifications.isEmpty
-                ? _buildPremiumEmptyState(isDark)
-                : ListView.builder(
-                  // Restored the exact original padding dimensions
+        // --- PRO FIX: Added Pull-to-Refresh to instantly sync from Supabase ---
+        child: RefreshIndicator(
+          color: AppColors.primaryGreen,
+          onRefresh: () => NotificationNotifier.instance.load(force: true),
+          child: notifications.isEmpty
+              ? ListView(
+                  children: [
+                    SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                    _buildPremiumEmptyState(isDark),
+                  ],
+                )
+              : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
                   itemCount: groupedNotifications.length,
                   itemBuilder: (context, sectionIndex) {
@@ -176,6 +183,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     );
                   },
                 ),
+        ),
       ),
     );
   }
@@ -183,7 +191,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget _buildNotificationCard(Map<String, dynamic> notif, bool isDark) {
     final isRead = notif['is_read'] == true;
 
-    // We pre-calculate a 100% solid color so the red background physically cannot bleed through
     final surfaceColor = Theme.of(context).colorScheme.surface;
     final unreadTint = AppColors.primaryGreen.withValues(
       alpha: isDark ? 0.08 : 0.04,
@@ -192,15 +199,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         isRead ? surfaceColor : Color.alphaBlend(unreadTint, surfaceColor);
 
     return Container(
-      // EXACT ORIGINAL MARGIN: Restored to purely bottom: 16. No extra bulk.
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        boxShadow: AppStyles.cardShadow(
-          context,
-        ), // Shadow is static and safe outside the clip
+        boxShadow: AppStyles.cardShadow(context),
       ),
-      // MASTER MASK: Forces perfectly rounded corners on both the background and sliding card
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Dismissible(
@@ -221,7 +224,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           child: Container(
             decoration: BoxDecoration(
-              color: solidCardColor, // Uses the solid blended color
+              color: solidCardColor,
               border: Border.all(
                 color:
                     isRead
@@ -238,7 +241,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: InkWell(
                 onTap:
                     () => NotificationNotifier.instance.markAsRead(notif['id']),
-                // EXACT ORIGINAL PADDING: 16 all around
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(

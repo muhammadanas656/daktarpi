@@ -1,10 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -142,7 +141,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   String _getCleanFileName(String path) {
-    return path.split('/').last.replaceFirst(RegExp(r'^\d+_'), '');
+    return path
+        .split(RegExp(r'[\\/]'))
+        .last
+        .replaceFirst(RegExp(r'^\d+_'), '');
   }
 
   Future<void> _deleteRecord(MedicalRecord record) async {
@@ -289,18 +291,13 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           'jpg',
           'jpeg',
           'png',
+          'heic',
         ].contains(path.split('.').last.toLowerCase());
 
-        // PRO FIX: OFFLINE CACHE SYSTEM
-        // Check the local app directory for the file before hitting the network
-        final dir = await getApplicationDocumentsDirectory();
-        final fileName = _getCleanFileName(path);
-        final localFile = File('${dir.path}/$fileName');
-        final bool existsLocally = await localFile.exists();
-
         final isOffline = NetworkNotifier.instance.isOffline;
+        final localFile = await _repository.getLocalAttachmentFile(path);
 
-        if (isOffline && !existsLocally) {
+        if (isOffline && localFile == null) {
           if (mounted) {
             CustomSnackbar.showError(
               context,
@@ -311,17 +308,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         }
 
         String? networkUrl;
-        if (!isOffline) {
+        if (!isOffline && localFile == null) {
           networkUrl = await _repository.getSignedUrl(path);
-        }
-
-        // PRO FIX: Background Caching. If we are online and don't have it locally, save it forever!
-        if (!isOffline && !existsLocally && networkUrl != null) {
-          http.get(Uri.parse(networkUrl)).then((response) {
-            if (response.statusCode == 200) {
-              localFile.writeAsBytes(response.bodyBytes);
-            }
-          });
+          unawaited(_repository.cacheRemoteFile(path, signedUrl: networkUrl));
         }
 
         if (isImage) {
@@ -364,16 +353,31 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(22),
-                        child: InteractiveViewer(
-                          // PRO FIX: Instantly load the local file if it exists
-                          child:
-                              existsLocally
-                                  ? Image.file(localFile, fit: BoxFit.contain)
-                                  : AppNetworkImage(
-                                    imageUrl: networkUrl,
-                                    cacheKey: path,
-                                    fit: BoxFit.contain,
-                                  ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final imageChild =
+                                localFile != null
+                                    ? Image.file(
+                                      localFile,
+                                      fit: BoxFit.contain,
+                                      gaplessPlayback: true,
+                                    )
+                                    : AppNetworkImage(
+                                      imageUrl: networkUrl,
+                                      cacheKey: path,
+                                      width: constraints.maxWidth,
+                                      height: constraints.maxHeight,
+                                      fit: BoxFit.contain,
+                                    );
+
+                            return InteractiveViewer(
+                              child: SizedBox(
+                                width: constraints.maxWidth,
+                                height: constraints.maxHeight,
+                                child: imageChild,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -420,30 +424,27 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           return;
         }
 
-        // PRO FIX: Handling non-image documents (PDFs) offline
-        if (existsLocally) {
-          final result = await OpenFilex.open(localFile.path);
-          if (result.type != ResultType.done && mounted) {
-            CustomSnackbar.showError(
-              context,
-              "Could not open file: ${result.message}",
-            );
+        File? fileToOpen = localFile;
+        if (fileToOpen == null) {
+          if (mounted) {
+            CustomSnackbar.showInfo(context, "Downloading file...");
           }
-        } else {
-          if (mounted) CustomSnackbar.showInfo(context, "Downloading file...");
-          final response = await http.get(Uri.parse(networkUrl!));
-          if (response.statusCode == 200) {
-            await localFile.writeAsBytes(response.bodyBytes);
-            final result = await OpenFilex.open(localFile.path);
-            if (result.type != ResultType.done && mounted) {
-              CustomSnackbar.showError(
-                context,
-                "Could not open file: ${result.message}",
-              );
-            }
-          } else {
-            throw Exception('Failed to download file');
-          }
+          fileToOpen = await _repository.cacheRemoteFile(
+            path,
+            signedUrl: networkUrl,
+          );
+        }
+
+        if (fileToOpen == null) {
+          throw Exception('Failed to download file');
+        }
+
+        final result = await OpenFilex.open(fileToOpen.path);
+        if (result.type != ResultType.done && mounted) {
+          CustomSnackbar.showError(
+            context,
+            "Could not open file: ${result.message}",
+          );
         }
       } catch (e) {
         if (mounted) {

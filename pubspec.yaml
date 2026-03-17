@@ -73,6 +73,7 @@ dependencies:
   share_plus: ^12.0.1
   firebase_core: ^4.5.0
   firebase_messaging: ^16.1.2
+  skeletonizer: ^1.4.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

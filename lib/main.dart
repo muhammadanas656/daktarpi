@@ -46,6 +46,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       'timestamp': DateTime.now().toIso8601String(),
       'is_read': false,
       'payload': payload,
+      if (message.messageId != null) 'message_id': message.messageId,
     };
 
     // D. Talk directly to the physical database (bypassing the UI Notifier)
@@ -60,11 +61,82 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       ).compareTo(DateTime.parse(a['timestamp'])),
     );
 
-    await repo.saveNotifications(notifications);
-    debugPrint(
+await repo.saveLocalCache(notifications);    
+debugPrint(
       '✅ Background Isolate: Successfully saved ghost notification to Hive!',
     );
   }
+}
+
+Future<void> _runStartupStepVoid(
+  String label,
+  Future<void> Function() action, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  try {
+    await action().timeout(timeout);
+  } catch (e) {
+    debugPrint('Startup step failed: $label -> $e');
+  }
+}
+
+Future<T> _runStartupStepValue<T>(
+  String label,
+  Future<T> Function() action, {
+  required T fallback,
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  try {
+    return await action().timeout(timeout);
+  } catch (e) {
+    debugPrint('Startup step failed: $label -> $e');
+    return fallback;
+  }
+}
+
+Future<void> _startDeferredServices() async {
+  await _runStartupStepVoid(
+    'settings.load',
+    () => SettingsNotifier.instance.loadSettings(),
+  );
+  await _runStartupStepVoid(
+    'notifications.load',
+    () => NotificationNotifier.instance.load(),
+  );
+  unawaited(
+    _runStartupStepVoid(
+      'local_notifications.initialize',
+      () => AppointmentNotificationService.instance.initialize(),
+    ),
+  );
+  unawaited(
+    _runStartupStepVoid(
+      'network.initialize',
+      () async {
+        NetworkNotifier.instance.initialize();
+      },
+    ),
+  );
+
+  if (Supabase.instance.client.auth.currentSession != null) {
+    unawaited(
+      _runStartupStepVoid(
+        'fcm.initialize.current_session',
+        () => FcmService.instance.initialize(),
+      ),
+    );
+  }
+
+  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    if (data.session != null) {
+      unawaited(
+        _runStartupStepVoid(
+          'fcm.initialize.auth_change',
+          () => FcmService.instance.initialize(),
+        ),
+      );
+    }
+  });
 }
 
 Future<void> main() async {
@@ -82,26 +154,26 @@ Future<void> main() async {
       'Firebase not initialized for this platform (usually missing android firebase_options.dart): $e',
     );
   }
-  await dotenv.load(fileName: ".env");
-  await Hive.initFlutter();
+  await _runStartupStepVoid(
+    'dotenv.load',
+    () => dotenv.load(fileName: ".env"),
+  );
+  await _runStartupStepVoid(
+    'hive.init',
+    () => Hive.initFlutter(),
+  );
 
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
-  // 2. Start the FCM Service to grab the token
-  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-    if (data.session != null) {
-      FcmService.instance.initialize();
-    }
-  });
-
-  await SettingsNotifier.instance.loadSettings();
-  await NotificationNotifier.instance.load();
-  await AppointmentNotificationService.instance.initialize();
-  NetworkNotifier.instance.initialize();
-  final deviceCompromised = await DeviceIntegrityService().enforceOnStartup();
+  final deviceCompromised = await _runStartupStepValue<bool>(
+    'device_integrity.enforce',
+    () => DeviceIntegrityService().enforceOnStartup(),
+    fallback: false,
+    timeout: const Duration(seconds: 3),
+  );
 
   final telemetryService = ErrorTelemetryService();
 
@@ -136,6 +208,11 @@ Future<void> main() async {
   runZonedGuarded(
     () {
       runApp(deviceCompromised ? const _CompromisedDeviceApp() : const MyApp());
+      if (!deviceCompromised) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(_startDeferredServices());
+        });
+      }
     },
     (error, stack) {
       unawaited(

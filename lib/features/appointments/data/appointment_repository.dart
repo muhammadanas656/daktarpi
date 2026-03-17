@@ -116,7 +116,7 @@ class AppointmentRepository {
             case 'cancel_appointment':
               await _client
                   .from('appointments')
-                  .delete()
+                  .update({'status': 'canceled'})
                   .eq('id', payload['id']);
               break;
             case 'complete_appointment':

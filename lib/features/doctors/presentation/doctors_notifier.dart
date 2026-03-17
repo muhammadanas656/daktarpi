@@ -16,13 +16,13 @@ class DoctorsNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> _hospitals = [];
   List<Map<String, dynamic>> _clinics = [];
 
-  // PRO FIX: Centralized data points for HomeScreen and Specialty Lists 
+  // PRO FIX: Centralized data points for HomeScreen and Specialty Lists
   List<Map<String, dynamic>> _popularDoctors = [];
   List<Map<String, dynamic>> _featuredDoctors = [];
   List<Map<String, dynamic>> _specialties = [];
 
   bool _isLoading = false;
-  
+
   // Track parameters to prevent re-fetching the same data
   String _lastQuery = '';
   String _lastFilter = 'All';
@@ -30,7 +30,7 @@ class DoctorsNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> get doctors => _doctors;
   List<Map<String, dynamic>> get hospitals => _hospitals;
   List<Map<String, dynamic>> get clinics => _clinics;
-  
+
   List<Map<String, dynamic>> get popularDoctors => _popularDoctors;
   List<Map<String, dynamic>> get featuredDoctors => _featuredDoctors;
   List<Map<String, dynamic>> get specialties => _specialties;
@@ -44,8 +44,11 @@ class DoctorsNotifier extends ChangeNotifier {
     bool forceRefresh = false,
   }) async {
     // Optimization: Skip fetching if the exact constraints are already hot in RAM, unless forced
-    if (!forceRefresh && _lastQuery == query && _lastFilter == filter && _doctors.isNotEmpty) {
-      return; 
+    if (!forceRefresh &&
+        _lastQuery == query &&
+        _lastFilter == filter &&
+        _doctors.isNotEmpty) {
+      return;
     }
 
     _lastQuery = query;
@@ -65,7 +68,9 @@ class DoctorsNotifier extends ChangeNotifier {
           userLat = position.latitude;
           userLng = position.longitude;
         } catch (e) {
-          debugPrint("DoctorsNotifier: Location permission denied or unretrievable.");
+          debugPrint(
+            "DoctorsNotifier: Location permission denied or unretrievable.",
+          );
         }
       }
 
@@ -101,9 +106,15 @@ class DoctorsNotifier extends ChangeNotifier {
   }
 
   // --- PRO FIX: Centralized Sub-Searches ---
-  
-  Future<void> fetchPopularDoctors({String query = '', int? limit, bool forceRefresh = false}) async {
-    // Only block the UI if we have literally nothing to show
+
+  Future<void> fetchPopularDoctors({
+    String query = '',
+    int? limit,
+    bool forceRefresh = false,
+  }) async {
+    // PRO FIX: The RAM Cache Guard! If we have data and aren't forcing a refresh, escape instantly!
+    if (!forceRefresh && _popularDoctors.isNotEmpty) return;
+
     if (_popularDoctors.isEmpty) {
       _isLoading = true;
       notifyListeners();
@@ -112,7 +123,7 @@ class DoctorsNotifier extends ChangeNotifier {
     try {
       final userLocation = _profileNotifier.profile?.location;
       final countryIso = _profileNotifier.profile?.countryIso;
-      
+
       _popularDoctors = await _doctorRepo.fetchPopularDoctors(
         query: query,
         limit: limit,
@@ -128,7 +139,14 @@ class DoctorsNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchFeaturedDoctors({String query = '', int? limit, bool forceRefresh = false}) async {
+  Future<void> fetchFeaturedDoctors({
+    String query = '',
+    int? limit,
+    bool forceRefresh = false,
+  }) async {
+    // PRO FIX: The RAM Cache Guard!
+    if (!forceRefresh && _featuredDoctors.isNotEmpty) return;
+
     if (_featuredDoctors.isEmpty) {
       _isLoading = true;
       notifyListeners();
@@ -137,7 +155,7 @@ class DoctorsNotifier extends ChangeNotifier {
     try {
       final userLocation = _profileNotifier.profile?.location;
       final countryIso = _profileNotifier.profile?.countryIso;
-      
+
       _featuredDoctors = await _doctorRepo.fetchFeaturedDoctors(
         query: query,
         limit: limit,
@@ -154,12 +172,17 @@ class DoctorsNotifier extends ChangeNotifier {
   }
 
   Future<void> fetchSpecialties({bool forceRefresh = false}) async {
+    // PRO FIX: The RAM Cache Guard!
+    if (!forceRefresh && _specialties.isNotEmpty) return;
+
     if (_specialties.isEmpty) {
       _isLoading = true;
       notifyListeners();
     }
     try {
-      _specialties = await _doctorRepo.fetchSpecialties(forceRefresh: forceRefresh);
+      _specialties = await _doctorRepo.fetchSpecialties(
+        forceRefresh: forceRefresh,
+      );
     } catch (e) {
       debugPrint("DoctorsNotifier Specialties Fetch Error: $e");
     } finally {

@@ -40,6 +40,16 @@ class AppointmentNotifier extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  bool _shouldPreserveMissedStatusUpdate(Appointment appointment) {
+    final scheduledEnd =
+        DateTime.tryParse('${appointment.scheduleDate}T${appointment.endTime}') ??
+        DateTime.tryParse('${appointment.scheduleDate} ${appointment.endTime}');
+    if (scheduledEnd == null) {
+      return false;
+    }
+    return !scheduledEnd.isAfter(DateTime.now());
+  }
+
   void initializeRealtime() {
     if (_isRealtimeInitialized) {
       unawaited(_ensureRealtimeSubscription());
@@ -132,7 +142,10 @@ class AppointmentNotifier extends ChangeNotifier {
     }
 
     try {
-      final previousIds = _appointments.map((a) => a.id).toSet();
+      final previousAppointmentsById = {
+        for (final appointment in _appointments) appointment.id: appointment,
+      };
+      final previousIds = previousAppointmentsById.keys.toSet();
 
       // PRO FIX: Fetch ALL related data simultaneously, including the Activity Log!
       final results = await Future.wait([
@@ -149,7 +162,16 @@ class AppointmentNotifier extends ChangeNotifier {
 
       final nextIds = freshAppointments.map((a) => a.id).toSet();
       for (final removedId in previousIds.difference(nextIds)) {
-        unawaited(_notificationService.cancelReminder(removedId));
+        final removedAppointment = previousAppointmentsById[removedId];
+        final preserveMissedStatusUpdate =
+            removedAppointment != null &&
+            _shouldPreserveMissedStatusUpdate(removedAppointment);
+        unawaited(
+          _notificationService.cancelReminder(
+            removedId,
+            preserveMissedStatusUpdate: preserveMissedStatusUpdate,
+          ),
+        );
       }
 
       _appointments = freshAppointments;

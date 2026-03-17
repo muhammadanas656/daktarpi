@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +16,7 @@ import '../../data/medical_record.dart';
 import '../../data/medical_record_repository.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../../core/widgets/app_loader.dart';
+import '../../../../core/network/network_notifier.dart';
 
 class AddRecordScreen extends StatefulWidget {
   final MedicalRecord? recordToEdit;
@@ -71,7 +73,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   }
 
   String _getCleanFileName(String path) {
-    String name = path.split('/').last;
+    final name = path.split(RegExp(r'[\\/]')).last;
     return name.replaceFirst(RegExp(r'^\d+_'), '');
   }
 
@@ -297,8 +299,8 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final newImageUrls = await _repository.uploadFiles(_selectedImages);
-      final newDocUrls = await _repository.uploadFiles(_selectedDocs);
+      final newImageUrls = await _repository.prepareFilesForSave(_selectedImages);
+      final newDocUrls = await _repository.prepareFilesForSave(_selectedDocs);
 
       final allFilePaths = [
         ..._existingImageUrls,
@@ -344,18 +346,81 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
       builder:
           (_) => Dialog(
             backgroundColor: Colors.transparent,
-            child: Stack(
-              alignment: Alignment.topRight,
-              children: [
-                InteractiveViewer(child: Image(image: imageProvider)),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final maxWidth = MediaQuery.of(context).size.width * 0.86;
+                final maxHeight = MediaQuery.of(context).size.height * 0.7;
+
+                return SizedBox(
+                  width: maxWidth,
+                  height: maxHeight,
+                  child: Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      InteractiveViewer(
+                        child: SizedBox(
+                          width: maxWidth,
+                          height: maxHeight,
+                          child: Image(
+                            image: imageProvider,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
     );
+  }
+
+  Future<_ResolvedMedicalRecordImage> _resolveExistingImage(String path) async {
+    final localFile = await _repository.getLocalAttachmentFile(path);
+    if (localFile != null) {
+      return _ResolvedMedicalRecordImage(file: localFile);
+    }
+
+    if (NetworkNotifier.instance.isOffline) {
+      return const _ResolvedMedicalRecordImage();
+    }
+
+    final signedUrl = await _repository.getSignedUrl(path);
+    unawaited(_repository.cacheRemoteFile(path, signedUrl: signedUrl));
+    return _ResolvedMedicalRecordImage(networkUrl: signedUrl);
+  }
+
+  Future<void> _openExistingImage(String path) async {
+    try {
+      final resolvedImage = await _resolveExistingImage(path);
+      if (!mounted) {
+        return;
+      }
+
+      if (resolvedImage.file != null) {
+        _showFullImage(FileImage(resolvedImage.file!));
+        return;
+      }
+
+      if (resolvedImage.networkUrl != null) {
+        _showFullImage(NetworkImage(resolvedImage.networkUrl!));
+        return;
+      }
+
+      CustomSnackbar.showInfo(
+        context,
+        "This image isn't available offline yet.",
+      );
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showError(context, "Unable to open image: $e");
+      }
+    }
   }
 
   @override
@@ -420,9 +485,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                                 final path = entry.value;
                                 return _buildThumbnail(
                                   path: path,
-                                  onTap: (url) => _showFullImage(NetworkImage(url)),
                                   onDelete: () => setState(() => _existingImageUrls.removeAt(index)),
-                                  isNetwork: true,
                                 );
                               }),
                               ..._selectedImages.asMap().entries.map((entry) {
@@ -430,9 +493,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                                 final file = entry.value;
                                 return _buildThumbnail(
                                   file: file,
-                                  onTap: (_) => _showFullImage(FileImage(file)),
                                   onDelete: () => setState(() => _selectedImages.removeAt(index)),
-                                  isNetwork: false,
                                 );
                               }),
                             ],
@@ -725,56 +786,67 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   Widget _buildThumbnail({
     String? path,
     File? file,
-    required Function(String) onTap,
     required VoidCallback onDelete,
-    required bool isNetwork,
   }) {
+    final imageWidget =
+        file != null
+            ? GestureDetector(
+              onTap: () => _showFullImage(FileImage(file)),
+              child: Image.file(
+                file,
+                width: 100,
+                height: 120,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              ),
+            )
+            : FutureBuilder<_ResolvedMedicalRecordImage>(
+              future: _resolveExistingImage(path!),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return _buildThumbnailPlaceholder();
+                }
+
+                final resolvedImage = snapshot.data;
+                final resolvedFile = resolvedImage?.file;
+                if (resolvedFile != null) {
+                  return GestureDetector(
+                    onTap: () => _showFullImage(FileImage(resolvedFile)),
+                    child: Image.file(
+                      resolvedFile,
+                      width: 100,
+                      height: 120,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                    ),
+                  );
+                }
+
+                final resolvedNetworkUrl = resolvedImage?.networkUrl;
+                if (resolvedNetworkUrl != null) {
+                  return GestureDetector(
+                    onTap: () => _openExistingImage(path!),
+                    child: AppNetworkImage(
+                      imageUrl: resolvedNetworkUrl,
+                      cacheKey: path,
+                      width: 100,
+                      height: 120,
+                      fit: BoxFit.cover,
+                    ),
+                  );
+                }
+
+                return _buildUnavailableThumbnail();
+              },
+            );
+
     return Padding(
       padding: const EdgeInsets.only(right: 12),
       child: Stack(
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: GestureDetector(
-              onTap: () {
-                if (isNetwork && path != null) {
-                  // Handled by FutureBuilder inside
-                } else if (file != null) {
-                  onTap('');
-                }
-              },
-              child:
-                  isNetwork
-                      ? FutureBuilder<String>(
-                        future: _repository.getSignedUrl(path!),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const SizedBox(
-                              width: 100,
-                              height: 120,
-                              child: AppLoader(),
-                            );
-                          }
-                          return GestureDetector(
-                            onTap: () => onTap(snapshot.data!),
-                            // PRO FIX: Now caches the signed URL thumbnail instantly
-                          child: AppNetworkImage(
-                            imageUrl: snapshot.data!,
-                            cacheKey: path, // The raw path never changes!
-                            width: 100,
-                            height: 120,
-                            fit: BoxFit.cover,
-                          ),
-                        );
-                      },
-                    )
-                  : Image.file(
-                      file!,
-                      width: 100,
-                      height: 120,
-                      fit: BoxFit.cover,
-                    ),
-            ),
+            child: imageWidget,
           ),
           Positioned(
             top: 5,
@@ -793,6 +865,27 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
     );
   }
 
+  Widget _buildThumbnailPlaceholder() {
+    return const SizedBox(
+      width: 100,
+      height: 120,
+      child: AppLoader(),
+    );
+  }
+
+  Widget _buildUnavailableThumbnail() {
+    return Container(
+      width: 100,
+      height: 120,
+      color: Theme.of(context).colorScheme.surface,
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.image_not_supported_outlined,
+        color: context.colorTextLight,
+      ),
+    );
+  }
+
   Widget _buildLabel(String label) {
     return Text(
       label,
@@ -803,4 +896,11 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
       ),
     );
   }
+}
+
+class _ResolvedMedicalRecordImage {
+  final File? file;
+  final String? networkUrl;
+
+  const _ResolvedMedicalRecordImage({this.file, this.networkUrl});
 }

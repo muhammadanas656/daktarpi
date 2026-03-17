@@ -1,3 +1,4 @@
+import 'dart:io'; // PRO FIX: Added dart:io for local file handling
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
@@ -28,23 +29,34 @@ class AppNetworkImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // PRO FIX: We define the assets inside build to pass the context to the shimmer
     final fallback = _buildFallback();
     final url = imageUrl?.trim();
 
     Widget imageChild;
     if (url == null || url.isEmpty) {
       imageChild = fallback;
-    } else {
+    } 
+    // PRO FIX: If it's a web URL, aggressively cache it!
+    else if (url.startsWith('http://') || url.startsWith('https://')) {
       imageChild = CachedNetworkImage(
         imageUrl: url,
         cacheKey: cacheKey,
         width: width,
         height: height,
         fit: fit,
-        // PRO FIX: Passing context here to ensure the shimmer knows the theme mode
         placeholder: (context, url) => _buildShimmer(context),
         errorWidget: (context, url, error) => fallback,
+      );
+    } 
+    // PRO FIX: If it's a local file (like a newly picked category image), render it instantly!
+    else {
+      final file = File(url);
+      imageChild = Image.file(
+        file,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => fallback,
       );
     }
 
@@ -60,16 +72,15 @@ class AppNetworkImage extends StatelessWidget {
   Widget _buildShimmer(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // PROFESSIONAL TOKENS: Slate-based palette for a high-end medical-tech feel
     final Color baseColor =
         isDark
-            ? const Color(0xFF1E293B) // Dark Slate
-            : const Color(0xFFF1F5F9); // Light Slate
+            ? const Color(0xFF1E293B) 
+            : const Color(0xFFF1F5F9); 
 
     final Color highlightColor =
         isDark
-            ? const Color(0xFF334155) // Lighter Slate
-            : const Color(0xFFFFFFFF); // Pure White
+            ? const Color(0xFF334155) 
+            : const Color(0xFFFFFFFF); 
 
     return RepaintBoundary(
       child: Shimmer.fromColors(
@@ -83,7 +94,6 @@ class AppNetworkImage extends StatelessWidget {
           decoration: BoxDecoration(
             color: baseColor,
             shape: circular ? BoxShape.circle : BoxShape.rectangle,
-            // Only apply borderRadius if we are not in circular mode
             borderRadius: !circular ? borderRadius : null,
           ),
         ),
