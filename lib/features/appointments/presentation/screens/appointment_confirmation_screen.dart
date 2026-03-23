@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // PRO FIX: Added for Real-Time
 import '../../../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -6,7 +7,6 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../doctors/data/doctor_repository.dart';
 import '../../data/appointment_repository.dart';
-// Added ProfileRepository
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import 'package:intl/intl.dart';
@@ -41,38 +41,75 @@ class _AppointmentConfirmationScreenState
     extends State<AppointmentConfirmationScreen> {
   Color get primaryGreen => AppColors.primaryGreen;
   Color get textDark => context.colorTextDark;
+  Color get textLight => context.colorTextLight; // <--- ADD THIS LINE!
   Color get textGrey => context.colorTextGrey;
   Color get borderColor => context.colorBorder;
 
   final _doctorRepo = DoctorRepository();
   final _appointmentRepo = AppointmentRepository();
-  // Initialized Profile Repo
 
   TextStyle get _sectionHeaderStyle => AppTextStyles.h3(context);
 
   late DateTime _focusedDate;
   late DateTime _selectedDate;
   List<Map<String, dynamic>> _schedules = [];
-  List<String> _bookedSlots = [];
+  
+  Map<String, int> _slotBookingCounts = {};
   bool _isLoading = true;
 
   int _selectedTimeSlotIndex = -1;
+
+  // PRO FIX: The WebSocket channel for live updates
+  RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _focusedDate = widget.initialDate;
     _selectedDate = widget.initialDate;
-    if (widget.appointmentId != null) {
-      debugPrint("Mode: RESCHEDULE ID ${widget.appointmentId}");
-    } else {
-      debugPrint("Mode: NEW BOOKING");
-    }
     _fetchSchedulesAndBookings();
+    _setupRealtimeSubscription(); // PRO FIX: Boot up the live listener!
+  }
+
+  @override
+  void dispose() {
+    // PRO FIX: Instantly kill the WebSocket when they leave to save money
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  // --- PRO FIX: The highly-filtered, cheap Real-Time Listener ---
+  void _setupRealtimeSubscription() {
+    final doctorId = widget.doctor['id'].toString();
+
+    _realtimeChannel = Supabase.instance.client
+        .channel('public:appointments:doctor_$doctorId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all, // Listen to inserts, updates, and deletes
+          schema: 'public',
+          table: 'appointments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'doctor_id',
+            value: doctorId,
+          ),
+          callback: (payload) {
+            // If anyone books or cancels an appointment for this doctor, refresh the live UI!
+            debugPrint('🔄 Real-Time: Doctor schedule changed! Refreshing UI...');
+            if (mounted) {
+              _fetchSchedulesAndBookings();
+            }
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _fetchSchedulesAndBookings() async {
-    setState(() => _isLoading = true);
+    // We only show the big loader if the array is completely empty to prevent 
+    // the UI from flashing aggressively during background real-time updates.
+    if (_schedules.isEmpty) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       final scheduleRes = await _doctorRepo.fetchSchedulesByClinic(
@@ -81,7 +118,8 @@ class _AppointmentConfirmationScreenState
       );
 
       final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final bookedSlots = await _appointmentRepo.fetchBookedSlots(
+      
+      final slotCounts = await _appointmentRepo.fetchSlotBookingCounts(
         doctorId: widget.doctor['id'].toString(),
         clinicId: widget.clinic['id'].toString(),
         date: formattedDate,
@@ -91,41 +129,43 @@ class _AppointmentConfirmationScreenState
       if (mounted) {
         setState(() {
           _schedules = scheduleRes;
-          _bookedSlots = bookedSlots;
+          _slotBookingCounts = slotCounts;
           _isLoading = false;
-          _selectedTimeSlotIndex = -1;
-        });
-
-        // Auto-select slot if passed and available
-        if (widget.timeSlot != null) {
+          
+          // If the currently selected slot was just booked by someone else in real-time,
+          // we need to unselect it so they don't get an error trying to confirm!
           final slots = _generateSlots();
-          final index = slots.indexOf(widget.timeSlot!);
-          if (index != -1) {
-            setState(() {
-              _selectedTimeSlotIndex = index;
-            });
+          if (_selectedTimeSlotIndex != -1 && _selectedTimeSlotIndex < slots.length) {
+             if (slots[_selectedTimeSlotIndex]['isFull'] == true) {
+                 _selectedTimeSlotIndex = -1; // Unselect the now-stolen slot
+             }
           }
-        }
+
+          // Initial auto-select logic
+          if (widget.timeSlot != null && _selectedTimeSlotIndex == -1) {
+            final index = slots.indexWhere((s) => s['time'] == widget.timeSlot);
+            if (index != -1 && !slots[index]['isFull']) {
+              _selectedTimeSlotIndex = index;
+            }
+          }
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  List<String> _generateSlots() {
+  List<Map<String, dynamic>> _generateSlots() {
     if (_schedules.isEmpty) {
       return [];
     }
+    
     final dayName = DateFormat('EEEE').format(_selectedDate);
-    final daySchedules =
-        _schedules
-            .where(
-              (s) =>
-                  s['day_of_week'].toString().toLowerCase() ==
-                  dayName.toLowerCase(),
-            )
-            .toList();
-    List<String> allSlots = [];
+    final daySchedules = _schedules
+        .where((s) => s['day_of_week'].toString().toLowerCase() == dayName.toLowerCase())
+        .toList();
+        
+    List<Map<String, dynamic>> allSlots = [];
     final now = DateTime.now();
     final isToday = DateUtils.isSameDay(_selectedDate, now);
 
@@ -134,6 +174,8 @@ class _AppointmentConfirmationScreenState
         TimeOfDay start = _parseTime(schedule['start_time']);
         TimeOfDay end = _parseTime(schedule['end_time']);
         int duration = schedule['slot_duration_minutes'] ?? 30;
+        
+        int maxCapacity = schedule['max_patients'] ?? 1;
 
         int startMin = start.hour * 60 + start.minute;
         int endMin = end.hour * 60 + end.minute;
@@ -143,31 +185,39 @@ class _AppointmentConfirmationScreenState
           final eTime = _minToTime(startMin + duration);
           final slotStr = "$sTime - $eTime";
 
-          bool isBooked = _bookedSlots.contains(slotStr);
+          int currentBookings = _slotBookingCounts[slotStr] ?? 0;
+          int spotsLeft = maxCapacity - currentBookings;
+          bool isFull = spotsLeft <= 0;
+
           bool isPast = false;
           if (isToday) {
             final startHour = startMin ~/ 60;
             final startMinute = startMin % 60;
-            if (startHour < now.hour ||
-                (startHour == now.hour && startMinute < now.minute)) {
+            if (startHour < now.hour || (startHour == now.hour && startMinute < now.minute)) {
               isPast = true;
             }
           }
 
-          if (!isBooked && !isPast) {
-            allSlots.add(slotStr);
+          if (!isPast) {
+            allSlots.add({
+              'time': slotStr,
+              'spotsLeft': spotsLeft > 0 ? spotsLeft : 0,
+              'isFull': isFull,
+            });
           }
           startMin += duration;
         }
       } catch (_) {}
     }
-    allSlots.sort();
+    
+    allSlots.sort((a, b) => a['time'].compareTo(b['time']));
     return allSlots;
   }
 
   Future<void> _handleConfirm() async {
     final slots = _generateSlots();
     final today = DateUtils.dateOnly(DateTime.now());
+    
     if (_selectedDate.isBefore(today)) {
       CustomSnackbar.showError(context, "You cannot book a past date.");
       return;
@@ -177,24 +227,25 @@ class _AppointmentConfirmationScreenState
       return;
     }
 
+    final selectedSlot = slots[_selectedTimeSlotIndex];
+    if (selectedSlot['isFull']) {
+      CustomSnackbar.showError(context, "This slot is fully booked.");
+      return;
+    }
+
     final userId = _appointmentRepo.currentUserId;
     if (userId == null) {
       CustomSnackbar.showError(context, "Please sign in again to continue.");
       return;
     }
 
-    final slotString = slots[_selectedTimeSlotIndex];
-    final times = slotString.split(' - ');
+    final times = selectedSlot['time'].split(' - ');
     final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
-    final appointmentDateTime = DateFormat(
-      'yyyy-MM-dd HH:mm',
-    ).parse('$formattedDate ${times[0]}');
+    final appointmentDateTime = DateFormat('yyyy-MM-dd HH:mm').parse('$formattedDate ${times[0]}');
 
-    // --- PRO FIX: Extract the IDs from the attached records ---
     final rawAttachedRecords = widget.patientDetails['attachedRecords'] as List<dynamic>? ?? [];
     final attachedRecordIds = rawAttachedRecords.map((r) => r['id']).toList();
 
-    // Prepare the final payload for the database
     final data = {
       'user_id': userId,
       'doctor_id': widget.doctor['id'],
@@ -208,19 +259,15 @@ class _AppointmentConfirmationScreenState
       'patient_email': widget.patientDetails['email'],
       'patient_gender': widget.patientDetails['gender'],
       'patient_dob': widget.patientDetails['dob'],
-      // --- PRO FIX: Add the Image URL here so it saves to Supabase! ---
       'patient_image_url': widget.patientDetails['imagePath'], 
-      
       'idempotency_key': widget.idempotencyKey,
       'attached_record_ids': attachedRecordIds,
     };
 
-    // Format display strings for the success popup later
     final timeObj = DateFormat("HH:mm").parse(times[0]);
     final timeStr = DateFormat("hh:mm a").format(timeObj);
     final dateStr = DateFormat("MMMM d").format(_selectedDate);
 
-    // Proceed to Dummy Payment Screen!
     context.push(
       AppRoutes.dummyPayment,
       extra: DummyPaymentRouteArgs(
@@ -249,7 +296,7 @@ class _AppointmentConfirmationScreenState
               _buildAppBar(isReschedule),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -264,30 +311,26 @@ class _AppointmentConfirmationScreenState
                                 color: textDark,
                               ),
                             ),
-                            SizedBox(width: 12),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
                                 child: LinearProgressIndicator(
                                   value: 1.0,
-                                  backgroundColor: primaryGreen.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    primaryGreen,
-                                  ),
+                                  backgroundColor: primaryGreen.withValues(alpha: 0.1),
+                                  valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
                                   minHeight: 6,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        SizedBox(height: 24),
+                        const SizedBox(height: 24),
                       ],
                       _buildCalendar(),
-                      SizedBox(height: 24),
+                      const SizedBox(height: 24),
                       Text("Available Time", style: _sectionHeaderStyle),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       if (slots.isEmpty && !_isLoading)
                         Center(
                           child: Text(
@@ -299,10 +342,13 @@ class _AppointmentConfirmationScreenState
                         _buildOptionChips(
                           slots,
                           _selectedTimeSlotIndex,
-                          (i) => setState(() => _selectedTimeSlotIndex = i),
-                          true,
+                          (i) {
+                            if (!slots[i]['isFull']) {
+                              setState(() => _selectedTimeSlotIndex = i);
+                            }
+                          },
                         ),
-                      SizedBox(height: 40),
+                      const SizedBox(height: 40),
                     ],
                   ),
                 ),
@@ -317,7 +363,7 @@ class _AppointmentConfirmationScreenState
 
   Widget _buildAppBar(bool isReschedule) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -327,7 +373,6 @@ class _AppointmentConfirmationScreenState
             child: Container(
               width: 44,
               height: 44,
-              // PRO FIX: Dynamic surface card
               decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(12)),
               child: Icon(Icons.arrow_back_ios_new, size: 18, color: textDark),
             ),
@@ -336,7 +381,7 @@ class _AppointmentConfirmationScreenState
             isReschedule ? "Reschedule" : "Appointment",
             style: AppTextStyles.h3(context).copyWith(fontSize: 20),
           ),
-          SizedBox(width: 44),
+          const SizedBox(width: 44),
         ],
       ),
     );
@@ -344,22 +389,21 @@ class _AppointmentConfirmationScreenState
 
   Widget _buildCalendar() {
     return Container(
-      // PRO FIX: Replaced Colors.white and rigid shadow
       decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           Container(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: primaryGreen,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   DateFormat('MMMM yyyy').format(_focusedDate),
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -368,27 +412,13 @@ class _AppointmentConfirmationScreenState
                 Row(
                   children: [
                     InkWell(
-                      onTap:
-                          () => setState(
-                            () =>
-                                _focusedDate = DateTime(
-                                  _focusedDate.year,
-                                  _focusedDate.month - 1,
-                                ),
-                          ),
-                      child: Icon(Icons.chevron_left, color: Colors.white),
+                      onTap: () => setState(() => _focusedDate = DateTime(_focusedDate.year, _focusedDate.month - 1)),
+                      child: const Icon(Icons.chevron_left, color: Colors.white),
                     ),
-                    SizedBox(width: 16),
+                    const SizedBox(width: 16),
                     InkWell(
-                      onTap:
-                          () => setState(
-                            () =>
-                                _focusedDate = DateTime(
-                                  _focusedDate.year,
-                                  _focusedDate.month + 1,
-                                ),
-                          ),
-                      child: Icon(Icons.chevron_right, color: Colors.white),
+                      onTap: () => setState(() => _focusedDate = DateTime(_focusedDate.year, _focusedDate.month + 1)),
+                      child: const Icon(Icons.chevron_right, color: Colors.white),
                     ),
                   ],
                 ),
@@ -396,60 +426,33 @@ class _AppointmentConfirmationScreenState
             ),
           ),
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: GridView.builder(
               shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 7,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
               ),
-              itemCount:
-                  DateUtils.getDaysInMonth(
-                    _focusedDate.year,
-                    _focusedDate.month,
-                  ) +
-                  DateTime(_focusedDate.year, _focusedDate.month, 1).weekday -
-                  1,
+              itemCount: DateUtils.getDaysInMonth(_focusedDate.year, _focusedDate.month) +
+                  DateTime(_focusedDate.year, _focusedDate.month, 1).weekday - 1,
               itemBuilder: (context, index) {
-                if (index <
-                    DateTime(_focusedDate.year, _focusedDate.month, 1).weekday -
-                        1) {
-                  return SizedBox();
+                if (index < DateTime(_focusedDate.year, _focusedDate.month, 1).weekday - 1) {
+                  return const SizedBox();
                 }
 
-                final day =
-                    index -
-                    (DateTime(
-                          _focusedDate.year,
-                          _focusedDate.month,
-                          1,
-                        ).weekday -
-                        1) +
-                    1;
-
-                final date = DateTime(
-                  _focusedDate.year,
-                  _focusedDate.month,
-                  day,
-                );
-
+                final day = index - (DateTime(_focusedDate.year, _focusedDate.month, 1).weekday - 1) + 1;
+                final date = DateTime(_focusedDate.year, _focusedDate.month, day);
                 final isSelected = DateUtils.isSameDay(date, _selectedDate);
-
-                // --- NEW: Check if the date has passed ---
                 final today = DateUtils.dateOnly(DateTime.now());
                 final isPastDate = date.isBefore(today);
 
                 return InkWell(
-                  // --- NEW: Disable tapping for past dates ---
-                  onTap:
-                      isPastDate
-                          ? null
-                          : () {
-                            setState(() => _selectedDate = date);
-                            _fetchSchedulesAndBookings();
-                          },
+                  onTap: isPastDate ? null : () {
+                    setState(() => _selectedDate = date);
+                    _fetchSchedulesAndBookings();
+                  },
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
                     decoration: BoxDecoration(
@@ -460,13 +463,8 @@ class _AppointmentConfirmationScreenState
                       child: Text(
                         "$day",
                         style: TextStyle(
-                          // --- NEW: Grey out the text if it's a past date ---
-                          color:
-                              isPastDate
-                                  ? Colors.grey[300]
-                                  : (isSelected ? Colors.white : textDark),
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isPastDate ? Colors.grey[300] : (isSelected ? Colors.white : textDark),
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ),
@@ -481,45 +479,63 @@ class _AppointmentConfirmationScreenState
   }
 
   Widget _buildOptionChips(
-    List<String> items,
+    List<Map<String, dynamic>> slots,
     int selectedIndex,
     Function(int) onTap,
-    bool isTime,
   ) {
     return SingleChildScrollView(
-      clipBehavior: Clip.none, // PRO FIX: Prevent clipping of primary selection shadow
-      padding: EdgeInsets.only(bottom: 15), // PRO FIX: Allow scroll space for vertical shadow blur
+      clipBehavior: Clip.none, 
+      padding: const EdgeInsets.only(bottom: 15), 
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: List.generate(items.length, (index) {
+        children: List.generate(slots.length, (index) {
+          final slotData = slots[index];
           final isSelected = selectedIndex == index;
+          final isFull = slotData['isFull'] == true;
+          final spotsLeft = slotData['spotsLeft'] as int;
+
           return Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: GestureDetector(
-              onTap: () => onTap(index),
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  // PRO FIX: Adaptive unselected chip color
-                  color: isSelected ? primaryGreen : Theme.of(context).colorScheme.surface,
-                  shape: BoxShape.circle,
-                  border: isSelected ? null : Border.all(color: borderColor),
-                  boxShadow: isSelected
-                      ? AppStyles.primaryShadow(context, primaryGreen)
-                      : AppStyles.cardShadow(context),
-                ),
-                child: Center(
-                  child: Text(
-                    isTime
-                        ? _formatSlotDisplay(items[index])
-                        : _formatReminderDisplay(items[index]),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : primaryGreen,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+            padding: const EdgeInsets.only(right: 12),
+            child: Opacity(
+              opacity: isFull ? 0.5 : 1.0,
+              child: GestureDetector(
+                onTap: isFull ? null : () => onTap(index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 90, 
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: isSelected ? primaryGreen : Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: isSelected ? null : Border.all(color: borderColor),
+                    boxShadow: isSelected
+                        ? AppStyles.primaryShadow(context, primaryGreen)
+                        : (isFull ? null : AppStyles.cardShadow(context)),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _formatSlotDisplay(slotData['time']),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : (isFull ? textGrey : primaryGreen),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isFull ? "Full" : "$spotsLeft spot${spotsLeft > 1 ? 's' : ''}",
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: isSelected || isFull ? FontWeight.w600 : FontWeight.w500,
+                          color: isSelected 
+                              ? Colors.white.withValues(alpha: 0.9) 
+                              : (isFull ? AppColors.dangerRed : textLight),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -532,17 +548,15 @@ class _AppointmentConfirmationScreenState
 
   Widget _buildBottomButton() {
     return Container(
-      padding: EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        // PRO FIX: Dynamic bottom surface
         color: Theme.of(context).colorScheme.surface,
         border: Border(top: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkBorder : const Color(0xFFF0F0F0))),
       ),
       child: SafeArea(
         top: false,
         child: PrimaryButton(
-          label:
-              widget.appointmentId != null ? "Update Appointment" : "Confirm",
+          label: widget.appointmentId != null ? "Update Appointment" : "Confirm",
           onTap: _handleConfirm,
           isLoading: _isLoading,
           height: 54,
@@ -567,14 +581,5 @@ class _AppointmentConfirmationScreenState
     } catch (_) {
       return s;
     }
-  }
-
-  String _formatReminderDisplay(String minutesRaw) {
-    final minutes = int.tryParse(minutesRaw);
-    if (minutes == null) return "$minutesRaw\nMin";
-    if (minutes == 0) return "No\nAlarm";
-    if (minutes == 60) return "1\nHour";
-    if (minutes == 1440) return "24\nHours";
-    return "$minutes\nMin";
   }
 }

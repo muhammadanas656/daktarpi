@@ -15,7 +15,10 @@ class AuthEntryRouteService {
        _trustedDeviceRepository =
            trustedDeviceRepository ?? TrustedDeviceRepository();
 
-  Future<String> resolvePostAuthRoute({String? intendedRoute}) async {
+  Future<String> resolvePostAuthRoute({
+    bool skipServerValidation = false,
+    String? intendedRoute,
+  }) async {
     final route =
         AuthRouteResolver(
           AuthRepositoryRouteProvider(_authRepository),
@@ -35,6 +38,7 @@ class AuthEntryRouteService {
 
     final trusted = await _trustedDeviceRepository.isTrustedDeviceValid(
       userId: userId,
+      skipServerValidation: skipServerValidation,
     );
     if (!trusted) {
       return route;

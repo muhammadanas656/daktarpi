@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/app_loader.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -325,24 +326,16 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                                     await _settingsRepository.updatePassword(
                                       passwordController.text,
                                     );
-                                    await Supabase.instance.client.auth
-                                        .updateUser(
-                                          UserAttributes(
-                                            data: {'has_email_password': true},
-                                          ),
-                                        );
+                                    await _settingsRepository.updateUserMetadata(
+                                      {'has_email_password': true},
+                                    );
                                   } catch (e) {
                                     if (e.toString().toLowerCase().contains(
                                       'authentication failed',
                                     )) {
-                                      await Supabase.instance.client.auth
-                                          .updateUser(
-                                            UserAttributes(
-                                              data: {
-                                                'has_email_password': true,
-                                              },
-                                            ),
-                                          );
+                                      await _settingsRepository.updateUserMetadata(
+                                        {'has_email_password': true},
+                                      );
                                     } else {
                                       rethrow;
                                     }
@@ -534,12 +527,9 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                               : () async {
                                 setDialogState(() => isDialogLoading = true);
                                 try {
-                                  await Supabase.instance.client.auth
-                                      .updateUser(
-                                        UserAttributes(
-                                          data: {'has_email_password': false},
-                                        ),
-                                      );
+                                  await _settingsRepository.updateUserMetadata(
+                                    {'has_email_password': false},
+                                  );
                                   await _settingsRepository.refreshSession();
                                   if (dialogCtx.mounted) {
                                     Navigator.pop(dialogCtx);
@@ -814,8 +804,8 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       ),
       body:
           _isLoading
-              ? Center(
-                child: CircularProgressIndicator(color: AppColors.primaryGreen),
+              ? const Center(
+                child: AppLoader(),
               )
               : ListView(
                 padding: EdgeInsets.all(24.0),

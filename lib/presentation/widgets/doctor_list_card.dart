@@ -39,7 +39,10 @@ class DoctorListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
+    // PRO FIX: RepaintBoundary forces Flutter to cache this entire complex shadowed card as a flat raster graphic.
+    // This utterly eliminates GPU recalculations during 120fps fast-scrolling!
+    return RepaintBoundary(
+      child: Container(
       // PRO FIX: Instantly adapts to Dark Mode (removes shadow, shifts to Deep Slate)
       decoration: AppStyles.surfaceCard(context, borderRadius: AppShapes.xl),
       child: Material(
@@ -159,6 +162,6 @@ class DoctorListCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }

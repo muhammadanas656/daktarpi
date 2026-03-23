@@ -57,13 +57,16 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
   Timer? _autoCloseTimer;
   bool _isLocatorMenuOpen = false;
   Timer? _locatorAutoCloseTimer;
+  
   bool _isDistanceBarExpanded = false;
+  Timer? _distanceAutoCloseTimer; 
 
   @override
   void dispose() {
     _positionStream?.cancel();
     _autoCloseTimer?.cancel();
     _locatorAutoCloseTimer?.cancel();
+    _distanceAutoCloseTimer?.cancel(); 
     _mapController.dispose();
     super.dispose();
   }
@@ -98,7 +101,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
   void _openMenu() {
     setState(() => _isMenuOpen = true);
     _autoCloseTimer?.cancel();
-    _autoCloseTimer = Timer(Duration(seconds: 5), _closeMenu);
+    _autoCloseTimer = Timer(const Duration(seconds: 5), _closeMenu);
   }
 
   void _closeMenu() {
@@ -119,13 +122,24 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
   void _openLocatorMenu() {
     setState(() => _isLocatorMenuOpen = true);
     _locatorAutoCloseTimer?.cancel();
-    _locatorAutoCloseTimer = Timer(Duration(seconds: 5), _closeLocatorMenu);
+    _locatorAutoCloseTimer = Timer(const Duration(seconds: 5), _closeLocatorMenu);
   }
 
   void _closeLocatorMenu() {
     if (!mounted) return;
     _locatorAutoCloseTimer?.cancel();
     setState(() => _isLocatorMenuOpen = false);
+  }
+
+  void _startDistanceAutoCloseTimer() {
+    _distanceAutoCloseTimer?.cancel();
+    _distanceAutoCloseTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() {
+          _isDistanceBarExpanded = false;
+        });
+      }
+    });
   }
 
   double? _toDouble(dynamic value) {
@@ -304,9 +318,10 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
       _isRouteLoading = true;
       _isNavigating = true;
       _isUserPanning = false;
+      _isDistanceBarExpanded = false; // PRO FIX: Keep collapsed while loading!
     });
-
-    Future.delayed(Duration(milliseconds: 350), () {
+    
+    Future.delayed(const Duration(milliseconds: 350), () {
       if (mounted) {
         widget.scrollToTop();
       }
@@ -329,7 +344,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
 
       _positionStream?.cancel();
       _positionStream = Geolocator.getPositionStream(
-        locationSettings: LocationSettings(
+        locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 5,
         ),
@@ -363,7 +378,9 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
           _routePoints = points;
           _userLocation = start;
           _isRouteLoading = false;
+          _isDistanceBarExpanded = true; // PRO FIX: Expand ONLY when the route is ready!
         });
+        _startDistanceAutoCloseTimer(); // PRO FIX: Start the auto-hide timer now!
         _updateDistance();
         if (fitBounds) {
           _fitMapBounds();
@@ -391,6 +408,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
   void _cancelNavigation() {
     _positionStream?.cancel();
     _positionStream = null;
+    _distanceAutoCloseTimer?.cancel(); 
 
     widget.scrollToTop();
 
@@ -405,7 +423,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
 
     final clinicPoint = _selectedClinicPoint();
     if (clinicPoint != null) {
-      Future.delayed(Duration(milliseconds: 500), () {
+      Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
           _moveMapSafely(clinicPoint, 15.0);
         }
@@ -424,13 +442,13 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
 
     _runMapAction(
       () => _mapController.fitCamera(
-        CameraFit.bounds(bounds: bounds, padding: EdgeInsets.all(50)),
+        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
       ),
     );
   }
 
   Widget _buildLocationSelector() {
-    if (widget.clinics.isEmpty) return SizedBox.shrink();
+    if (widget.clinics.isEmpty) return const SizedBox.shrink();
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -445,11 +463,10 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                   widget.onClinicSelected(clinic);
                 },
                 child: Container(
-                  margin: EdgeInsets.only(right: 12),
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   width: 136,
                   decoration: BoxDecoration(
-                    // PRO FIX: Dark mode selector tabs
                     color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkScaffold : const Color(0xFFF4F6F8),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
@@ -473,12 +490,12 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                   : Colors.grey[600],
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         clinic['name'],
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10.5,
                           color: Color(0xFF97A0AB),
                         ),
@@ -501,7 +518,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
           color: Colors.grey[200],
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Center(child: Icon(Icons.map, color: Colors.grey, size: 40)),
+        child: const Center(child: Icon(Icons.map, color: Colors.grey, size: 40)),
       );
     }
 
@@ -519,7 +536,6 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
           width: double.infinity,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            // PRO FIX: Seamless dark mode border for the map
             border: Border.all(
               color: Theme.of(context).brightness == Brightness.dark 
                   ? AppColors.darkBorder 
@@ -541,7 +557,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                     setState(() => _isUserPanning = true);
                   }
                 },
-                interactionOptions: InteractionOptions(
+                interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
               ),
@@ -569,18 +585,18 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                       width: 36,
                       height: 36,
                       child: Container(
-                        padding: EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                           boxShadow: AppStyles.cardShadow(context),
-                          gradient: RadialGradient(
+                          gradient: const RadialGradient(
                             center: Alignment.center,
                             radius: 0.8,
                             colors: [AppColors.primaryGreen, Colors.white],
                           ),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.location_on_rounded,
                           color: Colors.white,
                           size: 18,
@@ -599,7 +615,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                             border: Border.all(color: Colors.white, width: 2),
                             boxShadow: AppStyles.cardShadow(context),
                           ),
-                          child: Icon(
+                          child: const Icon(
                             Icons.navigation,
                             color: Colors.white,
                             size: 14,
@@ -621,11 +637,11 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                 color: Colors.black.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Center(child: AppLoader()),
+              child: const Center(child: AppLoader()),
             ),
           ),
 
-        // 3. TOP NAVIGATION BAR (Distance/Calculating Fixed)
+        // 3. TOP NAVIGATION BAR (Distance bar with Auto-Collapse)
         Positioned(
           top: 12,
           left: 12,
@@ -637,26 +653,31 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                   opacity: animation,
                   child: SlideTransition(
                     position: Tween<Offset>(
-                      begin: Offset(0, -0.5),
+                      begin: const Offset(0, -0.5),
                       end: Offset.zero,
                     ).animate(animation),
                     child: child,
                   ),
                 ),
             child:
-                _isNavigating // <--- FIXED CONDITION HERE
+                _isNavigating || _isRouteLoading // PRO FIX: Keep the bar visible while loading!
                     ? Row(
-                      key: ValueKey('nav_bar_visible'),
+                      key: const ValueKey('nav_bar_visible'),
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         GestureDetector(
                           onTap: () {
-                            if (_isNavigating) {
+                            if (_isNavigating && !_isRouteLoading) {
                               setState(
                                 () =>
                                     _isDistanceBarExpanded =
                                         !_isDistanceBarExpanded,
                               );
+                              if (_isDistanceBarExpanded) {
+                                _startDistanceAutoCloseTimer();
+                              } else {
+                                _distanceAutoCloseTimer?.cancel();
+                              }
                             }
                           },
                           child: AnimatedContainer(
@@ -667,7 +688,6 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                               vertical: _isDistanceBarExpanded ? 16 : 8,
                             ),
                             decoration: BoxDecoration(
-                              // PRO FIX: Dynamic navigation bar surface
                               color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
                               borderRadius: BorderRadius.circular(
                                 _isDistanceBarExpanded ? 16 : 20,
@@ -684,18 +704,18 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
+                                      const Icon(
                                         Icons.route,
                                         color: AppColors.primaryGreen,
                                         size: 16,
                                       ),
-                                      SizedBox(width: 8),
+                                      const SizedBox(width: 8),
                                       AnimatedSwitcher(
                                         duration: AppMotion.fast,
                                         child:
                                             _isRouteLoading ||
                                                     _distanceToClinic == null
-                                                ? Row(
+                                                ? const Row(
                                                   key: ValueKey('calculating'),
                                                   mainAxisSize:
                                                       MainAxisSize.min,
@@ -703,7 +723,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                                     SizedBox(
                                                       width: 12,
                                                       height: 12,
-                                                      child: const AppLoader(
+                                                      child: AppLoader(
                                                             strokeWidth: 2,
                                                             color: AppColors.primaryGreen,
                                                           ),
@@ -723,7 +743,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                                   ],
                                                 )
                                                 : Row(
-                                                  key: ValueKey('distance'),
+                                                  key: const ValueKey('distance'),
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
@@ -740,7 +760,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                                         fontSize: 12,
                                                       ),
                                                     ),
-                                                    SizedBox(width: 8),
+                                                    const SizedBox(width: 8),
                                                     Icon(
                                                       _isDistanceBarExpanded
                                                           ? Icons.expand_less
@@ -765,22 +785,23 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                         ),
                                     child:
                                         (_isDistanceBarExpanded &&
-                                                _isNavigating)
+                                                _isNavigating && 
+                                                !_isRouteLoading)
                                             ? Column(
-                                              key: ValueKey('expanded_nav'),
+                                              key: const ValueKey('expanded_nav'),
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                SizedBox(height: 12),
-                                                Divider(
+                                                const SizedBox(height: 12),
+                                                const Divider(
                                                   height: 1,
                                                   color: Colors.black12,
                                                 ),
-                                                SizedBox(height: 12),
+                                                const SizedBox(height: 12),
                                                 Row(
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    Text(
+                                                    const Text(
                                                       "Active Navigation",
                                                       style: TextStyle(
                                                         color:
@@ -791,11 +812,11 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                                         fontSize: 13,
                                                       ),
                                                     ),
-                                                    SizedBox(width: 24),
+                                                    const SizedBox(width: 24),
                                                     InkWell(
                                                       onTap: _cancelNavigation,
                                                       child: Container(
-                                                        padding: EdgeInsets.all(
+                                                        padding: const EdgeInsets.all(
                                                           4,
                                                         ),
                                                         decoration:
@@ -808,7 +829,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                                                   BoxShape
                                                                       .circle,
                                                             ),
-                                                        child: Icon(
+                                                        child: const Icon(
                                                           Icons.close,
                                                           color: Colors.red,
                                                           size: 18,
@@ -819,7 +840,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                                                 ),
                                               ],
                                             )
-                                            : SizedBox.shrink(
+                                            : const SizedBox.shrink(
                                               key: ValueKey('collapsed_nav'),
                                             ),
                                   ),
@@ -830,7 +851,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                         ),
                       ],
                     )
-                    : SizedBox.shrink(key: ValueKey('nav_bar_hidden')),
+                    : const SizedBox.shrink(key: ValueKey('nav_bar_hidden')),
           ),
         ),
 
@@ -852,18 +873,18 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                     child:
                         _isLocatorMenuOpen
                             ? Padding(
-                              padding: EdgeInsets.only(right: 8.0),
+                              padding: const EdgeInsets.only(right: 8.0),
                               child: FloatingActionButton.small(
                                 heroTag: null,
-                                backgroundColor: Theme.of(context).colorScheme.surface, // PRO FIX
+                                backgroundColor: Theme.of(context).colorScheme.surface,
                                 onPressed: _centerOnClinic,
-                                child: Icon(
+                                child: const Icon(
                                   Icons.medical_services_outlined,
                                   color: Colors.redAccent,
                                 ),
                               ),
                             )
-                            : SizedBox.shrink(),
+                            : const SizedBox.shrink(),
                   ),
                   if (_isNavigating) ...[
                     AnimatedSize(
@@ -873,21 +894,21 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                       child:
                           _isLocatorMenuOpen
                               ? Padding(
-                                padding: EdgeInsets.only(right: 8.0),
+                                padding: const EdgeInsets.only(right: 8.0),
                                 child: FloatingActionButton.small(
                                   heroTag: null,
-                                  backgroundColor: Theme.of(context).colorScheme.surface, // PRO FIX
+                                  backgroundColor: Theme.of(context).colorScheme.surface,
                                   onPressed: () {
                                     setState(() => _isUserPanning = true);
                                     _fitMapBounds();
                                   },
-                                  child: Icon(
+                                  child: const Icon(
                                     Icons.map_outlined,
                                     color: Colors.green,
                                   ),
                                 ),
                               )
-                              : SizedBox.shrink(),
+                              : const SizedBox.shrink(),
                     ),
                     AnimatedSize(
                       duration: AppMotion.defaultDuration,
@@ -896,23 +917,23 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                       child:
                           _isLocatorMenuOpen
                               ? Padding(
-                                padding: EdgeInsets.only(right: 8.0),
+                                padding: const EdgeInsets.only(right: 8.0),
                                 child: FloatingActionButton.small(
                                   heroTag: null,
-                                  backgroundColor: Theme.of(context).colorScheme.surface, // PRO FIX
+                                  backgroundColor: Theme.of(context).colorScheme.surface,
                                   onPressed: _centerOnUser,
-                                  child: Icon(
+                                  child: const Icon(
                                     Icons.accessibility_new_rounded,
                                     color: Colors.blueAccent,
                                   ),
                                 ),
                               )
-                              : SizedBox.shrink(),
+                              : const SizedBox.shrink(),
                     ),
                   ],
                   FloatingActionButton.small(
                     heroTag: null,
-                    backgroundColor: Theme.of(context).colorScheme.surface, // PRO FIX
+                    backgroundColor: Theme.of(context).colorScheme.surface,
                     onPressed: _toggleLocatorMenu,
                     child: AnimatedRotation(
                       turns: _isLocatorMenuOpen ? 0.5 : 0.0,
@@ -926,7 +947,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                   ),
                 ],
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -937,15 +958,15 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                     child:
                         _isMenuOpen
                             ? Padding(
-                              padding: EdgeInsets.only(right: 8.0),
+                              padding: const EdgeInsets.only(right: 8.0),
                               child: FloatingActionButton.small(
                                 heroTag: null,
-                                backgroundColor: Theme.of(context).colorScheme.surface, // PRO FIX
+                                backgroundColor: Theme.of(context).colorScheme.surface,
                                 onPressed: _launchExternalMaps,
-                                child: Icon(Icons.public, color: Colors.blue),
+                                child: const Icon(Icons.public, color: Colors.blue),
                               ),
                             )
-                            : SizedBox.shrink(),
+                            : const SizedBox.shrink(),
                   ),
                   AnimatedSize(
                     duration: AppMotion.defaultDuration,
@@ -954,18 +975,18 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                     child:
                         (_isMenuOpen && !_isNavigating)
                             ? Padding(
-                              padding: EdgeInsets.only(right: 8.0),
+                              padding: const EdgeInsets.only(right: 8.0),
                               child: FloatingActionButton.small(
                                 heroTag: null,
-                                backgroundColor: Theme.of(context).colorScheme.surface, // PRO FIX
+                                backgroundColor: Theme.of(context).colorScheme.surface,
                                 onPressed: _launchInAppDirection,
-                                child: Icon(
+                                child: const Icon(
                                   Icons.turn_sharp_right,
                                   color: AppColors.primaryGreen,
                                 ),
                               ),
                             )
-                            : SizedBox.shrink(),
+                            : const SizedBox.shrink(),
                   ),
                   FloatingActionButton.small(
                     heroTag: null,
@@ -996,7 +1017,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildLocationSelector(),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
         RepaintBoundary(child: _buildMap()),
       ],
     );

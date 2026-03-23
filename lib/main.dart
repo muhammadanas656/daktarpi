@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -43,27 +44,30 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       'id': const Uuid().v4(),
       'title': title,
       'body': body,
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
       'is_read': false,
       'payload': payload,
       if (message.messageId != null) 'message_id': message.messageId,
     };
 
-    // D. Talk directly to the physical database (bypassing the UI Notifier)
-    final repo = NotificationRepository();
+    // D. Add to unsynced queue using Hive directly (bypassing Supabase/Repo)
+    // We cannot use Supabase or NotificationRepository here because the
+    // background isolate does not have the .env variables or auth session.
+    try {
+      final box = await Hive.openBox('notifications_box');
+      final List<dynamic> queue = box.get('unsynced_notifs') ?? [];
+      queue.add(newNotif);
+      await box.put('unsynced_notifs', queue);
+      
+      debugPrint(
+        '✅ Background Isolate: Saved ${title} to Hive unsynced queue successfully!',
+      );
+    } catch (e) {
+      debugPrint('❌ Background Isolate: Failed to save to Hive: $e');
+    }
 
-    // Fetch, insert, sort, and save
-    final notifications = await repo.getNotifications();
-    notifications.insert(0, newNotif);
-    notifications.sort(
-      (a, b) => DateTime.parse(
-        b['timestamp'],
-      ).compareTo(DateTime.parse(a['timestamp'])),
-    );
-
-await repo.saveLocalCache(notifications);    
-debugPrint(
-      '✅ Background Isolate: Successfully saved ghost notification to Hive!',
+    debugPrint(
+      '✅ Background Isolate: Saved notification to unsynced queue + cache!',
     );
   }
 }
@@ -103,6 +107,10 @@ Future<void> _startDeferredServices() async {
     'notifications.load',
     () => NotificationNotifier.instance.load(),
   );
+
+  // The core app is now ready and loaded. Remove the native splash screen!
+  FlutterNativeSplash.remove();
+
   unawaited(
     _runStartupStepVoid(
       'local_notifications.initialize',
@@ -140,7 +148,8 @@ Future<void> _startDeferredServices() async {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   // 1. Initialize Firebase
   try {
@@ -208,11 +217,13 @@ Future<void> main() async {
   runZonedGuarded(
     () {
       runApp(deviceCompromised ? const _CompromisedDeviceApp() : const MyApp());
-      if (!deviceCompromised) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          unawaited(_startDeferredServices());
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (deviceCompromised) {
+          FlutterNativeSplash.remove();
+          return;
+        }
+        unawaited(_startDeferredServices());
+      });
     },
     (error, stack) {
       unawaited(

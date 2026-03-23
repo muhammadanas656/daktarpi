@@ -324,6 +324,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
               Expanded(
                 child: PrimaryButton(
                   label: "Add",
+                  height: 54, // PRO FIX: Coherent Button
+                  borderRadius: 16,
                   onTap: () {
                     if (categoryController.text.trim().isNotEmpty) {
                       Navigator.pop(dialogCtx, categoryController.text.trim());
@@ -381,11 +383,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           finalImagePath = uploadedUrl;
         }
       } else {
-        // First try local cache
         final existingPatient = _savedPatients.where((p) => p['relation'] == catToSave).firstOrNull;
         finalImagePath = existingPatient?['image_path'];
 
-        // Defensive: If local cache didn't have it, query DB directly
         if (finalImagePath == null || finalImagePath.isEmpty) {
           try {
             final userId = _profileRepo.currentUserId;
@@ -463,6 +463,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                   Expanded(
                     child: PrimaryButton(
                       label: "Delete",
+                      height: 54, // PRO FIX: Coherent Button
+                      borderRadius: 16,
                       backgroundColor: AppColors.dangerRed,
                       onTap: isDeleting 
                           ? () {} 
@@ -531,7 +533,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     if (catToSave == "My Self") {
       finalImagePath = _userProfileUrl;
     } else {
-      // PRO FIX: Safely check for new image OR keep existing image
       if (_newPatientImage != null && _newPatientImage!.existsSync()) {
         try {
           final userId = _profileRepo.currentUserId;
@@ -547,11 +548,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
           debugPrint("Failed to upload category picture: $e");
         }
       } else {
-        // If no new image was picked, preserve the existing one!
         final existingPatient = _savedPatients.where((p) => p['relation'] == catToSave).firstOrNull;
         finalImagePath = existingPatient?['image_path'];
 
-        // Defensive: If local cache didn't have it, query DB directly
         if (finalImagePath == null || finalImagePath.isEmpty) {
           try {
             final userId = _profileRepo.currentUserId;
@@ -751,10 +750,14 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                         children: [
                                           Text(
                                             record.recordType,
+                                            maxLines: 2, // PRO FIX: Let vault titles wrap beautifully
+                                            overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                           ),
                                           Text(
                                             "For: ${record.recordFor} • ${DateFormat('dd MMM yyyy').format(record.recordDate)}",
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(color: Colors.grey, fontSize: 12),
                                           ),
                                         ],
@@ -777,6 +780,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                       width: double.infinity,
                       child: PrimaryButton(
                         label: "Done",
+                        height: 54, // PRO FIX: Coherent Button
+                        borderRadius: 16,
                         onTap: () {
                           setState(() {
                             _selectedRecords = tempSelected;
@@ -871,18 +876,20 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
             ),
           ),
         ] else ...[
+          // --- PRO FIX: Standardized Vault Button Height & Radius ---
           GestureDetector(
             onTap: _showMedicalRecordsBottomSheet,
             child: Container(
+              height: 54, 
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
                 border: Border.all(
                   color: isDark
                       ? AppColors.primaryGreen.withValues(alpha: 0.5)
                       : AppColors.primaryGreen,
+                  width: 1.5,
                 ),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16), 
                 color: isDark
                     ? AppColors.primaryGreen.withValues(alpha: 0.1)
                     : context.colorLightGreenBg.withValues(alpha: 0.3),
@@ -927,7 +934,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
                 Expanded(
                   child: SingleChildScrollView(
-                    // PRO FIX: Replaced `160 + ...` with a tight `24 + ...` padding!
                     padding: EdgeInsets.fromLTRB(24, 10, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1277,7 +1283,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
 
                               if (_newPendingCategory != null || (_selectedCategoryName != "My Self" && _savedPatients.isNotEmpty)) ...[
                                 const SizedBox(height: 24),
+                                // --- PRO FIX: Standardized Outlined Button ---
                                 SizedBox(
+                                  height: 54, // Match PrimaryButton height
                                   width: double.infinity,
                                   child: OutlinedButton.icon(
                                     onPressed: _isSavingCategory ? null : _saveCategoryLocally,
@@ -1285,9 +1293,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                         ? const SizedBox(
                                             width: 16,
                                             height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: AppColors.primaryGreen,
+                                            child: AppLoader(
+                                              size: 20,
                                             ),
                                           )
                                         : const Icon(Icons.save_rounded, color: AppColors.primaryGreen),
@@ -1301,9 +1308,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                     ),
                                     style: OutlinedButton.styleFrom(
                                       side: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(16), // Match PrimaryButton radius
                                       ),
                                     ),
                                   ),
@@ -1375,6 +1381,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     );
   }
 
+  // --- PRO FIX: Enabled 2-line Text Wrapping for Long Custom Categories ---
   Widget _buildOptionItem({
     required bool isSelected,
     required String label,
@@ -1386,107 +1393,114 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
     bool showDeleteIcon = false,
     VoidCallback? onDeleteTap,
   }) {
-    return Column(
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            GestureDetector(
-              onTap: () {
-                onTap();
-                if (isSelected &&
-                    onAvatarTap != null &&
-                    _newPatientImage == null) {
-                  onAvatarTap();
-                }
-              },
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: bgColor ?? Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isSelected ? primaryGreen : Colors.transparent,
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+    return SizedBox(
+      width: 88, // Expand slightly to comfortably fit long names wrapping
+      child: Column(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  onTap();
+                  if (isSelected &&
+                      onAvatarTap != null &&
+                      _newPatientImage == null) {
+                    onAvatarTap();
+                  }
+                },
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: bgColor ?? Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected ? primaryGreen : Colors.transparent,
+                      width: 2,
                     ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: content,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: content,
+                  ),
                 ),
               ),
-            ),
-            if (showEditIcon)
-              Positioned(
-                bottom: -4,
-                right: -4,
-                child: GestureDetector(
-                  onTap: () {
-                    onTap();
-                    onAvatarTap?.call();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: primaryGreen,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.surface,
-                        width: 2.5,
+              if (showEditIcon)
+                Positioned(
+                  bottom: -4,
+                  right: -4,
+                  child: GestureDetector(
+                    onTap: () {
+                      onTap();
+                      onAvatarTap?.call();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: primaryGreen,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.surface,
+                          width: 2.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        size: 14,
+                        color: Colors.white,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.camera_alt_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    ),
                   ),
                 ),
-              ),
-            if (showDeleteIcon)
-              Positioned(
-                top: -6,
-                right: -6,
-                child: GestureDetector(
-                  onTap: onDeleteTap,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      color: AppColors.dangerRed,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.surface,
-                        width: 2.5,
+              if (showDeleteIcon)
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: GestureDetector(
+                    onTap: onDeleteTap,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: AppColors.dangerRed,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.surface,
+                          width: 2.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.close_rounded, 
+                        size: 12, 
+                        color: Colors.white,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.close_rounded, 
-                      size: 12, 
-                      color: Colors.white,
-                    ),
                   ),
                 ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? primaryGreen : textLight,
-            fontSize: 14,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2, // Allow "Brother in law" to wrap!
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isSelected ? primaryGreen : textLight,
+              fontSize: 13, // Scaled down to fit two lines elegantly
+              height: 1.2,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

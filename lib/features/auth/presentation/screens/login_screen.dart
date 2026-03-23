@@ -616,34 +616,9 @@ class _ForgotPasswordSheetContentState
       await _authRepository.updatePassword(newPass);
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
-                SizedBox(width: 12),
-                Flexible(
-                  child: Text(
-                    "Password updated! Please login.",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF00C689),
-            behavior: SnackBarBehavior.floating,
-            elevation: 6,
-            margin: const EdgeInsets.only(bottom: 40, left: 20, right: 20),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(50),
-            ),
-          ),
+        CustomSnackbar.showSuccess(
+          context,
+          "Password updated! Please login.",
         );
       }
     } catch (e) {

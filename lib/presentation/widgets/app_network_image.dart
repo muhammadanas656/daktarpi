@@ -2,12 +2,15 @@ import 'dart:io'; // PRO FIX: Added dart:io for local file handling
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:flutter_svg/flutter_svg.dart'; // PRO FIX: Vector SVG rendering support
 
 class AppNetworkImage extends StatelessWidget {
   final String? imageUrl;
   final String? cacheKey;
   final double? width;
   final double? height;
+  final int? memCacheWidth;
+  final int? memCacheHeight;
   final BoxFit fit;
   final BorderRadius? borderRadius;
   final bool circular;
@@ -20,6 +23,8 @@ class AppNetworkImage extends StatelessWidget {
     this.cacheKey,
     this.width,
     this.height,
+    this.memCacheWidth,
+    this.memCacheHeight,
     this.fit = BoxFit.cover,
     this.borderRadius,
     this.circular = false,
@@ -36,7 +41,17 @@ class AppNetworkImage extends StatelessWidget {
     if (url == null || url.isEmpty) {
       imageChild = fallback;
     } 
-    // PRO FIX: If it's a web URL, aggressively cache it!
+    // PRO FIX: Vector graphics handling - Never pixelates!
+    if (url!.toLowerCase().endsWith('.svg')) {
+      imageChild = SvgPicture.network(
+        url,
+        width: width,
+        height: height,
+        fit: fit,
+        placeholderBuilder: (context) => _buildShimmer(context),
+      );
+    }
+    // PRO FIX: High-DPI Raster Image caching
     else if (url.startsWith('http://') || url.startsWith('https://')) {
       imageChild = CachedNetworkImage(
         imageUrl: url,
@@ -44,6 +59,9 @@ class AppNetworkImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        filterQuality: FilterQuality.high,
+        memCacheWidth: memCacheWidth,
+        memCacheHeight: memCacheHeight,
         placeholder: (context, url) => _buildShimmer(context),
         errorWidget: (context, url, error) => fallback,
       );
@@ -56,6 +74,9 @@ class AppNetworkImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        filterQuality: FilterQuality.high,
+        cacheWidth: memCacheWidth,
+        cacheHeight: memCacheHeight,
         errorBuilder: (context, error, stackTrace) => fallback,
       );
     }

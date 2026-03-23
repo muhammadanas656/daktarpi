@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -47,7 +48,12 @@ class HomeRepository {
   }
 
   // PRO FIX: Added forceRefresh parameter to allow pull-to-refresh
-  Future<List<Map<String, dynamic>>> fetchBanners(String? countryIso, {bool forceRefresh = false}) async {
+  // PRO FIX: Added onFreshData callback to instantly push silent sync results to UI
+  Future<List<Map<String, dynamic>>> fetchBanners(
+    String? countryIso, {
+    bool forceRefresh = false,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
+  }) async {
     // 1. THE RAM GUARD (0 milliseconds!)
     // If we have banners in RAM and they are less than 10 mins old, return instantly.
     if (!forceRefresh && _ramBanners != null && _lastBannerFetch != null) {
@@ -67,20 +73,48 @@ class HomeRepository {
     final isOffline = NetworkNotifier.instance.isOffline;
     final cachedData = box.get(cacheKey);
 
-    // 2. THE OFFLINE GUARD
-    if (isOffline && cachedData != null) {
+    // 2. THE OFFLINE & INSTANT CACHE ENGINE
+    if (cachedData != null) {
       final decoded = jsonDecode(cachedData) as List<dynamic>;
       _ramBanners = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      return _ramBanners!;
+
+      // Fire Silent Sync!
+      if (!isOffline && !forceRefresh) {
+        unawaited(() async {
+          try {
+            await NetworkNotifier.instance.waitForSync();
+            var dbQuery = _client.from('banners').select().eq('is_active', true);
+            if (countryIso != null && countryIso.isNotEmpty) {
+              dbQuery = dbQuery.eq('country_iso', countryIso);
+            }
+            final response = await dbQuery.timeout(const Duration(seconds: 8));
+            final data = List<Map<String, dynamic>>.from(response);
+            
+            final freshStr = jsonEncode(data);
+            if (freshStr != cachedData) {
+              await box.put(cacheKey, freshStr);
+              _ramBanners = data;
+              _lastBannerFetch = DateTime.now();
+              if (onFreshData != null) onFreshData(data);
+            }
+          } catch (_) {}
+        }());
+      }
+
+      // Rule 2: Return Cache Instantly
+      if (isOffline || !forceRefresh) {
+        return _ramBanners!;
+      }
     }
 
-    // 3. THE NETWORK FETCH
+    // 3. THE NETWORK FETCH (Blocking only if no cache or force refresh)
+    await NetworkNotifier.instance.waitForSync();
     try {
       var dbQuery = _client.from('banners').select().eq('is_active', true);
       if (countryIso != null && countryIso.isNotEmpty) {
         dbQuery = dbQuery.eq('country_iso', countryIso);
       }
-      final response = await dbQuery;
+      final response = await dbQuery.timeout(const Duration(seconds: 8));
       final data = List<Map<String, dynamic>>.from(response);
       
       // Save to disk (Hive) and RAM

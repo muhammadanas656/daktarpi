@@ -247,6 +247,16 @@ class AppointmentNotificationService {
     }
   }
 
+  // The specific reminder titles that this local service manages.
+  // We use this to ensure we ONLY delete our own reminders and don't
+  // accidentally wipe out backend-generated pushes (like "Booking Confirmed").
+  static const Set<String> _managedReminderTitles = {
+    _standardReminderTitle,
+    _fiveHourWarningTitle,
+    _morningOfReminderTitle,
+    _statusUpdateTitle,
+  };
+
   Future<void> scheduleReminder({
     required int appointmentId,
     required DateTime appointmentLocalDateTime,
@@ -265,6 +275,13 @@ class AppointmentNotificationService {
       'h:mm a',
     ).format(appointmentLocalDateTime);
     final payloadString = 'appointment:$safeId';
+
+    // PRO FIX: Scrub ONLY the local reminders previously generated for this appointment.
+    // By passing includedTitles, we avoid deleting "Booking Confirmed" backend pushes!
+    await NotificationNotifier.instance.deleteNotificationsByPayload(
+      payloadString,
+      includedTitles: _managedReminderTitles,
+    );
 
     final nowUtc = DateTime.now().toUtc();
     final desiredReminderUtc =
@@ -346,7 +363,7 @@ class AppointmentNotificationService {
       await _plugin.cancel(safeId + 300000);
       await NotificationNotifier.instance.deleteNotificationsByPayload(
         payloadString,
-        excludedTitles: _nonMissedReminderTitles,
+        includedTitles: {_statusUpdateTitle},
       );
     }
 
@@ -414,10 +431,14 @@ class AppointmentNotificationService {
     }
 
     // 2. PRO FIX: Scrub the future-dated "ghost" messages from the local Hive inbox!
+    // We only scrub the specific locally managed reminders to avoid touching backend alerts.
+    final titlesToDelete = preserveMissedStatusUpdate 
+        ? _managedReminderTitles.difference({_statusUpdateTitle})
+        : _managedReminderTitles;
+        
     await NotificationNotifier.instance.deleteNotificationsByPayload(
       'appointment:$safeId',
-      excludedTitles:
-          preserveMissedStatusUpdate ? {_statusUpdateTitle} : const {},
+      includedTitles: titlesToDelete,
     );
   }
 

@@ -10,6 +10,7 @@ abstract class Clinic with _$Clinic {
     required int id,
     @Default('Unknown Clinic') String name,
     @Default('Unknown Address') String address,
+    @JsonKey(name: 'logo_url') String? logoUrl,
   }) = _Clinic;
 
   factory Clinic.fromJson(Map<String, dynamic> json) => _$ClinicFromJson(json);

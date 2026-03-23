@@ -63,6 +63,12 @@ class SettingsRepository {
     return _authRepository.refreshSession();
   }
 
+  Future<void> updateUserMetadata(Map<String, dynamic> metadata) async {
+    await Supabase.instance.client.auth.updateUser(
+      UserAttributes(data: metadata),
+    );
+  }
+
   Future<void> linkGoogleIdentity({required String redirectTo}) {
     return _authRepository.linkGoogleIdentity(redirectTo: redirectTo);
   }

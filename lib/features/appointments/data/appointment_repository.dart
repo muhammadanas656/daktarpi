@@ -19,8 +19,6 @@ class AppointmentRepository {
 
   String? get currentUserId => _client.auth.currentUser?.id;
 
-  // ─── Phase 2: Hive Read Cache ──────────────────────────────────────────────
-
   Future<Box> _getCacheBox() async {
     if (Hive.isBoxOpen(_cacheBoxName)) return Hive.box(_cacheBoxName);
     return await Hive.openBox(_cacheBoxName);
@@ -54,13 +52,10 @@ class AppointmentRepository {
       if (isOffline) return [];
     }
 
-    // --- PRO FIX: The Sync Guard ---
-    // If the internet just came back, this will PAUSE the fetch until the offline
-    // queue is 100% uploaded to Supabase. No more blinking UI!
     await NetworkNotifier.instance.waitForSync();
 
     try {
-      final data = await fetcher();
+      final data = await fetcher().timeout(const Duration(seconds: 8));
       await box.put(cacheKey, jsonEncode(data));
       await box.put(lastFetchKey, DateTime.now().toIso8601String());
       return data;
@@ -72,8 +67,6 @@ class AppointmentRepository {
       rethrow;
     }
   }
-
-  // ─── Phase 3: Offline Action Queue ─────────────────────────────────────────
 
   Future<Box> _getQueueBox() async {
     if (Hive.isBoxOpen(_queueBoxName)) return Hive.box(_queueBoxName);
@@ -111,25 +104,33 @@ class AppointmentRepository {
 
           switch (action) {
             case 'create_appointment':
-              await _client.from('appointments').insert(payload);
+              // Sync offline bookings using the new RPC too!
+              await _client.rpc('book_appointment_safe', params: {
+                'p_user_id': payload['user_id'],
+                'p_doctor_id': payload['doctor_id'],
+                'p_clinic_id': payload['clinic_id'],
+                'p_schedule_date': payload['schedule_date'],
+                'p_start_time': payload['start_time'],
+                'p_end_time': payload['end_time'],
+                'p_status': payload['status'],
+                'p_patient_name': payload['patient_name'],
+                'p_patient_phone': payload['patient_phone'],
+                'p_patient_email': payload['patient_email'],
+                'p_patient_gender': payload['patient_gender'],
+                'p_patient_dob': payload['patient_dob'],
+                'p_patient_image_url': payload['patient_image_url'],
+                'p_idempotency_key': payload['idempotency_key'],
+                'p_attached_record_ids': payload['attached_record_ids'] ?? [],
+              });
               break;
             case 'cancel_appointment':
-              await _client
-                  .from('appointments')
-                  .update({'status': 'canceled'})
-                  .eq('id', payload['id']);
+              await _client.from('appointments').update({'status': 'canceled'}).eq('id', payload['id']);
               break;
             case 'complete_appointment':
-              await _client
-                  .from('appointments')
-                  .update({'status': 'completed'})
-                  .eq('id', payload['id']);
+              await _client.from('appointments').update({'status': 'completed'}).eq('id', payload['id']);
               break;
             case 'update_appointment':
-              await _client
-                  .from('appointments')
-                  .update(payload['data'])
-                  .eq('id', payload['id']);
+              await _client.from('appointments').update(payload['data']).eq('id', payload['id']);
               break;
             case 'submit_review':
               await _client.from('reviews').insert(payload);
@@ -146,8 +147,6 @@ class AppointmentRepository {
       }
     }
   }
-
-  // ─── Data Access & Mutations ───────────────────────────────────────────────
 
   Future<List<Appointment>> fetchAppointments(String userId) async {
     try {
@@ -185,15 +184,10 @@ class AppointmentRepository {
       await _queueAction('cancel_appointment', {'id': appointmentId});
       return;
     }
-    await NetworkNotifier.instance.waitForSync(); // PRO FIX
+    await NetworkNotifier.instance.waitForSync();
 
     try {
-      final response =
-          await _client
-              .from('appointments')
-              .update({'status': 'canceled'})
-              .eq('id', appointmentId)
-              .select();
+      final response = await _client.from('appointments').update({'status': 'canceled'}).eq('id', appointmentId).select();
 
       final userId = currentUserId;
       if (userId != null) {
@@ -204,25 +198,13 @@ class AppointmentRepository {
       if (response.isEmpty) {
         throw const AppFailure(
           type: AppFailureType.backend,
-          userMessage:
-              'Unable to cancel appointment. It may have already been removed.',
-          technicalMessage:
-              'RLS blocked the cancellation, or appointment not found.',
+          userMessage: 'Unable to cancel appointment. It may have already been removed.',
+          technicalMessage: 'RLS blocked the cancellation, or appointment not found.',
           code: 'cancel_failed_empty',
         );
       }
-    } on PostgrestException catch (e) {
-      throw AppFailure.fromError(
-        e,
-        fallbackUserMessage:
-            'Unable to cancel this appointment right now. Please try again.',
-      );
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage:
-            'An unexpected error occurred while canceling the appointment.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to cancel this appointment right now. Please try again.');
     }
   }
 
@@ -231,43 +213,29 @@ class AppointmentRepository {
       await _queueAction('complete_appointment', {'id': appointmentId});
       return;
     }
-    await NetworkNotifier.instance.waitForSync(); // PRO FIX
+    await NetworkNotifier.instance.waitForSync(); 
 
     try {
-      await _client
-          .from('appointments')
-          .update({'status': 'completed'})
-          .eq('id', appointmentId);
-
+      await _client.from('appointments').update({'status': 'completed'}).eq('id', appointmentId);
       final userId = currentUserId;
       if (userId != null) {
         final box = await _getCacheBox();
         await box.delete('appointments_$userId');
       }
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to update appointment status right now.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to update appointment status right now.');
     }
   }
 
+  // --- LEGACY BRIDGE: Keeps DoctorDetailsScreen from crashing ---
   Future<List<String>> fetchBookedSlots({
     required String doctorId,
     required String clinicId,
     required String date,
     int? excludeAppointmentId,
   }) async {
-    if (NetworkNotifier.instance.isOffline) {
-      throw const AppFailure(
-        type: AppFailureType.network,
-        userMessage:
-            'Cannot check live slots while offline. Please connect to the internet.',
-        technicalMessage: 'offline',
-      );
-    }
-
-    await NetworkNotifier.instance.waitForSync(); // PRO FIX
+    if (NetworkNotifier.instance.isOffline) return [];
+    await NetworkNotifier.instance.waitForSync();
 
     try {
       var query = _client
@@ -277,7 +245,9 @@ class AppointmentRepository {
           .eq('clinic_id', clinicId)
           .eq('schedule_date', date)
           .isFilter('deleted_at', null)
-          .neq('status', 'canceled');
+          .neq('status', 'canceled')
+          .neq('status', 'missed');
+
       if (excludeAppointmentId != null) {
         query = query.neq('id', excludeAppointmentId);
       }
@@ -286,13 +256,54 @@ class AppointmentRepository {
       return List<dynamic>.from(response).map((record) {
         final start = record['start_time'].toString().substring(0, 5);
         final end = record['end_time'].toString().substring(0, 5);
-        return "$start - $end";
+        return '$start - $end';
       }).toList();
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load booked slots right now.',
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // --- PRO FIX: Fetch counts instead of a flat list! ---
+  Future<Map<String, int>> fetchSlotBookingCounts({
+    required String doctorId,
+    required String clinicId,
+    required String date,
+    int? excludeAppointmentId,
+  }) async {
+    if (NetworkNotifier.instance.isOffline) {
+      throw const AppFailure(
+        type: AppFailureType.network,
+        userMessage: 'Cannot check live slots while offline.',
+        technicalMessage: 'offline',
       );
+    }
+    await NetworkNotifier.instance.waitForSync();
+
+    try {
+      var query = _client.from('appointments').select('start_time, end_time')
+          .eq('doctor_id', doctorId)
+          .eq('clinic_id', clinicId)
+          .eq('schedule_date', date)
+          .isFilter('deleted_at', null)
+          .neq('status', 'canceled')
+          .neq('status', 'missed'); // Ensure we don't count inactive ones
+          
+      if (excludeAppointmentId != null) {
+        query = query.neq('id', excludeAppointmentId);
+      }
+
+      final response = await query;
+      Map<String, int> counts = {};
+      
+      for (var record in List<dynamic>.from(response)) {
+        final start = record['start_time'].toString().substring(0, 5);
+        final end = record['end_time'].toString().substring(0, 5);
+        final key = "$start - $end";
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      return counts;
+    } catch (error) {
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to load booked slots right now.');
     }
   }
 
@@ -301,16 +312,27 @@ class AppointmentRepository {
       await _queueAction('create_appointment', appointmentData);
       return -DateTime.now().millisecondsSinceEpoch.remainder(100000);
     }
-    await NetworkNotifier.instance.waitForSync(); // PRO FIX
+    await NetworkNotifier.instance.waitForSync();
 
     try {
-      final inserted =
-          await _client
-              .from('appointments')
-              .insert(appointmentData)
-              .select('id')
-              .single();
-      final idValue = inserted['id'];
+      // --- PRO FIX: Use the secure RPC to completely eliminate double bookings ---
+      final insertedId = await _client.rpc('book_appointment_safe', params: {
+        'p_user_id': appointmentData['user_id'],
+        'p_doctor_id': appointmentData['doctor_id'],
+        'p_clinic_id': appointmentData['clinic_id'],
+        'p_schedule_date': appointmentData['schedule_date'],
+        'p_start_time': appointmentData['start_time'],
+        'p_end_time': appointmentData['end_time'],
+        'p_status': appointmentData['status'],
+        'p_patient_name': appointmentData['patient_name'],
+        'p_patient_phone': appointmentData['patient_phone'],
+        'p_patient_email': appointmentData['patient_email'],
+        'p_patient_gender': appointmentData['patient_gender'],
+        'p_patient_dob': appointmentData['patient_dob'],
+        'p_patient_image_url': appointmentData['patient_image_url'],
+        'p_idempotency_key': appointmentData['idempotency_key'],
+        'p_attached_record_ids': appointmentData['attached_record_ids'] ?? [],
+      });
 
       final userId = currentUserId;
       if (userId != null) {
@@ -318,66 +340,42 @@ class AppointmentRepository {
         await box.delete('appointments_$userId');
       }
 
-      if (idValue is int) return idValue;
-
-      final parsed = int.tryParse(idValue.toString());
-      if (parsed == null) {
-        throw const AppFailure(
-          type: AppFailureType.backend,
-          userMessage: 'Booking created but appointment ID could not be read.',
-          technicalMessage: 'appointments.insert returned an invalid id.',
-          code: 'invalid_appointment_id',
-        );
-      }
-      return parsed;
+      return int.parse(insertedId.toString());
+      
     } on PostgrestException catch (error) {
-      final details =
-          '${error.message} ${error.details ?? ''} ${error.hint ?? ''}'
-              .toLowerCase();
-      if (error.code == '23505' && details.contains('idempotency')) {
+      // --- PRO FIX: Catch the custom exception we raised in SQL! ---
+      if (error.message.contains('Slot is fully booked')) {
         throw const AppFailure(
           type: AppFailureType.validation,
-          userMessage:
-              'This booking request was already submitted. Please wait for confirmation.',
+          userMessage: 'We are sorry, but someone just booked the last spot for this time. Please select another slot.',
+          technicalMessage: 'RPC locked and rejected booking.',
+          code: 'slot_full',
+        );
+      }
+      if (error.code == '23505') {
+        throw const AppFailure(
+          type: AppFailureType.validation,
+          userMessage: 'This booking request was already submitted. Please wait for confirmation.',
           technicalMessage: 'Duplicate idempotency key detected.',
           code: 'duplicate_idempotency_key',
         );
       }
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to create appointment right now.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to create appointment right now.');
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to create appointment right now.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to create appointment right now.');
     }
   }
 
-  Future<void> updateAppointment(
-    int appointmentId,
-    Map<String, dynamic> appointmentData,
-  ) async {
+  Future<void> updateAppointment(int appointmentId, Map<String, dynamic> appointmentData) async {
     if (NetworkNotifier.instance.isOffline) {
-      await _queueAction('update_appointment', {
-        'id': appointmentId,
-        'data': appointmentData,
-      });
+      await _queueAction('update_appointment', {'id': appointmentId, 'data': appointmentData});
       return;
     }
-    await NetworkNotifier.instance.waitForSync(); // PRO FIX
-
+    await NetworkNotifier.instance.waitForSync();
     try {
-      await _client
-          .from('appointments')
-          .update(appointmentData)
-          .eq('id', appointmentId);
+      await _client.from('appointments').update(appointmentData).eq('id', appointmentId);
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to update appointment right now.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to update appointment right now.');
     }
   }
 
@@ -399,8 +397,6 @@ class AppointmentRepository {
     };
 
     final box = await _getCacheBox();
-
-    // Update Activity Log Cache
     final logCacheKey = 'activity_log_complete_$userId';
     final logData = box.get(logCacheKey);
     if (logData != null) {
@@ -411,7 +407,6 @@ class AppointmentRepository {
       await box.put(logCacheKey, jsonEncode(decoded));
     }
 
-    // PRO FIX 4: Immediately remove the item from the Pending Reviews cache
     final pendingCacheKey = 'pending_reviews_$userId';
     final pendingData = box.get(pendingCacheKey);
     if (pendingData != null) {
@@ -428,22 +423,8 @@ class AppointmentRepository {
 
     try {
       await _client.from('reviews').insert(payload);
-    } on PostgrestException catch (e) {
-      if (e.code == '23505') {
-        throw AppFailure.fromError(
-          e,
-          fallbackUserMessage: 'You have already reviewed this appointment.',
-        );
-      }
-      throw AppFailure.fromError(
-        e,
-        fallbackUserMessage: 'Unable to submit review right now.',
-      );
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to submit review right now.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to submit review right now.');
     }
   }
 
@@ -466,8 +447,6 @@ class AppointmentRepository {
 
     if (appointmentId != null) {
       final box = await _getCacheBox();
-
-      // Update Activity Log Cache
       final logCacheKey = 'activity_log_complete_$userId';
       final logData = box.get(logCacheKey);
       if (logData != null) {
@@ -478,7 +457,6 @@ class AppointmentRepository {
         await box.put(logCacheKey, jsonEncode(decoded));
       }
 
-      // PRO FIX 5: Immediately remove the item from the Pending Complaints cache
       final pendingCacheKey = 'pending_complaints_$userId';
       final pendingData = box.get(pendingCacheKey);
       if (pendingData != null) {
@@ -497,15 +475,9 @@ class AppointmentRepository {
     try {
       await _client.from('complaints').insert(payload);
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage:
-            'Unable to submit your complaint right now. Please try again.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to submit your complaint right now.');
     }
   }
-
-  // ─── Read-Only Fallbacks ───────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchActivityLog(String userId) async {
     try {
@@ -514,40 +486,26 @@ class AppointmentRepository {
         fetcher: () async {
           final response = await _client
               .from('appointment_history')
-              .select(
-                '*, doctors ( full_name, profile_picture_url, specialties ( name ) ), clinics ( name )',
-              )
+              .select('*, doctors ( full_name, profile_picture_url, specialties ( name ) ), clinics ( name )')
               .eq('user_id', userId)
               .order('archived_at', ascending: false);
           final historyList = List<Map<String, dynamic>>.from(response);
 
-          final reviewsResponse = await _client
-              .from('reviews')
-              .select('appointment_id')
-              .eq('user_id', userId);
-          final complaintsResponse = await _client
-              .from('complaints')
-              .select('appointment_id')
-              .eq('user_id', userId);
+          final reviewsResponse = await _client.from('reviews').select('appointment_id').eq('user_id', userId);
+          final complaintsResponse = await _client.from('complaints').select('appointment_id').eq('user_id', userId);
 
-          final reviewedIds =
-              reviewsResponse.map((r) => r['appointment_id']).toSet();
-          final complainedIds =
-              complaintsResponse.map((c) => c['appointment_id']).toSet();
+          final reviewedIds = reviewsResponse.map((r) => r['appointment_id']).toSet();
+          final complainedIds = complaintsResponse.map((c) => c['appointment_id']).toSet();
 
           for (var item in historyList) {
             item['has_review'] = reviewedIds.contains(item['id']);
             item['has_complaint'] = complainedIds.contains(item['id']);
           }
-
           return historyList;
         },
       );
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to load activity log right now.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to load activity log right now.');
     }
   }
 
@@ -558,9 +516,7 @@ class AppointmentRepository {
         fetcher: () async {
           final response = await _client
               .from('appointments')
-              .select(
-                '*, doctors ( id, full_name, profile_picture_url, specialties ( name ) ), clinics ( id, name ), reviews ( id ) ',
-              )
+              .select('*, doctors ( id, full_name, profile_picture_url, specialties ( name ) ), clinics ( id, name ), reviews ( id ) ')
               .eq('user_id', userId)
               .eq('status', 'completed')
               .isFilter('deleted_at', null)
@@ -578,18 +534,14 @@ class AppointmentRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchPendingComplaints(
-    String userId,
-  ) async {
+  Future<List<Map<String, dynamic>>> fetchPendingComplaints(String userId) async {
     try {
       final data = await _fetchWithCache(
         cacheKey: 'pending_complaints_$userId',
         fetcher: () async {
           final response = await _client
               .from('appointments')
-              .select(
-                '*, doctors ( id, full_name, profile_picture_url, specialties ( name ) ), clinics ( id, name ), complaints ( id ) ',
-              )
+              .select('*, doctors ( id, full_name, profile_picture_url, specialties ( name ) ), clinics ( id, name ), complaints ( id ) ')
               .eq('user_id', userId)
               .eq('status', 'missed')
               .isFilter('deleted_at', null)
@@ -607,8 +559,6 @@ class AppointmentRepository {
     }
   }
 
-  // ─── Realtime ─────────────────────────────────────────────────────────────
-
   RealtimeChannel subscribeToAppointments({
     required String userId,
     required void Function(PostgresChangePayload) onChange,
@@ -619,24 +569,16 @@ class AppointmentRepository {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'appointments',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: userId,
-          ),
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: userId),
           callback: onChange,
-        )
-        .subscribe();
+        ).subscribe();
   }
 
   Future<void> removeChannel(RealtimeChannel channel) async {
     try {
       await _client.removeChannel(channel);
     } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to refresh realtime updates right now.',
-      );
+      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to refresh realtime updates right now.');
     }
   }
 }

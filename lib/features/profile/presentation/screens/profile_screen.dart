@@ -383,6 +383,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         body: Container(
           decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
           child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
             child: Column(
               children: [
                 // --- HEADER ---

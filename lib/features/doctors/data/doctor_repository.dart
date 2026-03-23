@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
@@ -37,6 +38,7 @@ class DoctorRepository {
     String? cacheKey,
     required Future<List<Map<String, dynamic>>> Function() fetcher,
     bool forceRefresh = false,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
   }) async {
     if (cacheKey == null) {
       if (NetworkNotifier.instance.isOffline) {
@@ -47,7 +49,7 @@ class DoctorRepository {
           technicalMessage: 'offline',
         );
       }
-      return await fetcher();
+      return await fetcher().timeout(const Duration(seconds: 8));
     }
 
     final box = await _getCacheBox();
@@ -59,22 +61,38 @@ class DoctorRepository {
     DateTime? lastFetch =
         lastFetchStr != null ? DateTime.tryParse(lastFetchStr) : null;
 
-    if (isOffline ||
-        (!forceRefresh && _isCacheValid(lastFetch) && cachedData != null)) {
-      if (cachedData != null) {
-        final List<dynamic> decoded = jsonDecode(cachedData);
-        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+    // --- PRO FIX: Instant Cache-First Return with Silent Background Sync ---
+    if (cachedData != null) {
+      final List<dynamic> decoded = jsonDecode(cachedData);
+      final cache = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+
+      if (!isOffline && !forceRefresh) {
+        unawaited(() async {
+          try {
+            await NetworkNotifier.instance.waitForSync();
+            final fresh = await fetcher().timeout(const Duration(seconds: 8));
+            final freshStr = jsonEncode(fresh);
+            
+            // Only notify UI and write to disk if data ACTUALLY changed
+            if (freshStr != cachedData) {
+              await box.put(cacheKey, freshStr);
+              await box.put(lastFetchKey, DateTime.now().toIso8601String());
+              if (onFreshData != null) onFreshData(fresh);
+            }
+          } catch (_) {}
+        }());
       }
-      if (isOffline) return [];
+
+      // Rule 2: NEVER block the UI if we have cache!
+      if (isOffline || !forceRefresh) {
+        return cache;
+      }
     }
 
-    // --- PRO FIX: The Sync Guard ---
-    // This stops fetchRecentDoctors() and fetchFavoriteDoctors() from blinking!
-    // It forces them to wait until the background offline queue finishes uploading.
     await NetworkNotifier.instance.waitForSync();
 
     try {
-      final data = await fetcher();
+      final data = await fetcher().timeout(const Duration(seconds: 8));
       await box.put(cacheKey, jsonEncode(data));
       await box.put(lastFetchKey, DateTime.now().toIso8601String());
       return data;
@@ -145,6 +163,19 @@ class DoctorRepository {
           debugPrint('❌ [Doctor Sync] Failed to process action: $e');
         }
       }
+    }
+  }
+
+  Future<String?> fetchSpecialtyIcon(String specialtyId) async {
+    try {
+      final response = await _client
+          .from('specialties')
+          .select('icon_url')
+          .eq('id', specialtyId)
+          .maybeSingle();
+      return response?['icon_url'] as String?;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -244,14 +275,11 @@ class DoctorRepository {
         } else {
           final response = await dbQuery;
           var data = List<Map<String, dynamic>>.from(response);
-          data.sort(
-            (a, b) => _getMinDistance(
-              a,
-              userLat,
-              userLng,
-            ).compareTo(_getMinDistance(b, userLat, userLng)),
-          );
-          return data;
+          return await compute(_isolateDistanceSort, {
+            'data': data,
+            'userLat': userLat,
+            'userLng': userLng,
+          });
         }
       },
     );
@@ -361,14 +389,11 @@ class DoctorRepository {
       } else {
         final response = await dbQuery;
         var data = List<Map<String, dynamic>>.from(response);
-        data.sort(
-          (a, b) => _getMinDistance(
-            a,
-            userLat,
-            userLng,
-          ).compareTo(_getMinDistance(b, userLat, userLng)),
-        );
-        return data;
+        return await compute(_isolateDistanceSort, {
+          'data': data,
+          'userLat': userLat,
+          'userLng': userLng,
+        });
       }
     } catch (error) {
       throw AppFailure.fromError(
@@ -411,11 +436,13 @@ class DoctorRepository {
     bool forceRefresh = false,
     String? userLocation,
     String? countryIso,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
   }) async {
     final isSearch = query != null && query.isNotEmpty;
     final data = await _fetchWithCache(
       cacheKey: isSearch ? null : 'popular_doctors_$countryIso',
       forceRefresh: forceRefresh,
+      onFreshData: onFreshData != null ? ((fresh) => onFreshData(limit != null ? fresh.take(limit).toList() : fresh)) : null,
       fetcher: () async {
         var dbQuery = _client
             .from('doctors')
@@ -444,11 +471,13 @@ class DoctorRepository {
     bool forceRefresh = false,
     String? userLocation,
     String? countryIso,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
   }) async {
     final isSearch = query != null && query.isNotEmpty;
     final data = await _fetchWithCache(
       cacheKey: isSearch ? null : 'featured_doctors_$countryIso',
       forceRefresh: forceRefresh,
+      onFreshData: onFreshData != null ? ((fresh) => onFreshData(limit != null ? fresh.take(limit).toList() : fresh)) : null,
       fetcher: () async {
         var dbQuery = _client
             .from('doctors')
@@ -523,10 +552,12 @@ class DoctorRepository {
   Future<List<Map<String, dynamic>>> fetchSpecialties({
     int limit = 10,
     bool forceRefresh = false,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
   }) async {
     final data = await _fetchWithCache(
       cacheKey: 'specialties_list',
       forceRefresh: forceRefresh,
+      onFreshData: onFreshData != null ? ((fresh) => onFreshData(fresh.take(limit).toList())) : null,
       fetcher: () async {
         final response = await _client.from('specialties').select();
         return List<Map<String, dynamic>>.from(response);
@@ -753,4 +784,33 @@ class DoctorRepository {
       },
     );
   }
+}
+
+// --- PRO FIX: 120fps Background Isolate Sorter ---
+List<Map<String, dynamic>> _isolateDistanceSort(Map<String, dynamic> params) {
+  final data = params['data'] as List<Map<String, dynamic>>;
+  final userLat = params['userLat'] as double;
+  final userLng = params['userLng'] as double;
+
+  data.sort((a, b) => _getMinDistanceHelper(a, userLat, userLng)
+      .compareTo(_getMinDistanceHelper(b, userLat, userLng)));
+  return data;
+}
+
+double _getMinDistanceHelper(Map<String, dynamic> doctor, double userLat, double userLng) {
+  final clinicsJunction = doctor['doctor_clinics'] as List<dynamic>? ?? [];
+  if (clinicsJunction.isEmpty) return double.maxFinite;
+  double minParamsDiff = double.maxFinite;
+  for (var junction in clinicsJunction) {
+    final clinic = junction['clinics'];
+    if (clinic != null && clinic['latitude'] != null && clinic['longitude'] != null) {
+      final dist = Geolocator.distanceBetween(
+        userLat, userLng,
+        (clinic['latitude'] as num).toDouble(),
+        (clinic['longitude'] as num).toDouble(),
+      );
+      if (dist < minParamsDiff) minParamsDiff = dist;
+    }
+  }
+  return minParamsDiff;
 }

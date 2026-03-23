@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui'; // PRO FIX: Required for Frosted Glass ImageFilter
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -46,7 +47,6 @@ class _SettingsScreenState extends State<SettingsScreen>
   String? _verifiedFactorId;
   bool _hasPromptedSecurity = false;
 
-  // NEW: State to track if the user has an email password provider
   bool _hasEmailProvider = false;
 
   late final AuthRepository _authRepository = AuthRepository();
@@ -70,25 +70,19 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void initState() {
     super.initState();
-    // Preload state from SettingsNotifier's cache for instant UI rendering without layout shifts
     _is2FAEnabled = SettingsNotifier.instance.is2FAEnabled;
-
-    // Preload biometric capabilities from SettingsNotifier's cache to prevent layout shift
     _hasBiometricHardware = SettingsNotifier.instance.hasBiometricHardware;
     _isBiometricEnabled = SettingsNotifier.instance.isBiometricEnabled;
 
     SettingsNotifier.instance.loadSettings();
 
-    // NEW: Check if the user signed in with an email/password or just OAuth (Google)
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       final providers = List<String>.from(user.appMetadata['providers'] ?? []);
       final hasEmailMetadata = user.userMetadata?['has_email_password'] == true;
-      // It has an email if it's in the providers list OR if we set the hidden metadata flag
       _hasEmailProvider = providers.contains('email') || hasEmailMetadata;
     }
 
-    // Run these in background to refresh the UI without blocking initial build
     _checkBiometricStatus();
     _check2FAStatus();
   }
@@ -108,15 +102,25 @@ class _SettingsScreenState extends State<SettingsScreen>
       return;
     }
 
-    final isEnabled = await _trustedDeviceRepository
-        .isBiometricEnabledForDevice(userId: user.id);
+    try {
+      final isEnabled = await _trustedDeviceRepository
+          .isBiometricEnabledForDevice(userId: user.id);
 
-    if (mounted) {
-      setState(() {
-        _hasBiometricHardware = true;
-        _isBiometricEnabled = isEnabled;
-      });
-      SettingsNotifier.instance.updateBiometricState(true, isEnabled);
+      if (mounted) {
+        setState(() {
+          _hasBiometricHardware = true;
+          _isBiometricEnabled = isEnabled;
+        });
+        SettingsNotifier.instance.updateBiometricState(true, isEnabled);
+      }
+    } catch (_) {
+      // PRO FIX: If offline, strictly trust the local cache instead of defaulting to false!
+      if (mounted) {
+        setState(() {
+          _hasBiometricHardware = true;
+          _isBiometricEnabled = SettingsNotifier.instance.isBiometricEnabled;
+        });
+      }
     }
   }
 
@@ -212,7 +216,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  // --- PRO FIX: Adaptive Glass Security Gate ---
   Future<bool> _enforceSecurityGate(String actionReason) async {
     final gateDecision = _securityGateService.evaluateAal2Gate();
     if (gateDecision.isAllowed) return true;
@@ -349,22 +352,17 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                   Expanded(
-                    child: TextButton(
-                      onPressed:
-                          isDialogLoading
-                              ? null
-                              : () => setDialogState(() {
+                    // PRO FIX: Upgraded to a solid PrimaryButton to match all other dialogs!
+                    child: PrimaryButton(
+                      label: isRecoveryMode ? "Use App" : "Use Backup",
+                      backgroundColor: themeColor, // Dynamically switches between Green and Orange
+                      onTap: isDialogLoading
+                          ? () {}
+                          : () => setDialogState(() {
                                 isRecoveryMode = !isRecoveryMode;
                                 otpController.clear();
                                 recoveryController.clear();
                               }),
-                      child: Text(
-                        isRecoveryMode ? "Use App" : "Use Backup",
-                        style: TextStyle(
-                          color: themeColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -479,7 +477,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
-  // --- PRO FIX: Fully Upgraded Adaptive Glass 2FA Wizard ---
   Future<void> _start2FASetupWizard() async {
     int currentStep = 0;
     bool isDialogLoading = false;
@@ -517,8 +514,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                   code: codeController.text,
                 );
 
-                await Supabase.instance.client.auth.updateUser(
-                  UserAttributes(data: {'is_2fa_enabled': true}),
+                await _settingsRepository.updateUserMetadata(
+                  {'is_2fa_enabled': true},
                 );
 
                 generatedCodes = _generateLocalCodes();
@@ -826,32 +823,53 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                   const SizedBox(height: 24),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Clipboard.setData(
-                        ClipboardData(text: generatedCodes.join('\n')),
-                      );
-                      if (ctx.mounted) {
-                        CustomSnackbar.showSuccess(
-                          ctx,
-                          "Codes copied to clipboard",
+                  SizedBox(
+                    width: double.infinity,
+                    child: InkWell(
+                      onTap: () {
+                        Clipboard.setData(
+                          ClipboardData(text: generatedCodes.join('\n')),
                         );
-                      }
-                    },
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: const Text(
-                      "Copy Codes",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor:
-                          isDark ? Colors.white : AppColors.darkTextPrimary,
-                      side: BorderSide(
-                        color:
-                            isDark ? AppColors.darkBorder : Colors.grey[300]!,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        if (ctx.mounted) {
+                          CustomSnackbar.showSuccess(
+                            ctx,
+                            "Codes copied to clipboard",
+                          );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isDark 
+                              ? Colors.white.withValues(alpha: 0.05) 
+                              : Colors.grey.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isDark 
+                                ? Colors.white.withValues(alpha: 0.1) 
+                                : Colors.grey.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.copy_rounded, 
+                              size: 18, 
+                              color: context.colorTextDark,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "Copy Codes",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: context.colorTextDark,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1071,8 +1089,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         );
       }
 
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(data: {'is_2fa_enabled': false}),
+      await _settingsRepository.updateUserMetadata(
+        {'is_2fa_enabled': false},
       );
 
       if (_verifiedFactorId != null) {
@@ -1319,51 +1337,82 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Stack(
       children: [
         Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          appBar: AppBar(
-            title: Text("Settings", style: AppTextStyles.h2(context)),
-            centerTitle: true,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: Icon(Icons.arrow_back_ios_new_rounded),
-              onPressed: () => context.pop(),
-              color: context.colorTextDark,
-            ),
-          ),
-          body: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SettingsAccountSecuritySection(
-                  hasEmailProvider: _hasEmailProvider,
-                  hasBiometricHardware: _hasBiometricHardware,
-                  isBiometricEnabled: _isBiometricEnabled,
-                  isBiometricToggleBusy: _isBiometricToggleBusy,
-                  onBiometricToggle: (val) async {
-                    final result = await _handleBiometricToggle(val);
-                    if (mounted) setState(() => _isBiometricEnabled = result);
-                    return result;
-                  },
-                  is2FAEnabled: _is2FAEnabled,
-                  is2FAToggleBusy: _is2FAToggleBusy,
-                  onTwoFactorToggle: _handleTwoFactorToggle,
-                  onTapChangePassword: _showChangePasswordDialog,
-                  onTapDeleteAccount: _showDeleteConfirmation,
+          // --- 📌 PRO FIX: Liquid Scroll & Frosted Glass Utility Header ---
+          body: CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                elevation: 0,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85),
+                surfaceTintColor: Colors.transparent,
+                flexibleSpace: ClipRRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(color: Colors.transparent),
+                  ),
                 ),
-                SizedBox(height: 32),
-                SettingsPreferencesSection(
-                  isBiometricEnabled: _isBiometricEnabled,
+                leadingWidth: 64,
+                leading: Center(
+                  child: InkWell(
+                    onTap: () => context.pop(),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.arrow_back_ios_new_rounded, color: context.colorTextDark, size: 18),
+                    ),
+                  ),
                 ),
-                SizedBox(height: 32),
-                SettingsSupportLegalSection(),
-                SizedBox(height: 40),
-              ],
-            ),
+                centerTitle: true,
+                title: Text(
+                  "Settings",
+                  style: AppTextStyles.h3(context).copyWith(
+                    fontSize: 18,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              
+              // --- 📌 PRO FIX: Wrapped your perfectly built sections in a SliverPadding ---
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    SettingsAccountSecuritySection(
+                      hasEmailProvider: _hasEmailProvider,
+                      hasBiometricHardware: _hasBiometricHardware,
+                      isBiometricEnabled: _isBiometricEnabled,
+                      isBiometricToggleBusy: _isBiometricToggleBusy,
+                      onBiometricToggle: (val) async {
+                        final result = await _handleBiometricToggle(val);
+                        if (mounted) setState(() => _isBiometricEnabled = result);
+                        return result;
+                      },
+                      is2FAEnabled: _is2FAEnabled,
+                      is2FAToggleBusy: _is2FAToggleBusy,
+                      onTwoFactorToggle: _handleTwoFactorToggle,
+                      onTapChangePassword: _showChangePasswordDialog,
+                      onTapDeleteAccount: _showDeleteConfirmation,
+                    ),
+                    const SizedBox(height: 32),
+                    SettingsPreferencesSection(
+                      isBiometricEnabled: _isBiometricEnabled,
+                    ),
+                    const SizedBox(height: 32),
+                    const SettingsSupportLegalSection(),
+                  ]),
+                ),
+              ),
+            ],
           ),
         ),
         if (_isLoading)

@@ -301,7 +301,8 @@ class MedicalRecordRepository {
           .select()
           .eq('user_id', userId)
           .isFilter('deleted_at', null)
-          .order('record_date', ascending: false);
+          .order('record_date', ascending: false)
+          .timeout(const Duration(seconds: 8));
       await box.put(cacheKey, jsonEncode(response));
       await box.put('${cacheKey}_time', DateTime.now().toIso8601String());
 

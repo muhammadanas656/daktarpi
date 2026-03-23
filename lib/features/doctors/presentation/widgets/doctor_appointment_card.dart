@@ -1,16 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import 'package:intl/intl.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 
-class DoctorAppointmentCard extends StatelessWidget {
+class DoctorAppointmentCard extends StatefulWidget {
   final List<Map<String, dynamic>> clinics;
   final Map<String, dynamic>? selectedClinic;
   final DateTime selectedDate;
   final List<DateTime> datesToShow;
-  final List<String> timeSlots;
-  final List<String> bookedSlots;
+  final List<Map<String, dynamic>> timeSlots;
   final String? selectedTimeSlot;
   final ValueChanged<Map<String, dynamic>?> onClinicChanged;
   final ValueChanged<DateTime> onDateSelected;
@@ -25,7 +25,6 @@ class DoctorAppointmentCard extends StatelessWidget {
     required this.selectedDate,
     required this.datesToShow,
     required this.timeSlots,
-    this.bookedSlots = const [],
     this.selectedTimeSlot,
     required this.onClinicChanged,
     required this.onDateSelected,
@@ -34,25 +33,69 @@ class DoctorAppointmentCard extends StatelessWidget {
     this.onMoreClinicTap,
   });
 
+  @override
+  State<DoctorAppointmentCard> createState() => _DoctorAppointmentCardState();
+}
+
+class _DoctorAppointmentCardState extends State<DoctorAppointmentCard> {
+  // PRO FIX: Internal state to handle the "Automatic Closure"
+  Timer? _collapseTimer;
+  String? _expandedSlotTime;
+
+  @override
+  void didUpdateWidget(DoctorAppointmentCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // When the parent selects a new slot, expand it and start the timer!
+    if (widget.selectedTimeSlot != oldWidget.selectedTimeSlot) {
+      if (widget.selectedTimeSlot != null) {
+        setState(() {
+          _expandedSlotTime = widget.selectedTimeSlot;
+        });
+        _startCollapseTimer();
+      } else {
+        // If the slot was cleared (e.g., date changed), cancel everything
+        _expandedSlotTime = null;
+        _collapseTimer?.cancel();
+      }
+    }
+  }
+
+  void _startCollapseTimer() {
+    _collapseTimer?.cancel();
+    _collapseTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _expandedSlotTime = null; // Automatically close the text!
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _collapseTimer?.cancel();
+    super.dispose();
+  }
+
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
-    final bool hasData = clinics.isNotEmpty && selectedClinic != null;
+    final isDark = Theme.of(context).brightness == Brightness.dark; 
+    final bool hasData = widget.clinics.isNotEmpty && widget.selectedClinic != null;
     final clinicName =
-        hasData ? selectedClinic!['name'].toString() : 'No Clinic Available';
-    final clinicAddress = hasData ? selectedClinic!['address'].toString() : '';
-    final dynamic price = hasData ? selectedClinic!['visit_price'] : 0;
+        hasData ? widget.selectedClinic!['name'].toString() : 'No Clinic Available';
+    final clinicAddress = hasData ? widget.selectedClinic!['address'].toString() : '';
+    final dynamic price = hasData ? widget.selectedClinic!['visit_price'] : 0;
     final waitTime =
-        hasData ? selectedClinic!['avg_wait_time'].toString() : 'N/A';
-    final moreClinicCount = clinics.length > 1 ? clinics.length - 1 : 0;
+        hasData ? widget.selectedClinic!['avg_wait_time'].toString() : 'N/A';
+    final moreClinicCount = widget.clinics.length > 1 ? widget.clinics.length - 1 : 0;
 
     return Container(
       width: double.infinity,
-      // PRO FIX: Dynamic surface instead of Colors.white and Color(0xFFE8EDF3)
       decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -60,7 +103,6 @@ class DoctorAppointmentCard extends StatelessWidget {
           Container(
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              // PRO FIX: Darker header in Dark Mode
               color: isDark ? AppColors.darkScaffold : const Color(0xFFCEE3E5),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(12),
@@ -123,19 +165,19 @@ class DoctorAppointmentCard extends StatelessWidget {
                     if (moreClinicCount > 0)
                       GestureDetector(
                         onTap: () {
-                          if (onMoreClinicTap != null) {
-                            onMoreClinicTap!();
+                          if (widget.onMoreClinicTap != null) {
+                            widget.onMoreClinicTap!();
                             return;
                           }
-                          if (clinics.isEmpty || selectedClinic == null) {
+                          if (widget.clinics.isEmpty || widget.selectedClinic == null) {
                             return;
                           }
-                          final currentIndex = clinics.indexOf(selectedClinic!);
+                          final currentIndex = widget.clinics.indexOf(widget.selectedClinic!);
                           final nextIndex =
                               currentIndex == -1
                                   ? 0
-                                  : (currentIndex + 1) % clinics.length;
-                          onClinicChanged(clinics[nextIndex]);
+                                  : (currentIndex + 1) % widget.clinics.length;
+                          widget.onClinicChanged(widget.clinics[nextIndex]);
                         },
                         child: Text(
                           "$moreClinicCount More clinic",
@@ -160,10 +202,10 @@ class DoctorAppointmentCard extends StatelessWidget {
                 SizedBox(height: 12),
                 Row(
                   children: [
-                    for (final date in datesToShow)
+                    for (final date in widget.datesToShow)
                       _buildDateTab(context, date),
                     InkWell(
-                      onTap: onCustomDateTap,
+                      onTap: widget.onCustomDateTap,
                       borderRadius: BorderRadius.circular(6),
                       child: Padding(
                         padding: EdgeInsets.all(4),
@@ -179,7 +221,7 @@ class DoctorAppointmentCard extends StatelessWidget {
                 SizedBox(height: 6),
                 Divider(height: 1, color: Color(0xFFDFE5EA)),
                 SizedBox(height: 12),
-                if (timeSlots.isEmpty)
+                if (widget.timeSlots.isEmpty)
                   Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Text(
@@ -191,16 +233,22 @@ class DoctorAppointmentCard extends StatelessWidget {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children:
-                          timeSlots.map((slot) {
-                            final isBooked = bookedSlots.contains(slot);
-                            final isSelected = slot == selectedTimeSlot;
+                          widget.timeSlots.map((slotData) {
+                            
+                            final String slotTime = slotData['time'];
+                            final bool isFull = slotData['isFull'];
+                            final int spotsLeft = slotData['spotsLeft'];
+                            
+                            final isSelected = slotTime == widget.selectedTimeSlot;
+                            // PRO FIX: Checks if THIS specific pill is the currently expanded one
+                            final isExpanded = isSelected && slotTime == _expandedSlotTime;
 
-                            // PRO FIX: Adaptive chip colors for Dark Mode
                             Color chipColor = isDark ? AppColors.darkScaffold : const Color(0xFFD7EEF1);
                             Color textColor = isDark ? AppColors.primaryGreen : const Color(0xFF2B757E);
                             
-                            if (isBooked) {
+                            if (isFull) {
                               chipColor = isDark ? AppColors.darkBorder : const Color(0xFFEEF1F4);
                               textColor = isDark ? Colors.grey[600]! : const Color(0xFF9CA7B3);
                             } else if (isSelected) {
@@ -209,27 +257,62 @@ class DoctorAppointmentCard extends StatelessWidget {
                             }
 
                             return GestureDetector(
-                              onTap:
-                                  (!isBooked && onTimeSlotSelected != null)
-                                      ? () => onTimeSlotSelected!(slot)
+                              onTap: (!isFull && widget.onTimeSlotSelected != null)
+                                      ? () {
+                                          widget.onTimeSlotSelected!(slotTime);
+                                          // If they tap the same slot again, force it to re-expand and reset the timer!
+                                          if (isSelected) {
+                                            setState(() {
+                                              _expandedSlotTime = slotTime;
+                                            });
+                                            _startCollapseTimer();
+                                          }
+                                        }
                                       : null,
-                              child: Container(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.fastOutSlowIn,
                                 margin: EdgeInsets.only(right: 8),
                                 padding: EdgeInsets.symmetric(
-                                  horizontal: 10,
+                                  horizontal: 12,
                                   vertical: 8,
                                 ),
                                 decoration: BoxDecoration(
                                   color: chipColor,
                                   borderRadius: BorderRadius.circular(16),
                                 ),
-                                child: Text(
-                                  slot,
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      slotTime,
+                                      style: TextStyle(
+                                        color: textColor,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    AnimatedSize(
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.fastOutSlowIn,
+                                      alignment: Alignment.topCenter,
+                                      // PRO FIX: Now respects the Timer's isExpanded state!
+                                      child: isExpanded && !isFull
+                                          ? Padding(
+                                              padding: const EdgeInsets.only(top: 4),
+                                              child: Text(
+                                                "Only $spotsLeft spot${spotsLeft > 1 ? 's' : ''} left!",
+                                                style: TextStyle(
+                                                  color: Colors.white.withValues(alpha: 0.9),
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );
@@ -245,7 +328,7 @@ class DoctorAppointmentCard extends StatelessWidget {
   }
 
   Widget _buildDateTab(BuildContext context, DateTime date) {
-    final isSelected = _isSameDay(date, selectedDate);
+    final isSelected = _isSameDay(date, widget.selectedDate);
     final now = DateTime.now();
     final isToday = _isSameDay(date, now);
     final isTomorrow = _isSameDay(date, now.add(Duration(days: 1)));
@@ -262,7 +345,7 @@ class DoctorAppointmentCard extends StatelessWidget {
 
     return Expanded(
       child: InkWell(
-        onTap: () => onDateSelected(date),
+        onTap: () => widget.onDateSelected(date),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 4),

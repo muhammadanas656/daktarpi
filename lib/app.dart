@@ -39,7 +39,14 @@ class MyApp extends StatelessWidget {
           child: MaterialApp.router(
             title: 'DaktarPai',
             debugShowCheckedModeBanner: false,
-
+            
+            // PRO FIX: Inject pure 120Hz iOS bouncy scrolling physics globally
+            scrollBehavior: const MaterialScrollBehavior().copyWith(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+            ),
+            
             // Theme Settings
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

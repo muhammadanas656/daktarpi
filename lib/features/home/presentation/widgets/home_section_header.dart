@@ -11,7 +11,7 @@ class HomeSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 25, 24, 15),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -21,7 +21,6 @@ class HomeSectionHeader extends StatelessWidget {
             child: Text(
               "See all >",
               style: AppTextStyles.bodySmall(context).copyWith(
-                // PRO FIX: Use primary green so it looks like an actionable button in both themes
                 color: AppColors.primaryGreen,
                 fontWeight: FontWeight.bold,
               ),

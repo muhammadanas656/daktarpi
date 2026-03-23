@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_dimens.dart';
-import '../../core/theme/app_shapes.dart';
 import '../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
 import 'app_network_image.dart';
@@ -27,12 +26,13 @@ class HomePopularDoctorCard extends StatelessWidget {
     return Container(
       width: 170,
       decoration: BoxDecoration(
+        // PRO FIX: Synchronized the dynamic radius so the shadow escapes cleanly
         borderRadius: AppStyles.cardRadius,
         boxShadow: AppStyles.cardShadow(context),
       ),
       child: Material(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: AppShapes.xl,
+        borderRadius: AppStyles.cardRadius,
         child: InkWell(
           onTap:
               () => context.push(
@@ -45,14 +45,15 @@ class HomePopularDoctorCard extends StatelessWidget {
                   'profile_picture_url': imageUrl,
                 },
               ),
-          borderRadius: AppShapes.xl,
+          borderRadius: AppStyles.cardRadius,
           child: Column(
             children: [
               Expanded(
                 flex: 3,
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(AppShapes.radiusXl),
+                  // We only clip the top corners of the image to match the card
+                  borderRadius: BorderRadius.vertical(
+                    top: AppStyles.cardRadius.topLeft,
                   ),
                   child: Hero(
                     tag: 'doctor-hero-$id',
@@ -81,6 +82,7 @@ class HomePopularDoctorCard extends StatelessWidget {
                           fontSize: 15,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         specialty,
                         maxLines: 1,
@@ -94,10 +96,14 @@ class HomePopularDoctorCard extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 14),
+                          const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                          const SizedBox(width: 4),
                           Text(
-                            " $rating",
-                            style: const TextStyle(fontSize: 12),
+                            rating,
+                            style: const TextStyle(
+                              fontSize: 12, 
+                              fontWeight: FontWeight.w600
+                            ),
                           ),
                         ],
                       ),

@@ -74,6 +74,7 @@ dependencies:
   firebase_core: ^4.5.0
   firebase_messaging: ^16.1.2
   skeletonizer: ^1.4.3
+  flutter_native_splash: ^2.4.6
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -140,3 +141,12 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_native_splash:
+  color: "#F3F4F6"
+  color_dark: "#1A1A1A"
+  # image: assets/images/logo.png
+  android_12:
+    # image: assets/images/logo.png
+    color: "#F3F4F6"
+    color_dark: "#1A1A1A"

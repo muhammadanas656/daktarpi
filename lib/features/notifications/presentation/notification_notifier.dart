@@ -37,7 +37,8 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
   int get unreadCount {
     final now = DateTime.now();
     return _notifications.where((n) {
-      final isPast = DateTime.parse(n['timestamp']).isBefore(now);
+      final notifDate = DateTime.parse(n['timestamp']).toLocal();
+      final isPast = notifDate.isBefore(now) || notifDate.isAtSameMomentAs(now);
       return isPast && n['is_read'] == false;
     }).length;
   }
@@ -81,8 +82,17 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
     try {
       await load();
 
+      // Dedup 1: By FCM messageId (prevents duplicate FCM push saves)
       if (messageId != null && messageId.isNotEmpty) {
         final alreadyExists = _notifications.any((n) => n['message_id'] == messageId);
+        if (alreadyExists) return;
+      }
+
+      // Dedup 2: By payload+title (prevents duplicate scheduled reminders)
+      if (payload != null && payload.isNotEmpty) {
+        final alreadyExists = _notifications.any(
+          (n) => n['payload'] == payload && n['title'] == title,
+        );
         if (alreadyExists) return;
       }
 
@@ -90,7 +100,7 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
         'id': const Uuid().v4(),
         'title': title,
         'body': body,
-        'timestamp': (scheduledTime ?? DateTime.now()).toIso8601String(),
+        'timestamp': (scheduledTime ?? DateTime.now()).toUtc().toIso8601String(),
         'is_read': false,
         'payload': payload,
         if (messageId != null) 'message_id': messageId,
@@ -124,7 +134,7 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
     await load();
     final now = DateTime.now();
     for (var n in _notifications) {
-      if (DateTime.parse(n['timestamp']).isBefore(now)) {
+      if (DateTime.parse(n['timestamp']).toLocal().isBefore(now)) {
         n['is_read'] = true;
       }
     }
@@ -145,22 +155,38 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> deleteNotificationsByPayload(
     String payload, {
     Set<String> excludedTitles = const {},
+    Set<String> includedTitles = const {},
   }) async {
     await load();
-    final initialLength = _notifications.length;
+    if (payload.isEmpty) return;
 
-    // Find the IDs we are about to delete so we can remove them from Supabase
-    final toDelete = _notifications.where(
-      (n) => n['payload'] == payload && !excludedTitles.contains(n['title']?.toString())
-    ).toList();
-
+    final toDelete =
+        _notifications.where((n) {
+          final isMatch = n['payload'] == payload;
+          if (!isMatch) return false;
+          
+          // PRO FIX: We ONLY want to delete "future" (unseen) ghosts.
+          // If a reminder has already fired and is in the past, it's part 
+          // of the historical inbox record and should NEVER be deleted!
+          final notifDate = DateTime.parse(n['timestamp']).toLocal();
+          if (!notifDate.isAfter(DateTime.now())) {
+            return false;
+          }
+          
+          if (includedTitles.isNotEmpty) {
+            return includedTitles.contains(n['title']?.toString());
+          }
+          
+          return !excludedTitles.contains(n['title']?.toString());
+        }).toList();
+    
     for (var n in toDelete) {
       await _repo.deleteRemote(n['id']);
     }
 
     _notifications.removeWhere((n) => toDelete.contains(n));
 
-    if (_notifications.length != initialLength) {
+    if (toDelete.isNotEmpty) {
       await _repo.saveLocalCache(_notifications);
       notifyListeners();
     }

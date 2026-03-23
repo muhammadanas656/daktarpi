@@ -232,7 +232,8 @@ final appRouter = GoRouter(
         final id = state.pathParameters['id']!;
         final extra = state.extra as SpecialtyRouteArgs?;
         final name = extra?.name ?? 'Doctors';
-        return SpecialtyDoctorsScreen(specialtyId: id, specialtyName: name);
+        final iconUrl = extra?.iconUrl; // Grabs the instantly cached URL!
+        return SpecialtyDoctorsScreen(specialtyId: id, specialtyName: name, specialtyIconUrl: iconUrl);
       },
     ),
 
@@ -243,7 +244,12 @@ final appRouter = GoRouter(
         final id = state.pathParameters['id']!;
         final extra = state.extra as ClinicRouteArgs?;
         final name = extra?.name ?? 'Clinic Doctors';
-        return ClinicDoctorsScreen(clinicId: int.parse(id), clinicName: name);
+        final logoUrl = extra?.logoUrl;
+        return ClinicDoctorsScreen(
+          clinicId: int.parse(id),
+          clinicName: name,
+          logoUrl: logoUrl,
+        );
       },
     ),
 

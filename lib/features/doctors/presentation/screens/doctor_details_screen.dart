@@ -61,7 +61,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   Map<String, dynamic>? _selectedClinic;
 
   DateTime _selectedDate = DateTime.now();
-  final List<String> _bookedSlots = [];
+  
+  // PRO FIX: Upgraded to track precise booking counts instead of a flat list!
+  Map<String, int> _slotBookingCounts = {};
   String? _selectedTimeSlot;
 
   final ScrollController _scrollController = ScrollController();
@@ -198,15 +200,15 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     if (_selectedClinic == null) return;
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final slots = await _appointmentRepo.fetchBookedSlots(
+      // PRO FIX: Now using the advanced capacity fetcher!
+      final counts = await _appointmentRepo.fetchSlotBookingCounts(
         doctorId: widget.doctorId,
         clinicId: _selectedClinic!['id'].toString(),
         date: dateStr,
       );
       if (mounted) {
         setState(() {
-          _bookedSlots.clear();
-          _bookedSlots.addAll(slots);
+          _slotBookingCounts = counts;
         });
       }
     } catch (e) {
@@ -286,7 +288,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     }
   }
 
-  List<String> _getSlotsForSelectedDate() {
+  // PRO FIX: Now generates Map objects with Capacity Logic!
+  List<Map<String, dynamic>> _getSlotsForSelectedDate() {
     if (_schedules.isEmpty || _selectedClinic == null) return [];
     final dayName = DateFormat('EEEE').format(_selectedDate);
     final now = DateTime.now();
@@ -302,12 +305,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
             )
             .toList();
 
-    List<String> allSlots = [];
+    List<Map<String, dynamic>> allSlots = [];
     for (var scheduleEntry in daySchedules) {
       try {
         final startStr = scheduleEntry['start_time'].toString();
         final endStr = scheduleEntry['end_time'].toString();
         final duration = scheduleEntry['slot_duration_minutes'] as int? ?? 30;
+        final maxCapacity = scheduleEntry['max_patients'] as int? ?? 1;
 
         TimeOfDay startTime = _parseTime(startStr);
         TimeOfDay endTime = _parseTime(endStr);
@@ -320,20 +324,24 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           if (isToday) {
             final slotHour = startMinutes ~/ 60;
             final slotMinute = startMinutes % 60;
-            final slotTime = DateTime(
-              now.year,
-              now.month,
-              now.day,
-              slotHour,
-              slotMinute,
-            );
+            final slotTime = DateTime(now.year, now.month, now.day, slotHour, slotMinute);
             if (slotTime.isBefore(now)) isPast = true;
           }
 
           if (!isPast) {
             final sTime = _minutesToTime(startMinutes);
             final eTime = _minutesToTime(startMinutes + duration);
-            allSlots.add("$sTime - $eTime");
+            final slotStr = "$sTime - $eTime";
+
+            int currentBookings = _slotBookingCounts[slotStr] ?? 0;
+            int spotsLeft = maxCapacity - currentBookings;
+            bool isFull = spotsLeft <= 0;
+
+            allSlots.add({
+              'time': slotStr,
+              'spotsLeft': spotsLeft > 0 ? spotsLeft : 0,
+              'isFull': isFull,
+            });
           }
           startMinutes += duration;
         }
@@ -341,8 +349,15 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         debugPrint("Error parsing schedule row: $e");
       }
     }
-    allSlots.sort((a, b) => a.compareTo(b));
-    return allSlots.toSet().toList();
+    
+    allSlots.sort((a, b) => a['time'].compareTo(b['time']));
+    
+    // Deduplicate in case of overlapping schedule rows
+    final uniqueSlots = <String, Map<String, dynamic>>{};
+    for (var slot in allSlots) {
+       uniqueSlots[slot['time']] = slot;
+    }
+    return uniqueSlots.values.toList();
   }
 
   TimeOfDay _parseTime(String timeStr) {
@@ -415,9 +430,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // --- PRO FIX: Swap to the new unique patients column ---
                       DoctorStatsRow(
-                        patients: _doctor!['patients_served']?.toString() ?? '0',
+                        patients:
+                            (_doctor!['unique_patients_count'] ??
+                                    _doctor!['patients_served'])
+                                ?.toString() ??
+                            '0',
                         experience: _doctor!['experience_years']?.toString() ?? '0',
                         rating: _doctor!['rating']?.toString() ?? '0.0',
                       ),
@@ -511,8 +529,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                               selectedClinic: _selectedClinic,
                               selectedDate: _selectedDate,
                               datesToShow: datesToShow,
-                              timeSlots: _getSlotsForSelectedDate(),
-                              bookedSlots: _bookedSlots.toList(),
+                              timeSlots: _getSlotsForSelectedDate(), // PRO FIX: Passing Map
                               selectedTimeSlot: _selectedTimeSlot,
                               onClinicChanged: (clinic) {
                                 if (clinic != null) {

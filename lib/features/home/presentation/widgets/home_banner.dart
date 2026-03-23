@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 
 class HomeBanner extends StatefulWidget {
   final List<Map<String, dynamic>> banners;
@@ -111,11 +112,11 @@ class _HomeBannerState extends State<HomeBanner> {
                         Positioned(
                           right: 10,
                           bottom: 0,
-                          child: Image.network(
-                            banner['image_url'],
+                          child: AppNetworkImage(
+                            imageUrl: banner['image_url'],
                             height: 140,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                            cacheKey: 'banner_${banner['id']}',
                           ),
                         ),
                     ],

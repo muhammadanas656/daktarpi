@@ -7,16 +7,17 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 
 import '../favorites_notifier.dart';
-import '../doctors_notifier.dart'; // PRO FIX: Imported the new central Notifier!
+import '../doctors_notifier.dart'; 
 import '../models/doctors_route_args.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../notifications/presentation/notification_notifier.dart';
 import '../../../../core/widgets/app_loader.dart';
 
 class DoctorsScreen extends StatefulWidget {
-  final bool isBackgroundLayer; // PRO FIX: Flag for 3D Drawer background mode
+  final bool isBackgroundLayer; 
 
   const DoctorsScreen({super.key, this.isBackgroundLayer = false});
 
@@ -45,10 +46,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   @override
   void initState() {
     super.initState();
-    // PRO FIX: We tell the notifier to load. If it already has data in RAM, 
-    // it skips the network call instantly! The Drawer background can just piggyback.
     _docsNotifier.fetchDoctors();
-
     _searchController.addListener(_onSearchChanged);
     _favNotifier.addListener(_onFavoritesChanged);
     _profileNotifier.addListener(_onProfileChanged);
@@ -87,13 +85,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     await _docsNotifier.fetchDoctors(
       query: _searchController.text.trim(),
       filter: _selectedFilter,
-      forceRefresh: true, // Pull-to-refresh forces a true global network fetch
+      forceRefresh: true, 
     );
   }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
@@ -149,12 +146,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-
-
-  // --- PRO FIX: Signature Surface Header for Doctors ---
-  // --- PRO FIX: Premium Editorial Glass Header ---
-  // --- PRO FIX: Clean Typographic Header ---
-  // --- PRO FIX: Clean Typographic Header with Reactive Inbox Badge ---
   Widget _buildHeader() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -192,8 +183,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                   ),
                   onPressed: () => context.push(AppRoutes.notifications),
                 ),
-
-                // Reactive Unread Badge!
                 AnimatedBuilder(
                   animation: NotificationNotifier.instance,
                   builder: (context, child) {
@@ -212,7 +201,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                           border: Border.all(
                             color: Theme.of(context).colorScheme.surface,
                             width: 1.5,
-                          ), // Cutout effect
+                          ), 
                         ),
                       ),
                     );
@@ -234,17 +223,16 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         hintText: "Search doctor, specialty...",
         showClearIcon: _searchController.text.isNotEmpty,
         onClear: _clearSearch,
-        readOnly: widget.isBackgroundLayer, // PRO FIX: Read-only prevents TextField rendering glitches on overlaid repainted canvases
+        readOnly: widget.isBackgroundLayer, 
       ),
     );
   }
 
   Widget _buildFilterChips() {
     return Container(
-      height: 54, // PRO FIX: Perfect professional height (not overexpanded)
+      height: 54, 
       margin: const EdgeInsets.only(top: 16, bottom: 12),
       child: ListView.separated(
-        // PRO FIX: The magic bullet. This prevents shadows from EVER being cut off!
         clipBehavior: Clip.none,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
         scrollDirection: Axis.horizontal,
@@ -257,7 +245,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           return GestureDetector(
             onTap: () => _onFilterTap(filter),
             child: AnimatedContainer(
-              // PRO FIX: Smooth animation when switching tabs
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -267,13 +254,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                     isSelected
                         ? AppColors.primaryGreen
                         : Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(
-                  24,
-                ), // Perfectly round pills
+                borderRadius: BorderRadius.circular(24),
                 border:
                     isSelected
                         ? null
-                        // Clean, professional outline for unselected state
                         : Border.all(
                           color: context.colorBorder.withValues(alpha: 0.6),
                         ),
@@ -284,14 +268,11 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                             color: AppColors.primaryGreen.withValues(
                               alpha: 0.35,
                             ),
-                            blurRadius: 14, // Lush, wide glow
-                            offset: const Offset(
-                              0,
-                              6,
-                            ), // Dropped slightly lower
+                            blurRadius: 14, 
+                            offset: const Offset(0, 6), 
                           ),
                         ]
-                        : [], // No shadow on unselected for a cleaner hierarchy
+                        : [], 
               ),
               child: Text(
                 filter,
@@ -299,7 +280,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                   color: isSelected ? Colors.white : context.colorTextLight,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   fontSize: 14,
-                  letterSpacing: 0.3, // Adds a touch of elegance to the text
+                  letterSpacing: 0.3, 
                 ),
               ),
             ),
@@ -321,7 +302,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   }
 
   Widget _buildDoctorList() {
-    final doctors = _docsNotifier.doctors; // Read mapped data from the Singleton Vault
+    final doctors = _docsNotifier.doctors; 
     if (doctors.isEmpty) {
       return Center(
         child: Text(
@@ -355,65 +336,120 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-  // Facility Grid Builders
-  Widget _buildHospitalGrid() => _buildFacilityGrid(_docsNotifier.hospitals);
-  Widget _buildClinicGrid() => _buildFacilityGrid(_docsNotifier.clinics);
+  Widget _buildHospitalGrid() => _buildFacilityGrid(_docsNotifier.hospitals, isHospital: true);
+  Widget _buildClinicGrid() => _buildFacilityGrid(_docsNotifier.clinics, isHospital: false);
 
-  Widget _buildFacilityGrid(List<Map<String, dynamic>> items) {
+  Widget _buildFacilityGrid(List<Map<String, dynamic>> items, {required bool isHospital}) {
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.85,
+        childAspectRatio: 0.72, 
       ),
       itemCount: items.length,
-      itemBuilder: (context, index) => _buildFacilityCard(items[index]),
+      itemBuilder: (context, index) => _buildFacilityCard(items[index], isHospital),
     );
   }
 
-  Widget _buildFacilityCard(Map<String, dynamic> facility) {
+  Widget _buildFacilityCard(Map<String, dynamic> facility, bool isHospital) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasImage = facility['image_url'] != null && facility['image_url'].toString().isNotEmpty;
+
+    // --- PRO FIX: Safe Fallback Icon ---
+    // If there is no image OR if the image URL is a broken 404 link, it safely drops back to this!
+    final fallbackIcon = Icon(
+      isHospital ? Icons.local_hospital_rounded : Icons.medical_services_rounded,
+      size: 40,
+      color: AppColors.primaryGreen.withValues(alpha: 0.4),
+    );
+
     return InkWell(
-      onTap:
-          () => context.push(
-            AppRoutes.clinicDoctorsById('${facility['id']}'),
-            extra: ClinicRouteArgs(name: facility['name']),
-          ),
+      onTap: () => context.push(
+        AppRoutes.clinicDoctorsById('${facility['id']}'),
+        extra: ClinicRouteArgs(
+          name: facility['name'],
+          logoUrl: facility['logo_url']?.toString(),
+        ),
+      ),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         decoration: AppStyles.surfaceCard(
           context,
           borderRadius: BorderRadius.circular(20),
         ),
+        clipBehavior: Clip.antiAlias, 
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            CircleAvatar(
-              radius: 40,
-              backgroundImage:
-                  facility['image_url'] != null
-                      ? NetworkImage(facility['image_url'])
-                      : null,
-              child:
-                  facility['image_url'] == null
-                      ? const Icon(
-                        Icons.local_hospital,
-                        color: AppColors.primaryGreen,
+            // 1. Image Cover
+            Expanded(
+              flex: 5,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkBorder : const Color(0xFFE8F1F2),
+                ),
+                child: hasImage
+                    ? AppNetworkImage(
+                        imageUrl: facility['image_url'],
+                        fit: BoxFit.cover,
+                        cacheKey: 'facility_${facility['id']}',
                       )
-                      : null,
+                    : fallbackIcon,
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              facility['name'] ?? 'Unknown',
-              style: AppTextStyles.bodyBold(context),
-              textAlign: TextAlign.center,
+            // 2. Info Section
+            Expanded(
+              flex: 5, 
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      facility['name'] ?? 'Unknown',
+                      maxLines: 2, 
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyBold(context).copyWith(
+                        fontSize: 13, 
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4), 
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.location_on_rounded, 
+                          size: 14, 
+                          color: context.colorTextLight,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            facility['address'] ?? 'Tap to view doctors',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.3,
+                              color: context.colorTextLight,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       ),
     );
   }
-
-
 }

@@ -1,50 +1,31 @@
-import 'dart:ui' as ui; // PRO FIX: Added for image capture
-import 'dart:io'; // PRO FIX: Added for file handling
-
-import 'package:flutter/rendering.dart'; // PRO FIX: Added for RepaintBoundary
-
+import 'dart:ui' as ui;
+import 'dart:io';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
-
 import 'package:cached_network_image/cached_network_image.dart';
-
 import 'package:add_2_calendar/add_2_calendar.dart';
-
-import 'package:path_provider/path_provider.dart'; // PRO FIX: Added
-
-import 'package:share_plus/share_plus.dart'; // PRO FIX: Added
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/services/appointment_notification_service.dart';
 import '../../../../presentation/widgets/app_floating_dialog.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/widgets/app_loader.dart';
-
 import 'package:go_router/go_router.dart';
-
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
-
 import '../../../../core/theme/app_styles.dart';
-
 import '../../../../core/theme/app_text_styles.dart';
-
 import '../../../../core/constants/app_routes.dart';
-
 import '../../../../presentation/widgets/custom_snackbar.dart';
-
 import '../appointment_notifier.dart';
-
 import '../../../../presentation/widgets/appointment_card.dart';
 import '../../../../presentation/widgets/primary_button.dart';
-
 import 'package:uuid/uuid.dart';
-
 import '../models/booking_route_args.dart';
-
 import '../../../../presentation/widgets/complaint_dialog.dart';
-
 import '../../../menu/presentation/widgets/review_dialog.dart';
-
 import '../../../../core/network/network_notifier.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
@@ -55,8 +36,7 @@ class MyAppointmentsScreen extends StatefulWidget {
 }
 
 class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
-  final Uuid _uuid = Uuid();
-
+  final Uuid _uuid = const Uuid();
   final _appointmentNotifier = AppointmentNotifier.instance;
   AppointmentsRouteArgs? _lastProcessedArgs;
 
@@ -80,7 +60,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     if (mounted) {
       setState(() {});
       if (!NetworkNotifier.instance.isOffline) {
-        // PRO FIX: Silent refresh when network is restored!
         _appointmentNotifier.fetchAppointments(isBackground: true);
       }
     }
@@ -93,8 +72,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    // PRO FIX: Route args are tracked by instance so returning to the app doesn't refire
     final extra = GoRouterState.of(context).extra;
     if (extra is AppointmentsRouteArgs &&
         extra.refresh &&
@@ -110,9 +87,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   Future<void> _completeAppointment(int id) async {
     try {
       await _appointmentNotifier.completeAppointment(id);
-
       await AppointmentNotificationService.instance.cancelReminder(id);
-
       if (mounted) {
         CustomSnackbar.showSuccess(context, "Appointment marked as completed");
       }
@@ -125,74 +100,56 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
   Future<void> _handleReschedule(Map<String, dynamic> appointment) async {
     final doctor = appointment['doctors'];
-
     final clinic = appointment['clinics'];
-
     final int appointmentId = appointment['id'];
-
     final patientDetails = {
       'name': appointment['patient_name'] ?? "",
-
       'phone': appointment['patient_phone'] ?? "",
-
       'email': appointment['patient_email'] ?? "",
-
       'gender': appointment['patient_gender'] ?? "Male",
-
       'dob': appointment['patient_dob'] ?? DateTime.now().toIso8601String(),
     };
 
     final result = await context.push(
       AppRoutes.paymentMethod,
-
       extra: PaymentMethodArgs(
         doctor: Map<String, dynamic>.from(doctor ?? const {}),
-
         clinic: Map<String, dynamic>.from(clinic ?? const {}),
-
         patientDetails: patientDetails,
-
         appointmentDate: DateTime.now().add(const Duration(days: 1)),
-
         appointmentId: appointmentId,
-
         idempotencyKey: _uuid.v4(),
       ),
     );
 
     if (result == true && mounted) {
       CustomSnackbar.showSuccess(context, "Reschedule Successful!");
-
       _appointmentNotifier.fetchAppointments();
     }
   }
 
-  // --- PRO FIX: Helper to draw a ticket "tear-off" dashed line ---
+  // --- PREMIUM RECEIPT COMPONENTS ---
 
   Widget _buildDashedDivider(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final boxWidth = constraints.constrainWidth();
-
-        const dashWidth = 6.0;
-
-        const dashHeight = 1.5;
-
-        final dashCount = (boxWidth / (2 * dashWidth)).floor();
+        const dashWidth = 8.0;
+        const dashSpace = 6.0;
+        final dashCount = (boxWidth / (dashWidth + dashSpace)).floor();
 
         return Flex(
           direction: Axis.horizontal,
-
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
           children: List.generate(dashCount, (_) {
             return SizedBox(
               width: dashWidth,
-
-              height: dashHeight,
-
+              height: 2.0,
               child: DecoratedBox(
-                decoration: BoxDecoration(color: context.colorBorder),
+                decoration: BoxDecoration(
+                  color: context.colorBorder.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             );
           }),
@@ -201,520 +158,306 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     );
   }
 
-  // --- PRO FIX: Premium "Boarding Pass" Style Receipt Dialog ---
+  Widget _buildReceiptRow(BuildContext context, String label, String value, {bool isHighlight = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: context.colorTextLight, 
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: isHighlight ? AppColors.primaryGreen : context.colorTextDark,
+                fontSize: isHighlight ? 16 : 14,
+                fontWeight: isHighlight ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showReceiptDialog(Map<String, dynamic> appointment) {
     final doctorName = appointment['doctors']?['full_name'] ?? 'Unknown Doctor';
-
     final clinicName = appointment['clinics']?['name'] ?? 'Unknown Clinic';
-
     final date = _formatDate(appointment['schedule_date']);
-
     final time = _formatTimeRange(
       appointment['start_time'],
-
       appointment['end_time'],
     );
-
     final patientName = appointment['patient_name'] ?? 'Guest';
-
     final patientPhone = appointment['patient_phone'] ?? 'N/A';
-
     final status = appointment['status']?.toString().toUpperCase() ?? 'UNKNOWN';
-
     final bookingId = '#DP-${appointment['id'].toString().padLeft(4, '0')}';
 
     final GlobalKey receiptBoundaryKey = GlobalKey();
-
     bool isProcessing = false;
 
     showDialog(
       context: context,
-
-      builder:
-          (ctx) => StatefulBuilder(
-            builder: (context, setDialogState) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-
-              return Dialog(
-                backgroundColor: Colors.transparent,
-
-                elevation: 0,
-
-                insetPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-
-                  vertical: 24,
-                ),
-
-                child: Container(
-                  // The "Tray" background holding the ticket and buttons
-                  decoration: BoxDecoration(
-                    color:
-                        isDark
-                            ? const Color(0xFF1A1A1A)
-                            : const Color(0xFFF3F4F6),
-
-                    borderRadius: BorderRadius.circular(24),
-
-                    // PRO FIX: Added the clean dialog border
-                    border: Border.all(color: context.colorBorder, width: 1.2),
-                  ),
-
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-
-                      children: [
-                        // --- The Area Captured for the Image (The Official Ticket) ---
-                        RepaintBoundary(
-                          key: receiptBoundaryKey,
-
-                          child: Container(
-                            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-
-                              borderRadius: BorderRadius.circular(20),
-
-                              // PRO FIX: Added a subtle paper edge border
-                              border: Border.all(
-                                color: context.colorBorder.withValues(
-                                  alpha: 0.5,
-                                ),
-
-                                width: 1,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          
+          return BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8), 
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // --- THE RECEIPT TICKET (Captured for Sharing) ---
+                      RepaintBoundary(
+                        key: receiptBoundaryKey,
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
                               ),
-
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
-
-                                  blurRadius: 15,
-
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-
-                              children: [
-                                // 1. TICKET HEADER (Solid Branded Color)
-                                Container(
-                                  width: double.infinity,
-
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 24,
-
-                                    horizontal: 20,
-                                  ),
-
-                                  decoration: const BoxDecoration(
-                                    color: AppColors.primaryGreen,
-
-                                    borderRadius: BorderRadius.vertical(
-                                      top: Radius.circular(20),
-                                    ),
-                                  ),
-
-                                  child: Column(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(12),
-
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.2,
-                                          ),
-
-                                          shape: BoxShape.circle,
-                                        ),
-
-                                        child: const Icon(
-                                          Icons.check_circle_outline_rounded,
-
-                                          color: Colors.white,
-
-                                          size: 36,
-                                        ),
-                                      ),
-
-                                      const SizedBox(height: 12),
-
-                                      const Text(
-                                        "Confirmed Booking",
-
-                                        style: TextStyle(
-                                          color: Colors.white,
-
-                                          fontSize: 20,
-
-                                          fontWeight: FontWeight.bold,
-
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-
-                                      const SizedBox(height: 4),
-
-                                      Text(
-                                        status == 'COMPLETED'
-                                            ? "Visit Completed"
-                                            : "Scheduled Visit",
-
-                                        style: TextStyle(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.8,
-                                          ),
-
-                                          fontSize: 13,
-
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                // 2. TICKET BODY (Patient & Doctor Details)
-                                Padding(
-                                  padding: const EdgeInsets.all(24),
-
-                                  child: Column(
-                                    children: [
-                                      _buildReceiptRow(
-                                        context,
-
-                                        "Patient",
-
-                                        patientName,
-                                      ),
-
-                                      const SizedBox(height: 12),
-
-                                      _buildReceiptRow(
-                                        context,
-
-                                        "Phone",
-
-                                        patientPhone,
-                                      ),
-
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 16,
-                                        ),
-
-                                        child: _buildDashedDivider(context),
-                                      ),
-
-                                      _buildReceiptRow(
-                                        context,
-
-                                        "Doctor",
-
-                                        doctorName,
-                                      ),
-
-                                      const SizedBox(height: 12),
-
-                                      _buildReceiptRow(
-                                        context,
-
-                                        "Clinic",
-
-                                        clinicName,
-                                      ),
-
-                                      const SizedBox(height: 12),
-
-                                      _buildReceiptRow(context, "Date", date),
-
-                                      const SizedBox(height: 12),
-
-                                      _buildReceiptRow(context, "Time", time),
-                                    ],
-                                  ),
-                                ),
-
-                                // 3. TICKET TEAR-OFF LINE
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                  ),
-
-                                  child: _buildDashedDivider(context),
-                                ),
-
-                                // 4. TICKET FOOTER (Barcode & Ref)
-                                Padding(
-                                  padding: const EdgeInsets.all(24),
-
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-
-                                        children: [
-                                          Text(
-                                            "Reference Number",
-
-                                            style: TextStyle(
-                                              color: context.colorTextLight,
-
-                                              fontSize: 12,
-
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-
-                                          const SizedBox(height: 6),
-
-                                          Text(
-                                            bookingId,
-
-                                            style: TextStyle(
-                                              color: context.colorTextDark,
-
-                                              fontWeight: FontWeight.w900,
-
-                                              fontSize: 20,
-
-                                              letterSpacing: 1.2,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-
-                                      // Fake Scannable QR Code to look professional
-                                      Icon(
-                                        Icons.qr_code_2_rounded,
-
-                                        size: 48,
-
-                                        color: context.colorTextDark.withValues(
-                                          alpha: 0.8,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
+                            ],
                           ),
-                        ),
-
-                        // --- The Action Buttons (Stacked Vertically Below the Ticket) ---
-                        Padding(
-                          padding: const EdgeInsets.all(24.0),
-
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              SizedBox(
+                              // 1. GREEN HEADER
+                              Container(
                                 width: double.infinity,
-
-                                child: PrimaryButton(
-                                  onTap:
-                                      isProcessing
-                                          ? () {}
-                                          : () async {
-                                            setDialogState(
-                                              () => isProcessing = true,
-                                            );
-
-                                            try {
-                                              await Future.delayed(
-                                                const Duration(
-                                                  milliseconds: 150,
-                                                ),
-                                              );
-
-                                              RenderRepaintBoundary boundary =
-                                                  receiptBoundaryKey
-                                                          .currentContext!
-                                                          .findRenderObject()
-                                                      as RenderRepaintBoundary;
-
-                                              ui.Image image = await boundary
-                                                  .toImage(pixelRatio: 3.0);
-
-                                              ByteData? byteData = await image
-                                                  .toByteData(
-                                                    format:
-                                                        ui.ImageByteFormat.png,
-                                                  );
-
-                                              Uint8List pngBytes =
-                                                  byteData!.buffer
-                                                      .asUint8List();
-
-                                              final directory =
-                                                  await getTemporaryDirectory();
-
-                                              final file =
-                                                  await File(
-                                                    '${directory.path}/DaktarPai_$bookingId.png',
-                                                  ).create();
-
-                                              await file.writeAsBytes(pngBytes);
-
-                                              // PRO FIX: Flawless SharePlus syntax with ShareParams
-
-                                              await SharePlus.instance.share(
-                                                ShareParams(
-                                                  files: [XFile(file.path)],
-
-                                                  subject:
-                                                      'Appointment Receipt $bookingId',
-
-                                                  text:
-                                                      'My appointment booking receipt ($bookingId)',
-                                                ),
-                                              );
-                                            } catch (e) {
-                                              debugPrint("Share Error: $e");
-
-                                              if (ctx.mounted) {
-                                                CustomSnackbar.showError(
-                                                  ctx,
-
-                                                  "Could not generate receipt file.",
-                                                );
-                                              }
-                                            } finally {
-                                              if (ctx.mounted) {
-                                                setDialogState(
-                                                  () => isProcessing = false,
-                                                );
-                                              }
-                                            }
-                                          },
-                                  label:
-                                      isProcessing
-                                          ? "Generating..."
-                                          : "Share Receipt",
-                                  icon:
-                                      isProcessing ? null : Icons.share_rounded,
-                                  customIcon:
-                                      isProcessing
-                                          ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: AppLoader(
-                                              color: Colors.white,
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                          : null,
-                                  backgroundColor: AppColors.primaryGreen,
-                                  borderRadius: 14,
+                                padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primaryGreen,
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.verified_rounded,
+                                        color: Colors.white,
+                                        size: 40,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                      "Appointment Confirmed",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        status,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 1.0,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // 2. DETAILS SECTION
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                                child: Column(
+                                  children: [
+                                    _buildReceiptRow(context, "Patient", patientName),
+                                    _buildReceiptRow(context, "Phone", patientPhone),
+                                    _buildReceiptRow(context, "Date", date, isHighlight: true),
+                                    _buildReceiptRow(context, "Time", time, isHighlight: true),
+                                    _buildReceiptRow(context, "Doctor", doctorName),
+                                    _buildReceiptRow(context, "Clinic", clinicName),
+                                  ],
                                 ),
                               ),
 
-                              const SizedBox(height: 12),
+                              // 3. TEAR-OFF LINE
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                                child: _buildDashedDivider(context),
+                              ),
 
-                              SizedBox(
-                                width: double.infinity,
-
-                                child: TextButton(
-                                  onPressed:
-                                      isProcessing
-                                          ? null
-                                          : () => Navigator.pop(ctx),
-
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
+                              // 4. FOOTER (QR & ID)
+                              Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          "Booking ID",
+                                          style: TextStyle(
+                                            color: context.colorTextLight,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          bookingId,
+                                          style: TextStyle(
+                                            color: context.colorTextDark,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 22,
+                                            letterSpacing: 1.0,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(
+                                        Icons.qr_code_2_rounded,
+                                        size: 50,
+                                        color: context.colorTextDark,
+                                      ),
                                     ),
-                                  ),
-
-                                  child: Text(
-                                    "Close",
-
-                                    style: TextStyle(
-                                      color: context.colorTextLight,
-
-                                      fontWeight: FontWeight.w600,
-
-                                      fontSize: 16,
-                                    ),
-                                  ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // --- 5. ACTION BUTTONS ---
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: isProcessing ? null : () => Navigator.pop(ctx),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                backgroundColor: Theme.of(context).colorScheme.surface,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: Text(
+                                "Close",
+                                style: TextStyle(
+                                  color: context.colorTextDark, 
+                                  fontWeight: FontWeight.w700, 
+                                  fontSize: 16
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: PrimaryButton(
+                              onTap: isProcessing
+                                  ? () {}
+                                  : () async {
+                                      setDialogState(() => isProcessing = true);
+                                      try {
+                                        await Future.delayed(const Duration(milliseconds: 150));
+                                        
+                                        RenderRepaintBoundary boundary = receiptBoundaryKey
+                                            .currentContext!.findRenderObject() as RenderRepaintBoundary;
+                                        ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+                                        ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+                                        Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+                                        final directory = await getTemporaryDirectory();
+                                        final file = await File('${directory.path}/DaktarPai_$bookingId.png').create();
+                                        await file.writeAsBytes(pngBytes);
+
+                                        await SharePlus.instance.share(
+                                          ShareParams(
+                                            files: [XFile(file.path)],
+                                            subject: 'Appointment Receipt $bookingId',
+                                            text: 'My appointment booking receipt ($bookingId)',
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        if (ctx.mounted) CustomSnackbar.showError(ctx, "Could not generate receipt.");
+                                      } finally {
+                                        if (ctx.mounted) setDialogState(() => isProcessing = false);
+                                      }
+                                    },
+                              label: isProcessing ? "Processing" : "Share",
+                              icon: isProcessing ? null : Icons.ios_share_rounded,
+                              customIcon: isProcessing
+                                  ? const SizedBox(
+                                      width: 18, height: 18,
+                                      child: AppLoader(color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : null,
+                              backgroundColor: AppColors.primaryGreen,
+                              borderRadius: 16,
+                              height: 54, 
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
-    );
-  }
-
-  // Helper for receipt row
-
-  Widget _buildReceiptRow(BuildContext context, String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
-      crossAxisAlignment: CrossAxisAlignment.start,
-
-      children: [
-        Text(
-          label,
-
-          style: TextStyle(color: context.colorTextLight, fontSize: 14),
-        ),
-
-        const SizedBox(width: 16),
-
-        Expanded(
-          child: Text(
-            value,
-
-            textAlign: TextAlign.right,
-
-            style: TextStyle(
-              color: context.colorTextDark,
-
-              fontSize: 14,
-
-              fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 
   void _showActionSheet(Map<String, dynamic> appointment) {
     final String doctorName = appointment['doctors']?['full_name'] ?? "Doctor";
-
     bool canCancel = true;
 
     try {
       final dateStr = appointment['schedule_date'].toString().split('T')[0];
-
       final startTimeStr = appointment['start_time'].toString();
-
       final startDateTime = DateTime.parse('$dateStr $startTimeStr');
-
       final timeDifference = startDateTime.difference(DateTime.now());
 
       if (timeDifference.inHours < 4) {
@@ -726,81 +469,58 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
     showModalBottomSheet(
       context: context,
-
       useRootNavigator: true,
-
       isScrollControlled: true,
-
       backgroundColor: Theme.of(context).colorScheme.surface,
-
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-
       builder:
           (context) => SafeArea(
             child: Container(
               padding: const EdgeInsets.all(24),
-
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-
                   children: [
                     Container(
                       width: 40,
-
                       height: 4,
-
                       decoration: BoxDecoration(
                         color: context.colorBorder,
-
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
                     Text(
                       "Manage Appointment",
-
                       style: TextStyle(
                         fontSize: 18,
-
                         fontWeight: FontWeight.w600,
-
                         color: context.colorTextDark,
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
                       "With $doctorName",
-
                       style: TextStyle(
                         color: context.colorTextLight,
-
                         fontSize: 14,
                       ),
                     ),
-
                     const SizedBox(height: 24),
 
                     // --- CALENDAR BUTTON ---
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-
                         try {
                           final dateStr =
                               appointment['schedule_date'].toString().split(
                                 'T',
                               )[0];
-
                           final startTimeStr =
                               appointment['start_time'].toString();
-
                           final endTimeStr =
                               appointment['end_time']?.toString() ??
                               startTimeStr;
@@ -808,22 +528,17 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           final startDateTime = DateTime.parse(
                             '$dateStr $startTimeStr',
                           );
-
                           final endDateTime = DateTime.parse(
                             '$dateStr $endTimeStr',
                           );
 
                           final event = Event(
                             title: 'Appointment with $doctorName',
-
                             description:
                                 'Medical appointment booked via DaktarPai.',
-
                             location:
                                 appointment['clinics']?['name'] ?? 'Clinic',
-
                             startDate: startDateTime,
-
                             endDate: endDateTime,
                           );
 
@@ -831,47 +546,33 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                         } catch (e) {
                           CustomSnackbar.showError(
                             context,
-
                             "Could not parse appointment time.",
                           );
                         }
                       },
-
                       borderRadius: BorderRadius.circular(12),
-
                       child: Padding(
                         padding: const EdgeInsets.all(12),
-
                         child: Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.all(8),
-
                               decoration: BoxDecoration(
                                 color: Colors.orange.withValues(alpha: 0.1),
-
                                 shape: BoxShape.circle,
                               ),
-
                               child: const Icon(
                                 Icons.calendar_month,
-
                                 color: Colors.orange,
-
                                 size: 20,
                               ),
                             ),
-
                             const SizedBox(width: 16),
-
                             Text(
                               "Add to Device Calendar",
-
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-
                                 fontSize: 16,
-
                                 color: context.colorTextDark,
                               ),
                             ),
@@ -882,7 +583,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
-
                       child: Divider(color: context.colorBorder),
                     ),
 
@@ -890,47 +590,33 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-
                         _handleReschedule(appointment);
                       },
-
                       borderRadius: BorderRadius.circular(12),
-
                       child: Padding(
                         padding: const EdgeInsets.all(12),
-
                         child: Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.all(8),
-
                               decoration: BoxDecoration(
                                 color: AppColors.primaryGreen.withValues(
                                   alpha: 0.1,
                                 ),
-
                                 shape: BoxShape.circle,
                               ),
-
                               child: const Icon(
                                 Icons.edit_calendar,
-
                                 color: AppColors.primaryGreen,
-
                                 size: 20,
                               ),
                             ),
-
                             const SizedBox(width: 16),
-
                             Text(
                               "Reschedule",
-
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-
                                 fontSize: 16,
-
                                 color: context.colorTextDark,
                               ),
                             ),
@@ -941,7 +627,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
-
                       child: Divider(color: context.colorBorder),
                     ),
 
@@ -949,47 +634,33 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-
                         _completeAppointment(appointment['id']);
                       },
-
                       borderRadius: BorderRadius.circular(12),
-
                       child: Padding(
                         padding: const EdgeInsets.all(12),
-
                         child: Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.all(8),
-
                               decoration: BoxDecoration(
                                 color: const Color(
                                   0xFF2196F3,
                                 ).withValues(alpha: 0.1),
-
                                 shape: BoxShape.circle,
                               ),
-
                               child: const Icon(
                                 Icons.check_circle_outline,
-
                                 color: Color(0xFF2196F3),
-
                                 size: 20,
                               ),
                             ),
-
                             const SizedBox(width: 16),
-
                             Text(
                               "Mark as Completed",
-
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-
                                 fontSize: 16,
-
                                 color: context.colorTextDark,
                               ),
                             ),
@@ -1000,7 +671,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
-
                       child: Divider(color: context.colorBorder),
                     ),
 
@@ -1008,28 +678,22 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-
                         if (canCancel) {
                           _confirmCancellation(appointment);
                         } else {
                           CustomSnackbar.showError(
                             context,
-
                             "Appointments cannot be canceled within 4 hours of the scheduled time. Please contact support or the clinic directly.",
                           );
                         }
                       },
-
                       borderRadius: BorderRadius.circular(12),
-
                       child: Padding(
                         padding: const EdgeInsets.all(12),
-
                         child: Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.all(8),
-
                               decoration: BoxDecoration(
                                 color:
                                     canCancel
@@ -1037,32 +701,23 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                                           alpha: 0.1,
                                         )
                                         : Colors.grey.withValues(alpha: 0.1),
-
                                 shape: BoxShape.circle,
                               ),
-
                               child: Icon(
                                 Icons.close,
-
                                 color:
                                     canCancel
                                         ? AppColors.dangerRed
                                         : Colors.grey,
-
                                 size: 20,
                               ),
                             ),
-
                             const SizedBox(width: 16),
-
                             Text(
                               "Cancel Appointment",
-
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-
                                 fontSize: 16,
-
                                 color:
                                     canCancel
                                         ? AppColors.dangerRed
@@ -1287,7 +942,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                                   ),
                             );
                           } else {
-                            // --- NEW GLOBAL DIALOG CALL ---
                             showDialog(
                               context: context,
                               barrierDismissible: false,
@@ -1334,19 +988,12 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-
             children: [
               _buildAppBar(),
-
-              // PRO FIX: Removed the isLoading check.
-
-              // Now it stays visible during silent background refreshes!
               _buildActionRequiredCarousel(),
-
               Expanded(
                 child:
                     (_appointmentNotifier.isLoading &&
@@ -1361,7 +1008,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     );
   }
 
-  // --- PRO FIX: Clean Typographic Header with History Route ---
   Widget _buildAppBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -1405,30 +1051,21 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   Widget _buildUpcomingBanner() {
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.symmetric(vertical: 18),
-
       decoration: BoxDecoration(
         color: AppColors.primaryGreen.withValues(alpha: 0.1),
-
         borderRadius: BorderRadius.circular(20),
-
         border: Border.all(
           color: AppColors.primaryGreen.withValues(alpha: 0.2),
         ),
       ),
-
       child: const Center(
         child: Text(
           "Upcoming Schedule",
-
           style: TextStyle(
             color: AppColors.primaryGreen,
-
             fontSize: 16,
-
             fontWeight: FontWeight.bold,
-
             letterSpacing: 0.5,
           ),
         ),
@@ -1441,61 +1078,40 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
     return RefreshIndicator(
       onRefresh: _appointmentNotifier.fetchAppointments,
-
       color: AppColors.primaryGreen,
-
       backgroundColor: Theme.of(context).colorScheme.surface,
-
       child:
           appointments.isEmpty
               ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-
                 children: [
                   const SizedBox(height: 16),
-
                   _buildRefreshHint(),
-
                   const SizedBox(height: 24),
-
                   _buildUpcomingBanner(),
-
                   SizedBox(height: MediaQuery.of(context).size.height * 0.2),
-
                   Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-
                       children: [
                         Icon(
                           Icons.event_available,
-
                           size: 64,
-
                           color: Colors.grey[300],
                         ),
-
                         const SizedBox(height: 16),
-
                         Text(
                           "No upcoming appointments",
-
                           style: TextStyle(
                             fontSize: 16,
-
                             fontWeight: FontWeight.w600,
-
                             color: context.colorTextLight,
                           ),
                         ),
-
                         const SizedBox(height: 8),
-
                         const Text(
                           "Your scheduled visits will appear here.",
-
                           style: TextStyle(fontSize: 13, color: Colors.grey),
                         ),
                       ],
@@ -1505,14 +1121,10 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               )
               : ListView.separated(
                 physics: const AlwaysScrollableScrollPhysics(),
-
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-
                 itemCount: appointments.length + 2,
-
                 separatorBuilder:
                     (context, index) => const SizedBox(height: 16),
-
                 itemBuilder: (context, index) {
                   if (index == 0) return _buildRefreshHint();
 
@@ -1521,10 +1133,8 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8.0),
-
                           child: _buildUpcomingBanner(),
                         ),
-
                         if (NetworkNotifier.instance.isOffline)
                           _buildOfflineWarningBanner(),
                       ],
@@ -1532,7 +1142,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                   }
 
                   final apt = appointments[index - 2].toJson();
-
                   final doctor = apt['doctors'] as Map<String, dynamic>? ?? {};
 
                   final String specialty =
@@ -1542,7 +1151,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           : "Specialist";
 
                   final currentClinicId = apt['clinic_id'];
-
                   final formattedBookingId =
                       '#DP-${apt['id'].toString().padLeft(4, '0')}';
 
@@ -1555,7 +1163,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                     for (var dc in docClinicsList) {
                       if (dc['clinic_id'] == currentClinicId) {
                         waitTime = dc['max_wait_time'] ?? 30;
-
                         break;
                       }
                     }
@@ -1563,29 +1170,17 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
                   return AppointmentCard(
                     bookingId: formattedBookingId,
-
                     name: doctor['full_name'] ?? "Unknown Doctor",
-
                     specialty: specialty,
-
                     date: _formatDate(apt['schedule_date']),
-
                     time: _formatTimeRange(apt['start_time'], apt['end_time']),
-
                     imageUrl: doctor['profile_picture_url'] ?? "",
-
                     status: apt['status'] ?? 'pending',
-
                     scheduleDate: apt['schedule_date'],
-
                     startTime: apt['start_time'],
-
                     maxWaitTime: waitTime,
-
                     onTap: () {},
-
                     onMoreTap: () => _showActionSheet(apt),
-
                     onReceiptTap: () => _showReceiptDialog(apt),
                   );
                 },
@@ -1596,26 +1191,18 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   Widget _buildRefreshHint() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-
       children: [
         Icon(
           Icons.keyboard_arrow_down_rounded,
-
           size: 16,
-
           color: Colors.grey[400],
         ),
-
         const SizedBox(width: 4),
-
         Text(
           "Pull down to refresh",
-
           style: TextStyle(
             fontSize: 12,
-
             fontWeight: FontWeight.w500,
-
             color: Colors.grey[400],
           ),
         ),
@@ -1625,7 +1212,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
   String _formatDate(String? d) {
     if (d == null) return "";
-
     try {
       return DateFormat('EEEE, d MMMM').format(DateTime.parse(d));
     } catch (_) {
@@ -1635,7 +1221,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
   String _formatTimeRange(String? s, String? e) {
     if (s == null) return "";
-
     return "${_formatTime(s)} - ${_formatTime(e ?? s)}";
   }
 
@@ -1650,34 +1235,23 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   Widget _buildOfflineWarningBanner() {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-
       padding: const EdgeInsets.all(12),
-
       decoration: BoxDecoration(
         color: Colors.orange.withValues(alpha: 0.1),
-
         borderRadius: BorderRadius.circular(12),
-
         border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
-
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: [
           const Icon(Icons.wifi_off_rounded, color: Colors.orange, size: 20),
-
           const SizedBox(width: 8),
-
           Expanded(
             child: Text(
               "You are currently offline. Live wait times and appointment statuses will update automatically when you reconnect.",
-
               style: TextStyle(
                 color: Colors.orange[800],
-
                 fontSize: 13,
-
                 fontWeight: FontWeight.w500,
               ),
             ),

@@ -49,9 +49,10 @@ class AppointmentCard extends StatelessWidget {
                 ? AppColors.darkBorder
                 : context.colorBorder.withValues(alpha: 0.5));
 
-    return CustomCard(
-      margin: const EdgeInsets.only(bottom: AppDimens.spaceLg),
-      padding: EdgeInsets.zero,
+    return RepaintBoundary(
+      child: CustomCard(
+        margin: const EdgeInsets.only(bottom: AppDimens.spaceLg),
+        padding: EdgeInsets.zero,
       borderColor: borderColor,
       hasShadow: true,
       // PRO FIX: ClipRRect ensures the bottom InkWell perfectly hugs the card corners
@@ -262,7 +263,7 @@ class AppointmentCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildInfoItem(

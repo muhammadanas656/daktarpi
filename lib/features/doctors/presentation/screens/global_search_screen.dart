@@ -182,7 +182,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         if (mounted) {
           context.push(
             AppRoutes.specialtyDoctorsById('${spec['id']}'),
-            extra: SpecialtyRouteArgs(name: spec['name']),
+            extra: SpecialtyRouteArgs(
+              name: spec['name'],
+              iconUrl: spec['icon_url'],
+            ),
           );
         }
         return;
@@ -312,7 +315,13 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   void _handleClinicTap(Map<String, dynamic> clinic) {
     FocusScope.of(context).unfocus(); // Force close keyboard
     _saveRecentSearch(clinic['name']);
-    context.push(AppRoutes.clinicDoctorsById('${clinic['id']}'));
+    context.push(
+      AppRoutes.clinicDoctorsById('${clinic['id']}'),
+      extra: ClinicRouteArgs(
+        name: clinic['name'] ?? 'Clinic',
+        logoUrl: clinic['logo_url']?.toString(),
+      ),
+    );
   }
 
   @override

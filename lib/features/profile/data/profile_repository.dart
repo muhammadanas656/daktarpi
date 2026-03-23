@@ -127,12 +127,12 @@ class ProfileRepository {
     await NetworkNotifier.instance.waitForSync();
 
     try {
-      final response =
-          await _client
-              .from('profiles')
-              .select()
-              .eq('id', userId)
-              .maybeSingle();
+      final response = await _client
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 8));
       if (response != null) {
         await box.put(cacheKey, jsonEncode(response));
         await box.put('${cacheKey}_time', DateTime.now().toIso8601String());

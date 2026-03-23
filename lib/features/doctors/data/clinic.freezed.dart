@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Clinic {
 
- int get id; String get name; String get address;
+ int get id; String get name; String get address;@JsonKey(name: 'logo_url') String? get logoUrl;
 /// Create a copy of Clinic
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $ClinicCopyWith<Clinic> get copyWith => _$ClinicCopyWithImpl<Clinic>(this as Cli
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Clinic&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.address, address) || other.address == address));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Clinic&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.address, address) || other.address == address)&&(identical(other.logoUrl, logoUrl) || other.logoUrl == logoUrl));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,address);
+int get hashCode => Object.hash(runtimeType,id,name,address,logoUrl);
 
 @override
 String toString() {
-  return 'Clinic(id: $id, name: $name, address: $address)';
+  return 'Clinic(id: $id, name: $name, address: $address, logoUrl: $logoUrl)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $ClinicCopyWith<$Res>  {
   factory $ClinicCopyWith(Clinic value, $Res Function(Clinic) _then) = _$ClinicCopyWithImpl;
 @useResult
 $Res call({
- int id, String name, String address
+ int id, String name, String address,@JsonKey(name: 'logo_url') String? logoUrl
 });
 
 
@@ -65,12 +65,13 @@ class _$ClinicCopyWithImpl<$Res>
 
 /// Create a copy of Clinic
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? address = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? address = null,Object? logoUrl = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,address: null == address ? _self.address : address // ignore: cast_nullable_to_non_nullable
-as String,
+as String,logoUrl: freezed == logoUrl ? _self.logoUrl : logoUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -155,10 +156,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String name,  String address)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String name,  String address, @JsonKey(name: 'logo_url')  String? logoUrl)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Clinic() when $default != null:
-return $default(_that.id,_that.name,_that.address);case _:
+return $default(_that.id,_that.name,_that.address,_that.logoUrl);case _:
   return orElse();
 
 }
@@ -176,10 +177,10 @@ return $default(_that.id,_that.name,_that.address);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String name,  String address)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String name,  String address, @JsonKey(name: 'logo_url')  String? logoUrl)  $default,) {final _that = this;
 switch (_that) {
 case _Clinic():
-return $default(_that.id,_that.name,_that.address);case _:
+return $default(_that.id,_that.name,_that.address,_that.logoUrl);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -196,10 +197,10 @@ return $default(_that.id,_that.name,_that.address);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String name,  String address)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String name,  String address, @JsonKey(name: 'logo_url')  String? logoUrl)?  $default,) {final _that = this;
 switch (_that) {
 case _Clinic() when $default != null:
-return $default(_that.id,_that.name,_that.address);case _:
+return $default(_that.id,_that.name,_that.address,_that.logoUrl);case _:
   return null;
 
 }
@@ -211,12 +212,13 @@ return $default(_that.id,_that.name,_that.address);case _:
 @JsonSerializable()
 
 class _Clinic implements Clinic {
-  const _Clinic({required this.id, this.name = 'Unknown Clinic', this.address = 'Unknown Address'});
+  const _Clinic({required this.id, this.name = 'Unknown Clinic', this.address = 'Unknown Address', @JsonKey(name: 'logo_url') this.logoUrl});
   factory _Clinic.fromJson(Map<String, dynamic> json) => _$ClinicFromJson(json);
 
 @override final  int id;
 @override@JsonKey() final  String name;
 @override@JsonKey() final  String address;
+@override@JsonKey(name: 'logo_url') final  String? logoUrl;
 
 /// Create a copy of Clinic
 /// with the given fields replaced by the non-null parameter values.
@@ -231,16 +233,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Clinic&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.address, address) || other.address == address));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Clinic&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.address, address) || other.address == address)&&(identical(other.logoUrl, logoUrl) || other.logoUrl == logoUrl));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,address);
+int get hashCode => Object.hash(runtimeType,id,name,address,logoUrl);
 
 @override
 String toString() {
-  return 'Clinic(id: $id, name: $name, address: $address)';
+  return 'Clinic(id: $id, name: $name, address: $address, logoUrl: $logoUrl)';
 }
 
 
@@ -251,7 +253,7 @@ abstract mixin class _$ClinicCopyWith<$Res> implements $ClinicCopyWith<$Res> {
   factory _$ClinicCopyWith(_Clinic value, $Res Function(_Clinic) _then) = __$ClinicCopyWithImpl;
 @override @useResult
 $Res call({
- int id, String name, String address
+ int id, String name, String address,@JsonKey(name: 'logo_url') String? logoUrl
 });
 
 
@@ -268,12 +270,13 @@ class __$ClinicCopyWithImpl<$Res>
 
 /// Create a copy of Clinic
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? address = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? address = null,Object? logoUrl = freezed,}) {
   return _then(_Clinic(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,address: null == address ? _self.address : address // ignore: cast_nullable_to_non_nullable
-as String,
+as String,logoUrl: freezed == logoUrl ? _self.logoUrl : logoUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

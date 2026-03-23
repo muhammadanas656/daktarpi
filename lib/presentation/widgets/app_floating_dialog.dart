@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_loader.dart';
 
 class AppFloatingDialog extends StatelessWidget {
   final IconData headerIcon;
@@ -115,9 +116,8 @@ class AppFloatingDialog extends StatelessWidget {
                 color: isDark ? Colors.black54 : Colors.white54,
                 borderRadius: BorderRadius.circular(28),
               ),
-              child: CircularProgressIndicator(
-                color: iconColor,
-                strokeWidth: 2,
+              child: const AppLoader(
+                size: 40,
               ),
             ),
         ],

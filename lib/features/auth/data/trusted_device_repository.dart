@@ -71,7 +71,10 @@ class TrustedDeviceRepository {
     );
   }
 
-  Future<bool> isTrustedDeviceValid({required String userId}) async {
+  Future<bool> isTrustedDeviceValid({
+    required String userId,
+    bool skipServerValidation = false,
+  }) async {
     final local = await _readLocalToken();
     if (local == null) {
       return false;
@@ -81,6 +84,13 @@ class TrustedDeviceRepository {
     if (local.userId != userId || local.expiresAt.isBefore(now)) {
       await clearLocalToken();
       return false;
+    }
+
+    // --- PRO FIX: Zero-Network Startup ---
+    // If we're booting the app and just need to route the user gracefully,
+    // we bypass the 30-second offline timeout hazard completely.
+    if (skipServerValidation) {
+      return true;
     }
 
     final tokenHash = _hashToken(local.token);
@@ -134,7 +144,8 @@ class TrustedDeviceRepository {
 
       return row['is_biometric_enabled'] == true;
     } catch (_) {
-      return false;
+      // PRO FIX: Allow timeout exceptions to bubble up so UI can fallback to local cache
+      rethrow;
     }
   }
 

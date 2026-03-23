@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:map_launcher/map_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_colors.dart';
+import '../../presentation/widgets/custom_snackbar.dart';
 
 class NavigationHelper {
   static Future<void> showMapOptions({
@@ -17,11 +18,9 @@ class NavigationHelper {
       if (!context.mounted) return;
 
       if (availableMaps.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No navigation applications found on this device.'),
-            backgroundColor: Colors.redAccent,
-          ),
+        CustomSnackbar.showError(
+          context,
+          'No navigation applications found on this device.',
         );
         return;
       }
@@ -111,12 +110,7 @@ class NavigationHelper {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error launching maps: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        CustomSnackbar.showError(context, 'Error launching maps: $e');
       }
     }
   }

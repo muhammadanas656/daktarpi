@@ -7,7 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/custom_app_bar.dart';
 import '../../data/doctor_repository.dart';
 import '../../presentation/favorites_notifier.dart';
-import '../../../../core/widgets/app_loader.dart'; // Added this import
+import '../../../../core/widgets/app_loader.dart'; 
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../core/theme/app_styles.dart';
 
@@ -28,7 +28,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
   @override
   void initState() {
     super.initState();
-    // PRO FIX: Ensures favorites are loaded into RAM if they haven't been yet
+    // Ensures favorites are loaded into RAM if they haven't been yet
     if (!_favNotifier.isLoaded) {
       _favNotifier.loadFavorites();
     }
@@ -50,9 +50,14 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     if (mounted) setState(() {});
   }
 
-  void _navigateToDoctorDetails(int doctorId) {
+  // PRO FIX: Pass the whole doctor object so it works perfectly offline!
+  void _navigateToDoctorDetails(Map<String, dynamic> doctor) {
+    final doctorId = doctor['id'];
     // When returning, refresh the recent list. Favorites updates instantly via Notifier.
-    context.push(AppRoutes.doctorDetailsById('$doctorId')).then((_) {
+    context.push(
+      AppRoutes.doctorDetailsById('$doctorId'),
+      extra: doctor, // <--- Passing the offline data!
+    ).then((_) {
       if (mounted) {
         setState(() => _recentFuture = _doctorRepo.fetchRecentDoctors());
       }
@@ -252,7 +257,6 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
         )
         .closed
         .then((reason) {
-          // PRO FIX: Actually delete it from the RAM Vault once the undo timer finishes!
           if (reason != SnackBarClosedReason.action &&
               _pendingRemovalIds.contains(doctorId)) {
             _favNotifier.toggle({'id': doctorId});
@@ -285,8 +289,8 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
           child: SafeArea(
             child: TabBarView(
               children: [
-                _buildFavoritesList(), // PRO FIX: Direct RAM Read
-                _buildRecentList(), // Standard Fetch
+                _buildFavoritesList(), 
+                _buildRecentList(), 
               ],
             ),
           ),
@@ -295,7 +299,6 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     );
   }
 
-  // --- PRO FIX: Completely separate Favorites List without FutureBuilder ---
   Widget _buildFavoritesList() {
     if (!_favNotifier.isLoaded) {
       return const Center(
@@ -350,7 +353,8 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
                               doctor['full_name'] ?? 'Unknown',
                               doctors.length,
                             ),
-                        onCardTap: () => _navigateToDoctorDetails(docId),
+                        // PRO FIX: Navigating with the whole object
+                        onCardTap: () => _navigateToDoctorDetails(doctor),
                       ),
                     ),
           ),
@@ -412,11 +416,9 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
                 views: (doctor['views_count'] ?? 0).toString(),
                 imageUrl: doctor['profile_picture_url'],
                 isFavorite: _favNotifier.isFavorite(docId),
-                onFavoriteTap:
-                    () => _favNotifier.toggle(
-                      doctor,
-                    ), // PRO FIX: Pass whole object
-                onCardTap: () => _navigateToDoctorDetails(docId),
+                onFavoriteTap: () => _favNotifier.toggle(doctor),
+                // PRO FIX: Navigating with the whole object
+                onCardTap: () => _navigateToDoctorDetails(doctor),
                 trailingWidget: trailing,
               ),
             );

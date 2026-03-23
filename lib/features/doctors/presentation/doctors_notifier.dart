@@ -38,6 +38,7 @@ class DoctorsNotifier extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   /// Fetch all required data once. Safe to be called by multiple screens.
+  /// Fetch all required data once. Safe to be called by multiple screens.
   Future<void> fetchDoctors({
     String query = '',
     String filter = 'All',
@@ -62,15 +63,37 @@ class DoctorsNotifier extends ChangeNotifier {
 
       if (filter == 'Nearest') {
         try {
+          // --- PRO FIX: The GPS Permission Gatekeeper ---
+          // 1. Check if the physical GPS hardware is turned on
+          bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+          if (!serviceEnabled) {
+            throw Exception('Location services are physically disabled.');
+          }
+
+          // 2. Check app permissions
+          LocationPermission permission = await Geolocator.checkPermission();
+          if (permission == LocationPermission.denied) {
+            // 3. Request permission from the user
+            permission = await Geolocator.requestPermission();
+            if (permission == LocationPermission.denied) {
+              throw Exception('User denied location permissions.');
+            }
+          }
+
+          if (permission == LocationPermission.deniedForever) {
+            throw Exception('Location permissions are permanently denied.');
+          }
+
+          // 4. If all checks pass, grab the exact coordinates!
           Position position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.medium,
+            desiredAccuracy: LocationAccuracy.high, // Upgraded to high for better sorting
           );
           userLat = position.latitude;
           userLng = position.longitude;
         } catch (e) {
-          debugPrint(
-            "DoctorsNotifier: Location permission denied or unretrievable.",
-          );
+          debugPrint("DoctorsNotifier: Location sorting failed -> $e");
+          // It will safely fall back to userLat/userLng being null, 
+          // which the repository handles by returning the unsorted list.
         }
       }
 
@@ -85,15 +108,18 @@ class DoctorsNotifier extends ChangeNotifier {
           userLocation: userLocation,
           countryIso: countryIso,
         ),
-        _doctorRepo.fetchHospitals(query: query),
-        _doctorRepo.fetchClinicsList(query: query),
+        _doctorRepo.fetchHospitals(
+          query: query,
+        ),
+        _doctorRepo.fetchClinicsList(
+          query: query,
+        ),
       ]);
 
-      // Ensure we only apply this if the user hasn't typed a NEW query while this was loading
       if (_lastQuery == query && _lastFilter == filter) {
-        _doctors = results[0];
-        _hospitals = results[1];
-        _clinics = results[2];
+        _doctors = results[0] as List<Map<String, dynamic>>;
+        _hospitals = results[1] as List<Map<String, dynamic>>;
+        _clinics = results[2] as List<Map<String, dynamic>>;
       }
     } catch (e) {
       debugPrint("DoctorsNotifier Fetch Error: $e");
@@ -130,6 +156,10 @@ class DoctorsNotifier extends ChangeNotifier {
         forceRefresh: forceRefresh,
         userLocation: userLocation,
         countryIso: countryIso,
+        onFreshData: (fresh) {
+          _popularDoctors = fresh;
+          notifyListeners();
+        },
       );
     } catch (e) {
       debugPrint("DoctorsNotifier Popular Fetch Error: $e");
@@ -162,6 +192,10 @@ class DoctorsNotifier extends ChangeNotifier {
         forceRefresh: forceRefresh,
         userLocation: userLocation,
         countryIso: countryIso,
+        onFreshData: (fresh) {
+          _featuredDoctors = fresh;
+          notifyListeners();
+        },
       );
     } catch (e) {
       debugPrint("DoctorsNotifier Featured Fetch Error: $e");
@@ -182,6 +216,10 @@ class DoctorsNotifier extends ChangeNotifier {
     try {
       _specialties = await _doctorRepo.fetchSpecialties(
         forceRefresh: forceRefresh,
+        onFreshData: (fresh) {
+          _specialties = fresh;
+          notifyListeners();
+        },
       );
     } catch (e) {
       debugPrint("DoctorsNotifier Specialties Fetch Error: $e");
