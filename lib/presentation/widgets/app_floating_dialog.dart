@@ -1,3 +1,4 @@
+import 'dart:ui' as ui; // 📌 PRO FIX: Needed for Frosted Glass blur
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_loader.dart';
@@ -9,7 +10,7 @@ class AppFloatingDialog extends StatelessWidget {
   final String? description;
   final Widget content;
   final Widget actions;
-  final bool isUpdating; // Automatically handles the loading spinner & UI lock
+  final bool isUpdating; 
 
   const AppFloatingDialog({
     super.key,
@@ -26,101 +27,111 @@ class AppFloatingDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // 1. The Main Box (No shadow here, prevents animation tearing)
-          Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color:
-                    isDark
-                        ? AppColors.darkBorder
-                        : Colors.grey.withValues(alpha: 0.2),
-                width: 1.5,
+    // 📌 PRO FIX: Wrapped the entire Dialog in a Frosted Glass BackdropFilter!
+    return BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 1. The Main Box
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                // 📌 PRO FIX: Slight transparency to make the glass feel real
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: isDark ? 0.85 : 0.95),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : Colors.white.withValues(alpha: 0.5),
+                  width: 1.5,
+                ),
+                // 📌 PRO FIX: Heavy cinematic drop shadow
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 40,
+                    spreadRadius: 10,
+                    offset: const Offset(0, 10),
+                  )
+                ],
               ),
-            ),
-            // 2. The Offline Shield (Locks UI while saving)
-            child: AbsorbPointer(
-              absorbing: isUpdating,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 3. The Glowing Header Icon (Safe inner shadow)
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: iconColor.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: iconColor.withValues(alpha: 0.25),
-                            blurRadius: 24,
-                            spreadRadius: -4,
-                          ),
-                        ],
+              child: AbsorbPointer(
+                absorbing: isUpdating,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 3. The Glowing Header Icon
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: iconColor.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: iconColor.withValues(alpha: 0.25),
+                              blurRadius: 24,
+                              spreadRadius: -4,
+                            ),
+                          ],
+                        ),
+                        child: Icon(headerIcon, color: iconColor, size: 34),
                       ),
-                      child: Icon(headerIcon, color: iconColor, size: 34),
-                    ),
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                    // 4. Standardized Typography
-                    Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    if (description != null) ...[
-                      const SizedBox(height: 12),
+                      // 4. Standardized Typography
                       Text(
-                        description!,
+                        title,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                          height: 1.4,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
                         ),
                       ),
+                      if (description != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          description!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 28),
+
+                      // 5. Custom Content
+                      content,
+
+                      const SizedBox(height: 32),
+                      // 6. Buttons
+                      actions,
                     ],
-                    const SizedBox(height: 28),
-
-                    // 5. Custom Content (TextFields, Stars, Switches, etc.)
-                    content,
-
-                    const SizedBox(height: 32),
-                    // 6. Buttons
-                    actions,
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // 7. Loading Overlay (Appears instantly on network call)
-          if (isUpdating)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.black54 : Colors.white54,
-                borderRadius: BorderRadius.circular(28),
+            // 7. Loading Overlay 
+            if (isUpdating)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.black54 : Colors.white54,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: const AppLoader(
+                  size: 40,
+                ),
               ),
-              child: const AppLoader(
-                size: 40,
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

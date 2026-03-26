@@ -12,7 +12,9 @@ import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../../core/widgets/app_loader.dart';
 
 class ProfileViewScreen extends StatefulWidget {
-  const ProfileViewScreen({super.key});
+  final bool isBackgroundLayer;
+  
+  const ProfileViewScreen({super.key, this.isBackgroundLayer = false});
 
   @override
   State<ProfileViewScreen> createState() => _ProfileViewScreenState();
@@ -25,7 +27,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
   void initState() {
     super.initState();
     _profileNotifier.addListener(_onProfileChanged);
-    if (!_profileNotifier.isLoaded) {
+    if (!widget.isBackgroundLayer && !_profileNotifier.isLoaded) {
       _profileNotifier.loadProfile();
     }
   }
@@ -44,7 +46,9 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
+    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
 
     if (!_profileNotifier.isLoaded) {
       return Scaffold(
@@ -72,9 +76,12 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
       backgroundColor: context.colorScaffoldBackground,
       body: Container(
         decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: SingleChildScrollView(
-          physics: const ClampingScrollPhysics(),
-          child: Column(
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.only(bottom: dynamicBottomPadding),
+            child: Column(
             children: [
               // --- HEADER ---
               Container(
@@ -89,9 +96,10 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: isDark 
-                        ? const [Color(0xFF009668), Color(0xFF006B78)] 
-                        : const [Color(0xFF00C689), Color(0xFF008FA0)], 
+                    colors:
+                        isDark
+                            ? const [Color(0xFF009668), Color(0xFF006B78)]
+                            : const [Color(0xFF00C689), Color(0xFF008FA0)],
                   ),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(30),
@@ -130,28 +138,30 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                         shape: BoxShape.circle,
                         // PRO FIX: Softer, glassmorphic border with a floating shadow
                         border: Border.all(
-                          color: isDark 
-                              ? Colors.white.withValues(alpha: 0.15) 
-                              : Colors.white, 
+                          color:
+                              isDark
+                                  ? Colors.white.withValues(alpha: 0.15)
+                                  : Colors.white,
                           width: 3,
                         ),
                         boxShadow: AppStyles.cardShadow(context),
                         color: isDark ? AppColors.darkSurface : Colors.white,
                       ),
                       child: ClipOval(
-                        child: avatarUrl != null && avatarUrl.isNotEmpty
-                            ? AppNetworkImage(
-                                imageUrl: avatarUrl,
-                                width: 110,
-                                height: 110,
-                                circular: true,
-                                fallbackIconSize: 60,
-                              )
-                            : const Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Colors.grey,
-                              ),
+                        child:
+                            avatarUrl != null && avatarUrl.isNotEmpty
+                                ? AppNetworkImage(
+                                  imageUrl: avatarUrl,
+                                  width: 110,
+                                  height: 110,
+                                  circular: true,
+                                  fallbackIconSize: 60,
+                                )
+                                : const Icon(
+                                  Icons.person,
+                                  size: 60,
+                                  color: Colors.grey,
+                                ),
                       ),
                     ),
                     SizedBox(height: 16),
@@ -224,6 +234,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -244,7 +255,10 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
+      decoration: AppStyles.surfaceCard(
+        context,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Row(
         children: [
           Container(

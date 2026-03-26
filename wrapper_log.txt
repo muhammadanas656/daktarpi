@@ -1,0 +1,5 @@
+92a22c9 added interaction related improvements in some pages with some improvements in the ui of the clinic and speciality screens
+ab19d08 polished the design of the dialogue boxes and the flow between pages
+d819dde made things more professional e.g. reminder global, notification setting customization
+5276793 added offline features and optimization with improvements in the ui
+a5e1439 added offline running feature to work even when user is offline

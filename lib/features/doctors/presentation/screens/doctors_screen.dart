@@ -10,14 +10,14 @@ import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 
 import '../favorites_notifier.dart';
-import '../doctors_notifier.dart'; 
+import '../doctors_notifier.dart';
 import '../models/doctors_route_args.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../../notifications/presentation/notification_notifier.dart';
 import '../../../../core/widgets/app_loader.dart';
 
 class DoctorsScreen extends StatefulWidget {
-  final bool isBackgroundLayer; 
+  final bool isBackgroundLayer;
 
   const DoctorsScreen({super.key, this.isBackgroundLayer = false});
 
@@ -31,7 +31,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   final _docsNotifier = DoctorsNotifier.instance;
 
   final TextEditingController _searchController = TextEditingController();
-  
+
   String _selectedFilter = 'All';
   Timer? _debounce;
 
@@ -85,7 +85,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     await _docsNotifier.fetchDoctors(
       query: _searchController.text.trim(),
       filter: _selectedFilter,
-      forceRefresh: true, 
+      forceRefresh: true,
     );
   }
 
@@ -95,8 +95,11 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       body: Container(
         decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
         child: SafeArea(
+          bottom: false,
           child: Column(
             children: [
+              // 🔥 PRO FIX: Removed RepaintBoundary armor. 
+              // Since there is no frosted glass here, the boundary was causing the glitch!
               _buildHeader(),
               _buildSearchBar(),
               _buildFilterChips(),
@@ -104,33 +107,35 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                 child: ListenableBuilder(
                   listenable: _docsNotifier,
                   builder: (context, _) {
-                    if (_docsNotifier.isLoading && _docsNotifier.doctors.isEmpty) {
+                    if (_docsNotifier.isLoading &&
+                        _docsNotifier.doctors.isEmpty) {
                       return const Center(
-                        child: AppLoader(
-                          color: AppColors.primaryGreen,
-                        ),
+                        child: AppLoader(color: AppColors.primaryGreen),
                       );
                     }
-                    
+
                     return Stack(
                       children: [
                         RefreshIndicator(
                           onRefresh: _fetchDoctors,
                           color: AppColors.primaryGreen,
-                          child: _selectedFilter == 'Hospital'
-                              ? _buildHospitalGrid()
-                              : _selectedFilter == 'Clinic'
+                          child:
+                              _selectedFilter == 'Hospital'
+                                  ? _buildHospitalGrid()
+                                  : _selectedFilter == 'Clinic'
                                   ? _buildClinicGrid()
                                   : _buildDoctorList(),
                         ),
-                        if (_docsNotifier.isLoading && _docsNotifier.doctors.isNotEmpty)
+                        if (_docsNotifier.isLoading &&
+                            _docsNotifier.doctors.isNotEmpty)
                           Positioned(
                             top: 0,
                             left: 0,
                             right: 0,
                             child: LinearProgressIndicator(
                               color: AppColors.primaryGreen,
-                              backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.1),
+                              backgroundColor: AppColors.primaryGreen
+                                  .withValues(alpha: 0.1),
                               minHeight: 3,
                             ),
                           ),
@@ -201,7 +206,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                           border: Border.all(
                             color: Theme.of(context).colorScheme.surface,
                             width: 1.5,
-                          ), 
+                          ),
                         ),
                       ),
                     );
@@ -223,14 +228,14 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         hintText: "Search doctor, specialty...",
         showClearIcon: _searchController.text.isNotEmpty,
         onClear: _clearSearch,
-        readOnly: widget.isBackgroundLayer, 
+        readOnly: widget.isBackgroundLayer,
       ),
     );
   }
 
   Widget _buildFilterChips() {
     return Container(
-      height: 54, 
+      height: 54,
       margin: const EdgeInsets.only(top: 16, bottom: 12),
       child: ListView.separated(
         clipBehavior: Clip.none,
@@ -268,11 +273,11 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                             color: AppColors.primaryGreen.withValues(
                               alpha: 0.35,
                             ),
-                            blurRadius: 14, 
-                            offset: const Offset(0, 6), 
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
                           ),
                         ]
-                        : [], 
+                        : [],
               ),
               child: Text(
                 filter,
@@ -280,7 +285,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                   color: isSelected ? Colors.white : context.colorTextLight,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   fontSize: 14,
-                  letterSpacing: 0.3, 
+                  letterSpacing: 0.3,
                 ),
               ),
             ),
@@ -302,7 +307,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
   }
 
   Widget _buildDoctorList() {
-    final doctors = _docsNotifier.doctors; 
+    final doctors = _docsNotifier.doctors;
     if (doctors.isEmpty) {
       return Center(
         child: Text(
@@ -311,8 +316,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         ),
       );
     }
+    final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
+    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
+
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      // 📌 PRO FIX: Added 120px bottom padding to escape the glass dock
+      padding: EdgeInsets.fromLTRB(24, 0, 24, dynamicBottomPadding),
       itemCount: doctors.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
@@ -336,50 +345,63 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
-  Widget _buildHospitalGrid() => _buildFacilityGrid(_docsNotifier.hospitals, isHospital: true);
-  Widget _buildClinicGrid() => _buildFacilityGrid(_docsNotifier.clinics, isHospital: false);
+  Widget _buildHospitalGrid() =>
+      _buildFacilityGrid(_docsNotifier.hospitals, isHospital: true);
+  Widget _buildClinicGrid() =>
+      _buildFacilityGrid(_docsNotifier.clinics, isHospital: false);
 
-  Widget _buildFacilityGrid(List<Map<String, dynamic>> items, {required bool isHospital}) {
+  Widget _buildFacilityGrid(
+    List<Map<String, dynamic>> items, {
+    required bool isHospital,
+  }) {
+    final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
+    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
+
     return GridView.builder(
-      padding: const EdgeInsets.all(24),
+      // 📌 PRO FIX: Added 120px bottom padding to escape the glass dock
+      padding: EdgeInsets.fromLTRB(24, 24, 24, dynamicBottomPadding),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.72, 
+        childAspectRatio: 0.72,
       ),
       itemCount: items.length,
-      itemBuilder: (context, index) => _buildFacilityCard(items[index], isHospital),
+      itemBuilder:
+          (context, index) => _buildFacilityCard(items[index], isHospital),
     );
   }
 
   Widget _buildFacilityCard(Map<String, dynamic> facility, bool isHospital) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hasImage = facility['image_url'] != null && facility['image_url'].toString().isNotEmpty;
+    final hasImage =
+        facility['image_url'] != null &&
+        facility['image_url'].toString().isNotEmpty;
 
-    // --- PRO FIX: Safe Fallback Icon ---
-    // If there is no image OR if the image URL is a broken 404 link, it safely drops back to this!
     final fallbackIcon = Icon(
-      isHospital ? Icons.local_hospital_rounded : Icons.medical_services_rounded,
+      isHospital
+          ? Icons.local_hospital_rounded
+          : Icons.medical_services_rounded,
       size: 40,
       color: AppColors.primaryGreen.withValues(alpha: 0.4),
     );
 
     return InkWell(
-      onTap: () => context.push(
-        AppRoutes.clinicDoctorsById('${facility['id']}'),
-        extra: ClinicRouteArgs(
-          name: facility['name'],
-          logoUrl: facility['logo_url']?.toString(),
-        ),
-      ),
+      onTap:
+          () => context.push(
+            AppRoutes.clinicDoctorsById('${facility['id']}'),
+            extra: ClinicRouteArgs(
+              name: facility['name'],
+              logoUrl: facility['logo_url']?.toString(),
+            ),
+          ),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         decoration: AppStyles.surfaceCard(
           context,
           borderRadius: BorderRadius.circular(20),
         ),
-        clipBehavior: Clip.antiAlias, 
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -389,20 +411,22 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkBorder : const Color(0xFFE8F1F2),
+                  color:
+                      isDark ? AppColors.darkBorder : const Color(0xFFE8F1F2),
                 ),
-                child: hasImage
-                    ? AppNetworkImage(
-                        imageUrl: facility['image_url'],
-                        fit: BoxFit.cover,
-                        cacheKey: 'facility_${facility['id']}',
-                      )
-                    : fallbackIcon,
+                child:
+                    hasImage
+                        ? AppNetworkImage(
+                          imageUrl: facility['image_url'],
+                          fit: BoxFit.cover,
+                          cacheKey: 'facility_${facility['id']}',
+                        )
+                        : fallbackIcon,
               ),
             ),
             // 2. Info Section
             Expanded(
-              flex: 5, 
+              flex: 5,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -411,20 +435,19 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                   children: [
                     Text(
                       facility['name'] ?? 'Unknown',
-                      maxLines: 2, 
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodyBold(context).copyWith(
-                        fontSize: 13, 
-                        height: 1.2,
-                      ),
+                      style: AppTextStyles.bodyBold(
+                        context,
+                      ).copyWith(fontSize: 13, height: 1.2),
                     ),
-                    const SizedBox(height: 4), 
+                    const SizedBox(height: 4),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
-                          Icons.location_on_rounded, 
-                          size: 14, 
+                          Icons.location_on_rounded,
+                          size: 14,
                           color: context.colorTextLight,
                         ),
                         const SizedBox(width: 4),

@@ -1,0 +1,166 @@
+commit 92a22c9d266821bdaa605e16392604bd52fa9e4d
+Author: manasnexis <anasmuhammadtariq9@gmail.com>
+Date:   Mon Mar 23 12:49:12 2026 +0500
+
+    added interaction related improvements in some pages with some improvements in the ui of the clinic and speciality screens
+
+diff --git a/lib/core/main_wrapper/main_wrapper.dart b/lib/core/main_wrapper/main_wrapper.dart
+index 7e5e6d5..dd74f51 100644
+--- a/lib/core/main_wrapper/main_wrapper.dart
++++ b/lib/core/main_wrapper/main_wrapper.dart
+@@ -12,6 +12,7 @@ import '../../features/settings/presentation/settings_notifier.dart';
+ import '../theme/app_motion.dart';
+ import '../theme/app_colors.dart';
+ import '../theme/app_styles.dart';
++import '../widgets/premium_app_loader.dart';
+ 
+ class MainWrapper extends StatefulWidget {
+   final StatefulNavigationShell navigationShell;
+@@ -23,11 +24,12 @@ class MainWrapper extends StatefulWidget {
+ }
+ 
+ class _MainWrapperState extends State<MainWrapper>
+-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
++    with TickerProviderStateMixin, WidgetsBindingObserver {
+   static const Curve _openCurve = Curves.easeOutQuint;
+   static const Curve _closeCurve = Curves.easeOutCirc;
+ 
+   late AnimationController _drawerController;
++  late AnimationController _globalLoaderController;
+   final double _maxSlide = 290.0;
+ 
+   bool _isDraggingDrawer = false;
+@@ -40,6 +42,14 @@ class _MainWrapperState extends State<MainWrapper>
+       vsync: this,
+       duration: AppMotion.defaultDuration,
+     );
++    _globalLoaderController = AnimationController(
++      vsync: this,
++      duration: const Duration(milliseconds: 600),
++    );
++
++    Future.delayed(const Duration(milliseconds: 1400), () {
++      if (mounted) _globalLoaderController.forward();
++    });
+ 
+     AppointmentNotifier.instance.initializeRealtime();
+     unawaited(AppointmentNotifier.instance.fetchAppointments());
+@@ -65,6 +75,7 @@ class _MainWrapperState extends State<MainWrapper>
+   void dispose() {
+     WidgetsBinding.instance.removeObserver(this);
+     _drawerController.dispose();
++    _globalLoaderController.dispose();
+     super.dispose();
+   }
+ 
+@@ -410,6 +421,35 @@ class _MainWrapperState extends State<MainWrapper>
+                   );
+                 },
+               ),
++
++              // LAYER 5: GLOBAL INITIAL CURTAIN
++              if (!_globalLoaderController.isCompleted)
++                AnimatedBuilder(
++                  animation: _globalLoaderController,
++                  builder: (context, child) {
++                    final opacity = Tween<double>(begin: 1.0, end: 0.0).animate(
++                      CurvedAnimation(
++                        parent: _globalLoaderController,
++                        curve: Curves.easeOut,
++                      ),
++                    ).value;
++
++                    return IgnorePointer(
++                      ignoring: _globalLoaderController.value > 0.0,
++                      child: Opacity(
++                        opacity: opacity,
++                        child: Container(
++                          width: double.infinity,
++                          height: double.infinity,
++                          color: Theme.of(context).scaffoldBackgroundColor,
++                          child: const Center(
++                            child: PremiumAppLoader(size: 42),
++                          ),
++                        ),
++                      ),
++                    );
++                  },
++                ),
+             ],
+           ),
+         ),
+
+commit ab19d08814e0e8daec16aaf0223178c65734f7ce
+Author: manasnexis <anasmuhammadtariq9@gmail.com>
+Date:   Sun Mar 15 07:56:52 2026 +0500
+
+    polished the design of the dialogue boxes and the flow between pages
+
+diff --git a/lib/core/main_wrapper/main_wrapper.dart b/lib/core/main_wrapper/main_wrapper.dart
+index adfdc4b..7e5e6d5 100644
+--- a/lib/core/main_wrapper/main_wrapper.dart
++++ b/lib/core/main_wrapper/main_wrapper.dart
+@@ -54,7 +54,9 @@ class _MainWrapperState extends State<MainWrapper>
+   void didChangeAppLifecycleState(AppLifecycleState state) {
+     if (state == AppLifecycleState.resumed) {
+       // PRO FIX: Silent refresh on resume!
+-      unawaited(AppointmentNotifier.instance.fetchAppointments(isBackground: true));
++      unawaited(
++        AppointmentNotifier.instance.fetchAppointments(isBackground: true),
++      );
+       unawaited(ProfileNotifier.instance.loadProfile());
+     }
+   }
+@@ -217,6 +219,7 @@ class _MainWrapperState extends State<MainWrapper>
+               AnimatedBuilder(
+                 animation: _drawerController,
+                 builder: (context, child) {
++                  // Controls how far right it slides and how much it shrinks
+                   double slide = 265 * _drawerController.value;
+                   double scale = 1 - (_drawerController.value * 0.45);
+ 
+@@ -227,7 +230,8 @@ class _MainWrapperState extends State<MainWrapper>
+                           ..scale(scale),
+                     alignment: Alignment.centerLeft,
+                     child: AbsorbPointer(
+-                      absorbing: true,
++                      absorbing:
++                          true, // Prevents users from interacting with the background
+                       child: Container(
+                         width: size.width,
+                         height: size.height,
+@@ -244,11 +248,13 @@ class _MainWrapperState extends State<MainWrapper>
+                                 color:
+                                     Theme.of(context).scaffoldBackgroundColor,
+                               ),
++                              // THIS IS THE DUMMY PAGE
+                               const RepaintBoundary(
+                                 child: IgnorePointer(
+                                   child: DoctorsScreen(isBackgroundLayer: true),
+                                 ),
+                               ),
++                              // Adds a darkening tint as the drawer opens
+                               Container(
+                                 color: dynamicDrawerBg.withValues(
+                                   alpha: (0.8 * _drawerController.value).clamp(
+
+commit d819ddeeb3df7f38d5f227ef58e548364072353b
+Author: manasnexis <anasmuhammadtariq9@gmail.com>
+Date:   Tue Mar 10 19:30:24 2026 +0500
+
+    made things more professional e.g. reminder global, notification setting customization
+
+diff --git a/lib/core/main_wrapper/main_wrapper.dart b/lib/core/main_wrapper/main_wrapper.dart
+index 64b7baa..adfdc4b 100644
+--- a/lib/core/main_wrapper/main_wrapper.dart
++++ b/lib/core/main_wrapper/main_wrapper.dart
+@@ -53,7 +53,8 @@ class _MainWrapperState extends State<MainWrapper>
+   @override
+   void didChangeAppLifecycleState(AppLifecycleState state) {
+     if (state == AppLifecycleState.resumed) {
+-      unawaited(AppointmentNotifier.instance.fetchAppointments());
++      // PRO FIX: Silent refresh on resume!
++      unawaited(AppointmentNotifier.instance.fetchAppointments(isBackground: true));
+       unawaited(ProfileNotifier.instance.loadProfile());
+     }
+   }

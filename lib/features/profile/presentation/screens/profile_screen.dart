@@ -382,10 +382,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: context.colorScaffoldBackground,
         body: Container(
           decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: Column(
-              children: [
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                children: [
                 // --- HEADER ---
                 Container(
                   width: double.infinity,
@@ -618,6 +620,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SizedBox(height: 40),
               ],
             ),
+          ),
           ),
         ),
       ),

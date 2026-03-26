@@ -12,7 +12,7 @@ It is intended to answer both of these questions in one place:
 1. Where does this code live?
 2. Which part of the app currently owns this behavior?
 
-Last reconciled: March 23, 2026.
+Last reconciled: March 25, 2026.
 
 Ground rules for this file:
 - The structure snapshot is based on tracked files from git ls-files.
@@ -244,7 +244,7 @@ Directory contents:
   - clinic.dart, clinic.freezed.dart, clinic.g.dart
   - doctor.dart, doctor.freezed.dart, doctor.g.dart
   - doctor_repository.dart
-  - oute_repository.dart
+  - route_repository.dart
   - specialty.dart
 - presentation/
   - doctors_notifier.dart
@@ -402,14 +402,13 @@ This directory owns app-wide infrastructure:
 - errors/: shared failure model (AppFailure)
 - localization/: localization wiring
 - main_wrapper/: shell wrapper, drawer, and root-tab orchestration
-- 
-etwork/: offline guard plus connectivity/offline queue sync
-- outer/: GoRouter configuration and auth refresh stream
+- network/: offline guard plus connectivity/offline queue sync
+- router/: GoRouter configuration and auth refresh stream
 - security/: biometrics, device integrity, inactivity lock, and step-up auth
 - services/: notifications, FCM, and error telemetry
 - theme/: colors, typography, dimensions, shapes, styles, motion, and themes
 - utils/: route/security formatting helpers
-- widgets/: app-wide UI helpers such as loaders, route-error screens, and error fallbacks
+- widgets/: app-wide UI helpers such as loaders, premium loaders, route-error screens, and error fallbacks
 
 ### 5.2 lib/presentation/widgets/
 
@@ -517,8 +516,11 @@ These contain the expected runner/config/generated-plugin files for each platfor
 
 ### 6.7 Root-Level Tracked Diagnostic / Project Files
 
-Tracked root-level non-source files currently include:
+Tracked root-level non-source and helper files currently include:
+- .gitignore
 - README.md
+- pubspec.yaml
+- pubspec.lock
 - analysis_options.yaml
 - analyze_out.txt
 - analyze_output.txt
@@ -526,6 +528,10 @@ Tracked root-level non-source files currently include:
 - .metadata
 - .vscode/*
 - .github/workflows/test.yml
+- missing_methods.dart
+- restored_doctor_repo.dart
+
+Untracked local helpers such as tmp/*.py are intentionally excluded from this source-of-truth snapshot because this file is reconciled against tracked files only.
 
 ## 7. Full Tracked Repository Tree
 ```text
@@ -614,6 +620,10 @@ daktarpi/
 |   |   |   |   |-- Icon-App-76x76@1x.png
 |   |   |   |   |-- Icon-App-76x76@2x.png
 |   |   |   |   \-- Icon-App-83.5x83.5@2x.png
+|   |   |   |-- LaunchBackground.imageset/
+|   |   |   |   |-- background.png
+|   |   |   |   |-- Contents.json
+|   |   |   |   \-- darkbackground.png
 |   |   |   \-- LaunchImage.imageset/
 |   |   |       |-- Contents.json
 |   |   |       |-- LaunchImage.png
@@ -689,6 +699,7 @@ daktarpi/
 |   |       |-- custom_app_bar.dart
 |   |       |-- custom_card.dart
 |   |       |-- empty_state_widget.dart
+|   |       |-- premium_app_loader.dart
 |   |       \-- route_error_screen.dart
 |   |-- data/
 |   |   \-- services/
@@ -918,9 +929,11 @@ daktarpi/
 |   |       \-- IDEWorkspaceChecks.plist
 |   \-- RunnerTests/
 |       \-- RunnerTests.swift
+|-- missing_methods.dart
 |-- pubspec.lock
 |-- pubspec.yaml
 |-- README.md
+|-- restored_doctor_repo.dart
 |-- supabase/
 |   |-- .branches/
 |   |   \-- _current_branch
@@ -999,5 +1012,4 @@ daktarpi/
         |-- win32_window.cpp
         \-- win32_window.h
 ```
-
 

@@ -1,18 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/menu/presentation/widgets/custom_drawer.dart';
-import '../../features/doctors/presentation/screens/doctors_screen.dart';
 import '../../features/appointments/presentation/appointment_notifier.dart';
+import '../../features/menu/presentation/widgets/custom_drawer.dart';
 import '../../features/profile/presentation/profile_notifier.dart';
-import '../../features/settings/presentation/settings_notifier.dart';
-import '../theme/app_motion.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_styles.dart';
-import '../widgets/premium_app_loader.dart';
 
 class MainWrapper extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -25,45 +22,41 @@ class MainWrapper extends StatefulWidget {
 
 class _MainWrapperState extends State<MainWrapper>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  static const Curve _openCurve = Curves.easeOutQuint;
-  static const Curve _closeCurve = Curves.easeOutCirc;
-
   late AnimationController _drawerController;
-  late AnimationController _globalLoaderController;
-  final double _maxSlide = 290.0;
+  late AnimationController _springController;
 
-  bool _isDraggingDrawer = false;
+  final ValueNotifier<double> _tabDragNotifier = ValueNotifier<double>(0.0);
+  final ValueNotifier<double> _depthTensionNotifier = ValueNotifier<double>(
+    0.0,
+  );
+  final ValueNotifier<Offset> _pointerPosition = ValueNotifier<Offset>(
+    Offset.zero,
+  );
+
+  bool _hasFiredThresholdHaptic = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     _drawerController = AnimationController(
       vsync: this,
-      duration: AppMotion.defaultDuration,
+      duration: const Duration(milliseconds: 350),
     );
-    _globalLoaderController = AnimationController(
+    _springController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 350),
     );
-
-    Future.delayed(const Duration(milliseconds: 1400), () {
-      if (mounted) _globalLoaderController.forward();
-    });
 
     AppointmentNotifier.instance.initializeRealtime();
     unawaited(AppointmentNotifier.instance.fetchAppointments());
     unawaited(ProfileNotifier.instance.loadProfile());
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _runIntroTutorial();
-    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // PRO FIX: Silent refresh on resume!
       unawaited(
         AppointmentNotifier.instance.fetchAppointments(isBackground: true),
       );
@@ -75,82 +68,75 @@ class _MainWrapperState extends State<MainWrapper>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _drawerController.dispose();
-    _globalLoaderController.dispose();
+    _springController.dispose();
+    _tabDragNotifier.dispose();
+    _depthTensionNotifier.dispose();
+    _pointerPosition.dispose();
     super.dispose();
   }
 
-  Future<void> _runIntroTutorial() async {
-    await SettingsNotifier.instance.loadSettings();
-    if (!SettingsNotifier.instance.showDrawerHint) {
-      return;
-    }
-
-    if (widget.navigationShell.currentIndex != 0) {
-      return;
-    }
-
-    await Future.delayed(const Duration(milliseconds: 3500));
-    if (!mounted) {
-      return;
-    }
-
-    try {
-      await _drawerController.animateTo(
-        0.15,
-        duration: const Duration(milliseconds: 1600),
-        curve: _openCurve,
-      );
-
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (!mounted) {
-        return;
-      }
-
-      await _drawerController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 1200),
-        curve: _closeCurve,
-      );
-    } catch (e) {
-      debugPrint("Animation interrupted: $e");
-    }
-  }
-
   void _goToBranch(int index) {
+    if (index == widget.navigationShell.currentIndex) return;
+
+    if (_springController.isAnimating) _springController.stop();
+    _tabDragNotifier.value = 0.0;
+    _depthTensionNotifier.value = 0.0;
+
     widget.navigationShell.goBranch(
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
     );
-    if (_drawerController.value > 0) {
-      _drawerController.reverse();
-    }
+    if (_drawerController.value > 0) _drawerController.reverse();
   }
 
   void _toggleDrawer() {
+    FocusManager.instance.primaryFocus?.unfocus();
     if (_drawerController.isDismissed) {
-      FocusManager.instance.primaryFocus?.unfocus();
-      _drawerController.forward();
+      _drawerController.animateTo(1.0, curve: Curves.easeOutQuart);
     } else {
-      _drawerController.reverse();
+      _drawerController.animateTo(0.0, curve: Curves.easeOutQuart);
     }
   }
 
   void _onDragStart(DragStartDetails details) {
-    _isDraggingDrawer = false;
+    if (_springController.isAnimating) _springController.stop();
+    _depthTensionNotifier.value = _tabDragNotifier.value.abs();
+    _pointerPosition.value = details.globalPosition;
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    if (widget.navigationShell.currentIndex != 0) {
+    int currentIndex = widget.navigationShell.currentIndex;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+
+    _pointerPosition.value = details.globalPosition;
+
+    double drawerDelta = details.primaryDelta! / (screenWidth * 0.65);
+    double tabDelta = details.primaryDelta! / screenWidth;
+
+    if (_drawerController.value > 0.0 ||
+        (currentIndex == 0 &&
+            _tabDragNotifier.value == 0.0 &&
+            details.primaryDelta! > 0)) {
+      _drawerController.value = (_drawerController.value + drawerDelta).clamp(
+        0.0,
+        1.0,
+      );
       return;
     }
 
-    double delta = details.primaryDelta! / _maxSlide;
-    if (_drawerController.value > 0 || delta > 0) {
-      _drawerController.value += delta;
-    }
-    if (_drawerController.value > 0.0) {
-      _isDraggingDrawer = true;
+    double newVal = (_tabDragNotifier.value + tabDelta).clamp(-1.0, 1.0);
+    if (currentIndex == 0 && newVal > 0) newVal = 0.0;
+    if (currentIndex == 3 && newVal < 0) newVal = 0.0;
+
+    _tabDragNotifier.value = newVal;
+    _depthTensionNotifier.value = newVal.abs();
+
+    if (newVal.abs() >= 0.25 && !_hasFiredThresholdHaptic) {
+      HapticFeedback.selectionClick();
+      _hasFiredThresholdHaptic = true;
+    } else if (newVal.abs() < 0.25) {
+      _hasFiredThresholdHaptic = false;
     }
   }
 
@@ -158,300 +144,563 @@ class _MainWrapperState extends State<MainWrapper>
     double velocity = details.primaryVelocity ?? 0;
     int currentIndex = widget.navigationShell.currentIndex;
 
-    if (_isDraggingDrawer || _drawerController.value > 0.0) {
+    if (_drawerController.value > 0.0) {
       if (velocity.abs() > 200) {
         velocity > 0
-            ? _drawerController.forward()
-            : _drawerController.reverse();
+            ? _drawerController.animateTo(1.0, curve: Curves.easeOutQuart)
+            : _drawerController.animateTo(0.0, curve: Curves.easeOutQuart);
       } else {
         _drawerController.value > 0.5
-            ? _drawerController.forward()
-            : _drawerController.reverse();
+            ? _drawerController.animateTo(1.0, curve: Curves.easeOutQuart)
+            : _drawerController.animateTo(0.0, curve: Curves.easeOutQuart);
       }
-      _isDraggingDrawer = false;
       return;
     }
 
-    if (_drawerController.isDismissed && velocity.abs() > 300) {
-      if (velocity < 0) {
-        if (currentIndex < 3) {
-          _goToBranch(currentIndex + 1);
-        }
+    final dragVal = _tabDragNotifier.value;
+    bool isFlickNext = velocity < -300 && dragVal < 0;
+    bool isFlickPrev = velocity > 300 && dragVal > 0;
+    bool isPastThreshold = dragVal.abs() >= 0.25;
+
+    if (isFlickNext || (isPastThreshold && dragVal < 0)) {
+      if (currentIndex < 3) {
+        widget.navigationShell.goBranch(currentIndex + 1);
+        _tabDragNotifier.value = 0.0;
+        _animateDepthToZero();
       } else {
-        currentIndex > 0
-            ? _goToBranch(currentIndex - 1)
-            : _drawerController.forward();
+        _animateBothToZero();
       }
+    } else if (isFlickPrev || (isPastThreshold && dragVal > 0)) {
+      if (currentIndex > 0) {
+        widget.navigationShell.goBranch(currentIndex - 1);
+        _tabDragNotifier.value = 0.0;
+        _animateDepthToZero();
+      } else {
+        _animateBothToZero();
+      }
+    } else {
+      _animateBothToZero();
     }
+  }
+
+  void _animateDepthToZero() {
+    _hasFiredThresholdHaptic = false;
+    _springController.duration = const Duration(milliseconds: 350);
+
+    final Animation<double> anim = Tween<double>(
+      begin: _depthTensionNotifier.value,
+      end: 0.0,
+    ).animate(
+      CurvedAnimation(parent: _springController, curve: Curves.easeOutQuart),
+    );
+
+    void listener() => _depthTensionNotifier.value = anim.value;
+    anim.addListener(listener);
+    _springController
+        .forward(from: 0.0)
+        .then((_) => anim.removeListener(listener));
+  }
+
+  void _animateBothToZero() {
+    _hasFiredThresholdHaptic = false;
+    _springController.duration = const Duration(milliseconds: 250);
+
+    final Animation<double> anim = Tween<double>(
+      begin: _tabDragNotifier.value,
+      end: 0.0,
+    ).animate(
+      CurvedAnimation(parent: _springController, curve: Curves.easeOutCubic),
+    );
+
+    void listener() {
+      _tabDragNotifier.value = anim.value;
+      _depthTensionNotifier.value = anim.value.abs();
+    }
+
+    anim.addListener(listener);
+    _springController
+        .forward(from: 0.0)
+        .then((_) => anim.removeListener(listener));
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dynamicDrawerBg =
-        isDark ? const Color(0xFF162236) : const Color(0xFF626F8D);
-    final size = MediaQuery.sizeOf(context);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final screenHeight = MediaQuery.sizeOf(context).height;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          return;
-        }
-        if (_drawerController.value > 0) {
-          _drawerController.reverse();
-          return;
-        }
-
-        final String location = GoRouterState.of(context).uri.path;
-        final bool isRootTab =
-            location == '/home' ||
-            location == '/doctors' ||
-            location == '/appointments' ||
-            location == '/profile';
-
-        if (isRootTab) {
-          SystemNavigator.pop();
-        } else {
-          context.pop();
-        }
-      },
-      child: Scaffold(
-        backgroundColor: dynamicDrawerBg,
-        resizeToAvoidBottomInset: false,
-        body: GestureDetector(
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.8, -0.3),
+            radius: 1.5,
+            colors: [Color(0xFF0F171A), Colors.black],
+          ),
+        ),
+        child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onHorizontalDragStart: _onDragStart,
           onHorizontalDragUpdate: _onDragUpdate,
           onHorizontalDragEnd: _onDragEnd,
           child: Stack(
             children: [
-              // LAYER 1: BACK CARD
+              CustomDrawer(
+                onClose: _toggleDrawer,
+                onNavigateToTab: _goToBranch,
+                drawerAnimation: _drawerController,
+                pointerNotifier: _pointerPosition,
+              ),
               AnimatedBuilder(
-                animation: _drawerController,
+                animation: Listenable.merge([
+                  _tabDragNotifier,
+                  _depthTensionNotifier,
+                  _drawerController,
+                  _pointerPosition,
+                ]),
                 builder: (context, child) {
-                  // Controls how far right it slides and how much it shrinks
-                  double slide = 265 * _drawerController.value;
-                  double scale = 1 - (_drawerController.value * 0.45);
+                  final double tabTension = _depthTensionNotifier.value;
+                  final double dragValue = _tabDragNotifier.value;
+                  final double tabScale = 1.0 - (tabTension * 0.06);
+                  final double tabBlur =
+                      math.pow(tabTension, 1.5).toDouble() * 20.0;
+
+                  final double drawerVal = _drawerController.value;
+                  final double scale = tabScale - (drawerVal * 0.3);
+                  final double translateX = drawerVal * (screenWidth * 0.65);
+                  final double rotateY = drawerVal * -0.15;
+                  final double normalizedY =
+                      (_pointerPosition.value.dy / screenHeight) - 0.5;
+                  final double rotateX = drawerVal * (normalizedY * 0.1);
+                  final double radius =
+                      (tabTension * 45.0) + (drawerVal * 40.0);
+                  final double totalBlur =
+                      math.max(tabBlur, drawerVal * 25.0).toDouble();
 
                   return Transform(
+                    alignment: Alignment.center,
                     transform:
                         Matrix4.identity()
-                          ..translate(slide)
-                          ..scale(scale),
-                    alignment: Alignment.centerLeft,
-                    child: AbsorbPointer(
-                      absorbing:
-                          true, // Prevents users from interacting with the background
-                      child: Container(
-                        width: size.width,
-                        height: size.height,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: AppStyles.cardShadow(context),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(30),
-                          child: Stack(
-                            children: [
-                              Container(
-                                color:
-                                    Theme.of(context).scaffoldBackgroundColor,
-                              ),
-                              // THIS IS THE DUMMY PAGE
-                              const RepaintBoundary(
-                                child: IgnorePointer(
-                                  child: DoctorsScreen(isBackgroundLayer: true),
-                                ),
-                              ),
-                              // Adds a darkening tint as the drawer opens
-                              Container(
-                                color: dynamicDrawerBg.withValues(
-                                  alpha: (0.8 * _drawerController.value).clamp(
-                                    0.0,
-                                    1.0,
+                          ..setEntry(3, 2, 0.001)
+                          ..translate(translateX, 0.0, 0.0)
+                          ..scale(scale)
+                          ..rotateY(rotateY)
+                          ..rotateX(rotateX),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(radius),
+                        border:
+                            drawerVal > 0.05
+                                ? Border.all(
+                                  color: Colors.white.withValues(
+                                    alpha: drawerVal * 0.15,
+                                  ),
+                                  width: 1.5,
+                                )
+                                : null,
+                        boxShadow:
+                            drawerVal > 0.05
+                                ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(
+                                      alpha: drawerVal * 0.9,
+                                    ),
+                                    blurRadius: 60,
+                                    spreadRadius: 10,
+                                    offset: const Offset(-30, 0),
+                                  ),
+                                ]
+                                : const [],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          RepaintBoundary(
+                            child: Container(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              child: widget.navigationShell,
+                            ),
+                          ),
+                          if (drawerVal > 0)
+                            GestureDetector(
+                              onTap: _toggleDrawer,
+                              child: Container(color: Colors.transparent),
+                            ),
+                          if (drawerVal > 0)
+                            IgnorePointer(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment(0.5, normalizedY - 1),
+                                    end: Alignment(-0.5, normalizedY + 1),
+                                    colors: [
+                                      Colors.white.withValues(
+                                        alpha: drawerVal * 0.1,
+                                      ),
+                                      Colors.transparent,
+                                      Colors.black.withValues(
+                                        alpha: drawerVal * 0.5,
+                                      ),
+                                    ],
+                                    stops: const [0.0, 0.3, 1.0],
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          if (tabTension > 0 || drawerVal > 0)
+                            IgnorePointer(
+                              child: BackdropFilter(
+                                filter: ui.ImageFilter.blur(
+                                  sigmaX: totalBlur,
+                                  sigmaY: totalBlur,
+                                ),
+                                child: Container(
+                                  color: Colors.black.withValues(
+                                    alpha: math.max(
+                                      tabTension * 0.4,
+                                      drawerVal * 0.3,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   );
                 },
               ),
-
-              // LAYER 2: MENU
-              SafeArea(
-                child: SizedBox(
-                  width: 260,
-                  child: CustomDrawer(
-                    onClose: _toggleDrawer,
-                    onNavigateToTab: _goToBranch,
+              Positioned(
+                bottom: MediaQuery.paddingOf(context).bottom + 20,
+                left: 20,
+                right: 20,
+                child: AnimatedBuilder(
+                  animation: _drawerController,
+                  builder: (context, child) {
+                    return IgnorePointer(
+                      ignoring: _drawerController.value > 0.0,
+                      child: Transform.translate(
+                        offset: Offset(0, _drawerController.value * 100),
+                        child: Opacity(
+                          opacity:
+                              (1.0 - (_drawerController.value * 2))
+                                  .clamp(0.0, 1.0)
+                                  .toDouble(),
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: RepaintBoundary(
+                    child: _HolographicFluidDock(
+                      selectedIndex: widget.navigationShell.currentIndex,
+                      onTap: _goToBranch,
+                      tabDragNotifier: _tabDragNotifier,
+                      depthTensionNotifier: _depthTensionNotifier,
+                    ),
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-              // LAYER 3: FRONT CARD
-              AnimatedBuilder(
-                animation: _drawerController,
-                builder: (context, child) {
-                  double slide = _maxSlide * _drawerController.value;
-                  double scale = 1 - (_drawerController.value * 0.3);
-                  bool isDrawerOpen = _drawerController.value > 0.1;
-                  double cornerRadius = (_drawerController.value * 400).clamp(
-                    0.0,
-                    40.0,
-                  );
+class _HolographicFluidDock extends StatefulWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+  final ValueNotifier<double> tabDragNotifier;
+  final ValueNotifier<double> depthTensionNotifier;
 
-                  return Transform(
-                    transform:
-                        Matrix4.identity()
-                          ..translate(slide)
-                          ..scale(scale),
-                    alignment: Alignment.centerLeft,
-                    child: RepaintBoundary(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(cornerRadius),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            boxShadow: AppStyles.drawerShadow(context),
-                          ),
-                          child: AbsorbPointer(
-                            absorbing: isDrawerOpen,
-                            child: child,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-                child: Scaffold(
-                  body: SizedBox.expand(
-                    child: AnimatedSwitcher(
-                      duration: AppMotion.defaultDuration,
-                      child: widget.navigationShell,
-                    ),
+  const _HolographicFluidDock({
+    required this.selectedIndex,
+    required this.onTap,
+    required this.tabDragNotifier,
+    required this.depthTensionNotifier,
+  });
+
+  @override
+  State<_HolographicFluidDock> createState() => _HolographicFluidDockState();
+}
+
+class _HolographicFluidDockState extends State<_HolographicFluidDock>
+    with TickerProviderStateMixin {
+  late AnimationController _lightSweepController;
+  late AnimationController _morphController;
+  late Animation<double> _stretchAnimation;
+
+  double _morphDirection = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _lightSweepController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat();
+    _morphController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    _stretchAnimation = TweenSequence([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.0,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 50,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeInCubic)),
+        weight: 50,
+      ),
+    ]).animate(_morphController);
+  }
+
+  @override
+  void didUpdateWidget(covariant _HolographicFluidDock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedIndex != oldWidget.selectedIndex) {
+      _morphDirection =
+          widget.selectedIndex > oldWidget.selectedIndex ? 1.0 : -1.0;
+      _morphController.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _lightSweepController.dispose();
+    _morphController.dispose();
+    super.dispose();
+  }
+
+  Color _getAmbientGlow(int index) {
+    switch (index) {
+      case 0:
+        return AppColors.primaryGreen;
+      case 1:
+        return const Color(0xFF007BFF);
+      case 2:
+        return const Color(0xFFFF9F00);
+      case 3:
+        return const Color(0xFF8E44AD);
+      default:
+        return AppColors.primaryGreen;
+    }
+  }
+
+  void _handleTabTap(int index) {
+    if (widget.selectedIndex == index) {
+      HapticFeedback.heavyImpact();
+    } else {
+      HapticFeedback.selectionClick();
+      widget.onTap(index);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        widget.tabDragNotifier,
+        widget.depthTensionNotifier,
+      ]),
+      builder: (context, child) {
+        final double dragValue = widget.tabDragNotifier.value;
+        final double tension = widget.depthTensionNotifier.value;
+
+        int targetIndex = widget.selectedIndex;
+        if (dragValue < 0 && targetIndex < 3) targetIndex++;
+        if (dragValue > 0 && targetIndex > 0) targetIndex--;
+
+        final Color startColor = _getAmbientGlow(widget.selectedIndex);
+        final Color endColor = _getAmbientGlow(targetIndex);
+        final Color ambientColor =
+            Color.lerp(startColor, endColor, dragValue.abs()) ?? startColor;
+
+        return AnimatedBuilder(
+          animation: _morphController,
+          builder: (context, child) {
+            double stretch = 1.0 + (_stretchAnimation.value * 0.08);
+            double squish = 1.0 - (_stretchAnimation.value * 0.04);
+            double translation =
+                _morphDirection * (_stretchAnimation.value * 15);
+
+            if (tension > 0) {
+              stretch += tension * 0.06;
+              squish -= tension * 0.03;
+              translation += (dragValue > 0 ? -1 : 1) * (dragValue.abs() * 12);
+            }
+
+            return Transform(
+              transform:
+                  Matrix4.identity()
+                    ..setEntry(3, 2, 0.001)
+                    ..translate(translation, 0.0)
+                    ..scale(stretch, squish),
+              alignment: Alignment.center,
+              child: child,
+            );
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            height: 76,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(38),
+              boxShadow: [
+                BoxShadow(
+                  color: ambientColor.withValues(alpha: isDark ? 0.15 : 0.25),
+                  blurRadius: 40,
+                  spreadRadius: 6,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(36.5),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
                   ),
-                  bottomNavigationBar: NavigationBar(
-                    selectedIndex: widget.navigationShell.currentIndex,
-                    onDestinationSelected: _goToBranch,
-                    backgroundColor: Theme.of(context).colorScheme.surface,
-                    indicatorColor: AppColors.primaryGreen.withValues(
-                      alpha: 0.15,
-                    ),
-                    elevation: 0,
-                    destinations: const [
-                      NavigationDestination(
-                        icon: Icon(Icons.home_outlined),
-                        selectedIcon: Icon(
-                          Icons.home_rounded,
-                          color: AppColors.primaryGreen,
-                        ),
-                        label: 'Home',
+                  decoration: BoxDecoration(
+                    color:
+                        isDark
+                            ? Colors.black.withValues(alpha: 0.65)
+                            : Colors.white.withValues(alpha: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _FluidTab(
+                        icon: Icons.home_rounded,
+                        label: "Home",
+                        expansionRatio:
+                            widget.selectedIndex == 0
+                                ? (1.0 - dragValue.abs())
+                                : (targetIndex == 0 ? dragValue.abs() : 0.0),
+                        activeColor: AppColors.primaryGreen,
+                        onTap: () => _handleTabTap(0),
                       ),
-                      NavigationDestination(
-                        icon: Icon(Icons.medical_services_outlined),
-                        selectedIcon: Icon(
-                          Icons.medical_services_rounded,
-                          color: AppColors.primaryGreen,
-                        ),
-                        label: 'Doctors',
+                      _FluidTab(
+                        icon: Icons.medical_services_rounded,
+                        label: "Doctors",
+                        expansionRatio:
+                            widget.selectedIndex == 1
+                                ? (1.0 - dragValue.abs())
+                                : (targetIndex == 1 ? dragValue.abs() : 0.0),
+                        activeColor: const Color(0xFF007BFF),
+                        onTap: () => _handleTabTap(1),
                       ),
-                      NavigationDestination(
-                        icon: Icon(Icons.assignment_outlined),
-                        selectedIcon: Icon(
-                          Icons.assignment_rounded,
-                          color: AppColors.primaryGreen,
-                        ),
-                        label: 'Appointment',
+                      _FluidTab(
+                        icon: Icons.assignment_rounded,
+                        label: "Schedule",
+                        expansionRatio:
+                            widget.selectedIndex == 2
+                                ? (1.0 - dragValue.abs())
+                                : (targetIndex == 2 ? dragValue.abs() : 0.0),
+                        activeColor: const Color(0xFFFF9F00),
+                        onTap: () => _handleTabTap(2),
                       ),
-                      NavigationDestination(
-                        icon: Icon(Icons.account_circle_outlined),
-                        selectedIcon: Icon(
-                          Icons.account_circle_rounded,
-                          color: AppColors.primaryGreen,
-                        ),
-                        label: 'Profile',
+                      _FluidTab(
+                        icon: Icons.account_circle_rounded,
+                        label: "Profile",
+                        expansionRatio:
+                            widget.selectedIndex == 3
+                                ? (1.0 - dragValue.abs())
+                                : (targetIndex == 3 ? dragValue.abs() : 0.0),
+                        activeColor: const Color(0xFF8E44AD),
+                        onTap: () => _handleTabTap(3),
                       ),
                     ],
                   ),
                 ),
               ),
-
-              // LAYER 4: CLOSE BUTTON
-              AnimatedBuilder(
-                animation: _drawerController,
-                builder: (context, child) {
-                  // PRO FIX: Added curly braces to satisfy dart linting rules
-                  if (_drawerController.value < 0.2) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return Positioned(
-                    top: 60,
-                    right: 30,
-                    child: Opacity(
-                      opacity: _drawerController.value,
-                      child: GestureDetector(
-                        onTap: _toggleDrawer,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.white,
-                            size: 26,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              // LAYER 5: GLOBAL INITIAL CURTAIN
-              if (!_globalLoaderController.isCompleted)
-                AnimatedBuilder(
-                  animation: _globalLoaderController,
-                  builder: (context, child) {
-                    final opacity = Tween<double>(begin: 1.0, end: 0.0).animate(
-                      CurvedAnimation(
-                        parent: _globalLoaderController,
-                        curve: Curves.easeOut,
-                      ),
-                    ).value;
-
-                    return IgnorePointer(
-                      ignoring: _globalLoaderController.value > 0.0,
-                      child: Opacity(
-                        opacity: opacity,
-                        child: Container(
-                          width: double.infinity,
-                          height: double.infinity,
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          child: const Center(
-                            child: PremiumAppLoader(size: 42),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-            ],
+            ),
           ),
+        );
+      },
+    );
+  }
+}
+
+class _FluidTab extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final double expansionRatio;
+  final Color activeColor;
+  final VoidCallback onTap;
+
+  const _FluidTab({
+    required this.icon,
+    required this.label,
+    required this.expansionRatio,
+    required this.activeColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeBgColor = activeColor.withValues(alpha: isDark ? 0.2 : 0.15);
+    final inactiveIconColor = isDark ? Colors.white54 : Colors.black45;
+
+    final Color bgColor =
+        Color.lerp(Colors.transparent, activeBgColor, expansionRatio)!;
+    final Color iconColor =
+        Color.lerp(inactiveIconColor, activeColor, expansionRatio)!;
+    final double hPadding = 12.0 + (8.0 * expansionRatio);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: iconColor, size: 26),
+            if (expansionRatio > 0.05)
+              ClipRect(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: expansionRatio,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: activeColor.withValues(alpha: expansionRatio),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        letterSpacing: 0.2,
+                      ),
+                      maxLines: 1,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

@@ -22,40 +22,43 @@ import '../widgets/home_specialties_row.dart';
 import '../widgets/home_section_header.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final bool isBackgroundLayer;
+  
+  const HomeScreen({super.key, this.isBackgroundLayer = false});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
   final _homeRepo = HomeRepository();
   final _favNotifier = FavoritesNotifier.instance;
   final _profileNotifier = ProfileNotifier.instance;
   final _docsNotifier = DoctorsNotifier.instance;
 
-  // --- THE MASTER CHOREOGRAPHER ---
   late AnimationController _launchController;
-  
   List<Map<String, dynamic>> _banners = [];
 
   @override
   void initState() {
     super.initState();
     _launchController = AnimationController(
-      vsync: this, 
-      duration: const Duration(milliseconds: 1600)
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
     );
 
-    // Completely removes the background loader from the widget tree when done
     _launchController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        setState(() {}); 
+        setState(() {});
       }
     });
 
-    _fetchAllData();
+    if (!widget.isBackgroundLayer) {
+      _fetchAllData();
+    }
+    
     _favNotifier.addListener(_onNotifierChanged);
     _profileNotifier.addListener(_onNotifierChanged);
     _docsNotifier.addListener(_onNotifierChanged);
@@ -98,19 +101,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _docsNotifier.fetchPopularDoctors(limit: 5, forceRefresh: forceRefresh),
         _docsNotifier.fetchFeaturedDoctors(limit: 5, forceRefresh: forceRefresh),
         _homeRepo.fetchBanners(
-          countryIso, 
-          forceRefresh: forceRefresh,
-          onFreshData: (fresh) {
-            if (mounted) setState(() { _banners = fresh; });
-          },
-        ).catchError((_) => <Map<String, dynamic>>[]),
+              countryIso,
+              forceRefresh: forceRefresh,
+              onFreshData: (fresh) {
+                if (mounted) setState(() => _banners = fresh);
+              },
+            )
+            .catchError((_) => <Map<String, dynamic>>[]),
       ]).timeout(const Duration(seconds: 12));
 
       if (mounted) {
         setState(() {
           _banners = results[3] as List<Map<String, dynamic>>;
         });
-        
+
         if (!_launchController.isAnimating && !_launchController.isCompleted) {
           _launchController.forward();
         }
@@ -118,34 +122,34 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } catch (e) {
       debugPrint("Error loading home data: $e");
       if (mounted && !_launchController.isCompleted) {
-        _launchController.forward(); 
+        _launchController.forward();
       }
     }
   }
 
-  // --- The Rhythm Engine ---
   Widget _buildStaggered({
-    required Widget child, 
-    required double start, 
-    required double end, 
-    bool slideDown = false
+    required Widget child,
+    required double start,
+    required double end,
+    bool slideDown = false,
   }) {
     return AnimatedBuilder(
       animation: _launchController,
       builder: (context, child) {
+        // 🔥 The "Kill Switch": Unlocks native scrolling by removing animation wrappers once complete
+        // This is what guarantees the Impeller smear bug never returns.
+        if (_launchController.isCompleted || widget.isBackgroundLayer) return child!;
+
         final slideOffset = slideDown ? const Offset(0, -0.3) : const Offset(0, 0.15);
         final slide = Tween<Offset>(begin: slideOffset, end: Offset.zero)
             .animate(CurvedAnimation(parent: _launchController, curve: Interval(start, end, curve: Curves.easeOutQuart))).value;
-        
+
         final opacity = Tween<double>(begin: 0.0, end: 1.0)
             .animate(CurvedAnimation(parent: _launchController, curve: Interval(start, end, curve: Curves.easeOut))).value;
-        
+
         return Opacity(
           opacity: opacity,
-          child: FractionalTranslation(
-            translation: slide,
-            child: child,
-          ),
+          child: FractionalTranslation(translation: slide, child: child),
         );
       },
       child: child,
@@ -154,79 +158,66 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
+    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Stack(
-        children: [
-          // ==========================================
-          // LAYER 1: THE MAIN WRAPPER & CONTENT
-          // ==========================================
-          RefreshIndicator(
-            onRefresh: _refreshData,
-            color: AppColors.primaryGreen,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            child: SingleChildScrollView(
-              // PRO FIX: ClampingScrollPhysics prevents the global bouncy physics from breaking the static header visuals
-              physics: const ClampingScrollPhysics(),
-              padding: EdgeInsets.zero, 
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Header Drops Down (0.1 to 0.6)
-                  _buildStaggered(
-                    start: 0.1, 
-                    end: 0.6, 
-                    slideDown: true,
-                    child: _buildHeader(),
-                  ),
-
-                  // 2. Banner Glides Up (0.2 to 0.7)
-                  _buildStaggered(
-                    start: 0.2, 
-                    end: 0.7, 
-                    child: HomeBanner(banners: _banners),
-                  ),
-                  
-                  // 3. Specialties Glide Up (0.3 to 0.8)
-                  _buildStaggered(
-                    start: 0.3, 
-                    end: 0.8, 
-                    child: _buildSpecialtiesSection(),
-                  ),
-
-                  // 4. Popular Doctors Glide Up (0.4 to 0.9)
-                  _buildStaggered(
-                    start: 0.4, 
-                    end: 0.9, 
-                    child: _buildPopularSection(),
-                  ),
-
-                  // 5. Featured Doctors Glide Up (0.5 to 1.0)
-                  _buildStaggered(
-                    start: 0.5, 
-                    end: 1.0, 
-                    child: _buildFeaturedSection(),
-                  ),
-                  
-                  const SizedBox(height: 40),
-                ],
+      // 🚀 THE ULTIMATE FIX: Pure, clean, restricted native layout.
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        color: AppColors.primaryGreen,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        // Drops naturally from the top, resting below the notch
+        displacement: MediaQuery.paddingOf(context).top + 40,
+        edgeOffset: 0, 
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+          child: SingleChildScrollView(
+            // 🛡️ THE PHYSICS LOCK: Clamping prevents the infinite overscroll completely. 
+            // AlwaysScrollable allows the refresh spinner to work without dragging the screen down.
+            physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+          padding: EdgeInsets.only(bottom: dynamicBottomPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStaggered(
+                start: 0.1,
+                end: 0.6,
+                slideDown: true,
+                child: _buildHeader(), // No hacks, just the header.
               ),
-            ),
+              _buildStaggered(
+                start: 0.2,
+                end: 0.7,
+                child: HomeBanner(banners: _banners),
+              ),
+              _buildStaggered(
+                start: 0.3,
+                end: 0.8,
+                child: _buildSpecialtiesSection(),
+              ),
+              _buildStaggered(
+                start: 0.4,
+                end: 0.9,
+                child: _buildPopularSection(),
+              ),
+              _buildStaggered(
+                start: 0.5,
+                end: 1.0,
+                child: _buildFeaturedSection(),
+              ),
+            ],
           ),
-
-
-
-
-        ],
+        ),
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
     return HomeHeader(
-      fullName: !_profileNotifier.isLoaded
-          ? "Loading..."
-          : _profileNotifier.fullName,
+      fullName: !_profileNotifier.isLoaded ? "Loading..." : _profileNotifier.fullName,
       avatarUrl: _profileNotifier.avatarUrl,
       searchController: _searchController,
       onSearchTap: () async {
@@ -235,8 +226,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       },
     );
   }
-
-  // --- Helpers for cleaner build hierarchy ---
 
   Widget _buildSpecialtiesSection() {
     return Column(

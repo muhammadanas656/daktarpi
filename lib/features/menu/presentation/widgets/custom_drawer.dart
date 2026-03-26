@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_routes.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../../core/constants/app_routes.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
+import '../../../../presentation/widgets/primary_button.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../../../profile/presentation/profile_notifier.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../presentation/widgets/app_network_image.dart';
-import '../../../../core/theme/app_styles.dart';
-import '../../../../presentation/widgets/app_floating_dialog.dart';
-import '../../../../presentation/widgets/primary_button.dart';
 
 class CustomDrawer extends StatefulWidget {
   final VoidCallback onClose;
   final Function(int) onNavigateToTab;
+  final Animation<double> drawerAnimation;
+  final ValueNotifier<Offset> pointerNotifier;
 
   const CustomDrawer({
     super.key,
     required this.onClose,
     required this.onNavigateToTab,
+    required this.drawerAnimation,
+    required this.pointerNotifier,
   });
 
   @override
@@ -24,7 +29,6 @@ class CustomDrawer extends StatefulWidget {
 }
 
 class _CustomDrawerState extends State<CustomDrawer> {
-  final Color drawerContentColor = Colors.transparent;
   final _profileRepo = ProfileRepository();
   final _profileNotifier = ProfileNotifier.instance;
 
@@ -32,10 +36,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
   void initState() {
     super.initState();
     _profileNotifier.addListener(_update);
-    // Ensure data is loaded if not already
-    if (!_profileNotifier.isLoaded) {
-      _profileNotifier.loadProfile();
-    }
+    if (!_profileNotifier.isLoaded) _profileNotifier.loadProfile();
   }
 
   @override
@@ -46,6 +47,33 @@ class _CustomDrawerState extends State<CustomDrawer> {
 
   void _update() {
     if (mounted) setState(() {});
+  }
+
+  Widget _buildStaggeredItem(Widget child, int index) {
+    return AnimatedBuilder(
+      animation: widget.drawerAnimation,
+      builder: (context, childWidget) {
+        final start = (index * 0.06).clamp(0.0, 1.0);
+        final end = (start + 0.4).clamp(0.0, 1.0);
+
+        final curve = CurvedAnimation(
+          parent: widget.drawerAnimation,
+          curve: Interval(start, end, curve: Curves.easeOutBack),
+        );
+
+        return Transform.scale(
+          scale: 0.8 + (0.2 * curve.value),
+          child: Transform.translate(
+            offset: Offset(-40 * (1 - curve.value), 0),
+            child: Opacity(
+              opacity: curve.value.clamp(0.0, 1.0),
+              child: childWidget,
+            ),
+          ),
+        );
+      },
+      child: child,
+    );
   }
 
   Future<void> _showLogoutDialog(BuildContext parentContext) async {
@@ -118,7 +146,6 @@ class _CustomDrawerState extends State<CustomDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    // Use notifier data
     final userName =
         _profileNotifier.fullName.isNotEmpty
             ? _profileNotifier.fullName
@@ -126,232 +153,249 @@ class _CustomDrawerState extends State<CustomDrawer> {
     final phone =
         (_profileNotifier.phoneNumber?.isNotEmpty ?? false)
             ? _profileNotifier.phoneNumber!
-            : "No Contact Info";
+            : "";
     final avatar = _profileNotifier.avatarUrl;
 
-    return Container(
-      color: drawerContentColor,
-      // PRO FIX: Adjusted padding so the design breathes properly
-      padding: const EdgeInsets.fromLTRB(20, 70, 0, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // --- PRO PROFILE SECTION ---
-          Padding(
-            padding: const EdgeInsets.only(left: 8),
+    return Stack(
+      children: [
+        AnimatedBuilder(
+          animation: Listenable.merge([
+            widget.pointerNotifier,
+            widget.drawerAnimation,
+          ]),
+          builder: (context, child) {
+            final pointer = widget.pointerNotifier.value;
+            return Positioned(
+              left: pointer.dx - 250,
+              top: pointer.dy - 250,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: widget.drawerAnimation.value > 0.1 ? 1.0 : 0.0,
+                child: Container(
+                  width: 500,
+                  height: 500,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        AppColors.primaryGreen.withValues(alpha: 0.15),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 30, top: 40, bottom: 40),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      width: 2,
-                    ),
-                    boxShadow: AppStyles.cardShadow(context),
-                  ),
-                  // PRO FIX: Removed NetworkImage, using AppNetworkImage for offline support
-                  child: CircleAvatar(
-                    radius: 38,
-                    backgroundColor: Colors.white,
-                    child:
-                        avatar != null && avatar.isNotEmpty
-                            ? AppNetworkImage(
-                              imageUrl: avatar,
-                              width: 76,
-                              height: 76,
-                              circular: true,
-                            )
-                            : const Icon(
-                              Icons.person,
-                              color: Colors.grey,
-                              size: 38,
-                            ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  userName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                _buildStaggeredItem(
+                  Row(
                     children: [
-                      const Icon(Icons.phone, color: Colors.white70, size: 12),
-                      const SizedBox(width: 6),
-                      Text(
-                        phone,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryGreen.withValues(
+                                alpha: 0.3,
+                              ),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 36,
+                          backgroundColor: Colors.white10,
+                          child:
+                              avatar != null && avatar.isNotEmpty
+                                  ? AppNetworkImage(
+                                    imageUrl: avatar,
+                                    width: 72,
+                                    height: 72,
+                                    circular: true,
+                                  )
+                                  : const Icon(
+                                    Icons.person,
+                                    color: Colors.white54,
+                                    size: 36,
+                                  ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              userName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            if (phone.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  phone,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
+                  0,
+                ),
+                const Spacer(),
+                _buildStaggeredItem(
+                  _TactileHUDItem(
+                    icon: Icons.person_outline_rounded,
+                    title: "Doctors",
+                    onTap: () {
+                      widget.onClose();
+                      context.push(AppRoutes.myDoctors);
+                    },
+                  ),
+                  1,
+                ),
+                const SizedBox(height: 28),
+                _buildStaggeredItem(
+                  _TactileHUDItem(
+                    icon: Icons.assignment_outlined,
+                    title: "Records",
+                    onTap: () {
+                      widget.onClose();
+                      context.push(AppRoutes.medicalRecords);
+                    },
+                  ),
+                  2,
+                ),
+                const SizedBox(height: 28),
+                _buildStaggeredItem(
+                  _TactileHUDItem(
+                    icon: Icons.calendar_today_rounded,
+                    title: "Schedule",
+                    onTap: () {
+                      widget.onClose();
+                      widget.onNavigateToTab(2);
+                    },
+                  ),
+                  3,
+                ),
+                const SizedBox(height: 28),
+                _buildStaggeredItem(
+                  _TactileHUDItem(
+                    icon: Icons.settings_outlined,
+                    title: "Settings",
+                    onTap: () {
+                      widget.onClose();
+                      context.push(AppRoutes.settings);
+                    },
+                  ),
+                  4,
+                ),
+                const Spacer(),
+                _buildStaggeredItem(
+                  _TactileHUDItem(
+                    icon: Icons.logout_rounded,
+                    title: "Log Out",
+                    color: Colors.redAccent,
+                    onTap: () => _showLogoutDialog(context),
+                  ),
+                  5,
                 ),
               ],
             ),
           ),
-
-          const SizedBox(height: 48),
-
-          // --- PRO NAVIGATION LIST ---
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              physics: const BouncingScrollPhysics(),
-              children: [
-                _buildDrawerItem(
-                  Icons.person_outline_rounded,
-                  "My Doctors",
-                  () {
-                    widget.onClose();
-                    context.push(AppRoutes.myDoctors);
-                  },
-                ),
-                _buildDrawerItem(
-                  Icons.assignment_outlined,
-                  "Medical Records",
-                  () {
-                    widget.onClose();
-                    context.push(AppRoutes.medicalRecords);
-                  },
-                ),
-                _buildDrawerItem(
-                  Icons.calendar_today_rounded,
-                  "My Appointments",
-                  () {
-                    widget.onClose();
-                    widget.onNavigateToTab(2);
-                  },
-                ),
-                _buildDrawerItem(Icons.settings_outlined, "Settings", () {
-                  widget.onClose();
-                  context.push(AppRoutes.settings);
-                }),
-              ],
-            ),
-          ),
-
-          // --- PRO LOGOUT BUTTON ---
-          Container(
-            margin: const EdgeInsets.only(right: 32, top: 20),
-            decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(
-                alpha: 0.15,
-              ), // Destructive Glassmorphism
-              borderRadius: const BorderRadius.horizontal(
-                right: Radius.circular(30),
-                left: Radius.circular(12),
-              ),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              leading: const Icon(
-                Icons.logout_rounded,
-                color: Colors.redAccent,
-                size: 24,
-              ),
-              title: const Text(
-                "Logout",
-                style: TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              onTap: () {
-                _showLogoutDialog(context);
-              },
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
 
-  // --- PRO DRAWER ITEM ---
-  Widget _buildDrawerItem(
-    IconData icon,
-    String title,
-    VoidCallback onTap, {
-    bool isSelected = false,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(
-        bottom: 8,
-        right: 16,
-      ), // Leave space on the right for pill effect
-      decoration:
-          isSelected
-              ? BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
-                borderRadius: const BorderRadius.horizontal(
-                  right: Radius.circular(30),
-                  left: Radius.circular(12),
-                ),
-                border: const Border(
-                  left: BorderSide(color: AppColors.primaryGreen, width: 4),
-                ),
-              )
-              : const BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: Colors.transparent, width: 4),
+class _TactileHUDItem extends StatefulWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _TactileHUDItem({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  State<_TactileHUDItem> createState() => _TactileHUDItemState();
+}
+
+class _TactileHUDItemState extends State<_TactileHUDItem> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = widget.color ?? Colors.white;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) {
+        HapticFeedback.heavyImpact();
+        setState(() => _isPressed = true);
+      },
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        Future.delayed(const Duration(milliseconds: 100), widget.onTap);
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.90 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: _isPressed ? 0.5 : 1.0,
+          duration: const Duration(milliseconds: 150),
+          child: Row(
+            children: [
+              Icon(
+                widget.icon,
+                color: baseColor.withValues(alpha: 0.3),
+                size: 30,
+              ),
+              const SizedBox(width: 20),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  color: baseColor,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1.0,
                 ),
               ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        horizontalTitleGap: 8,
-        minLeadingWidth: 24,
-        leading: Icon(
-          icon,
-          color: Colors.white.withValues(alpha: 0.9),
-          size: 24,
-        ),
-        title: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            title,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
-              fontSize: 15,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            ),
-          ),
-        ),
-        trailing:
-            isSelected
-                ? null
-                : const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Colors.white24,
-                  size: 14,
-                ),
-        onTap: onTap,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.horizontal(
-            right: Radius.circular(30),
-            left: Radius.circular(12),
+            ],
           ),
         ),
       ),
