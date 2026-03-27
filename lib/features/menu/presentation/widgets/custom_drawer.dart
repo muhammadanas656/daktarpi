@@ -14,14 +14,12 @@ class CustomDrawer extends StatefulWidget {
   final VoidCallback onClose;
   final Function(int) onNavigateToTab;
   final Animation<double> drawerAnimation;
-  final ValueNotifier<Offset> pointerNotifier;
 
   const CustomDrawer({
     super.key,
     required this.onClose,
     required this.onNavigateToTab,
     required this.drawerAnimation,
-    required this.pointerNotifier,
   });
 
   @override
@@ -53,23 +51,12 @@ class _CustomDrawerState extends State<CustomDrawer> {
     return AnimatedBuilder(
       animation: widget.drawerAnimation,
       builder: (context, childWidget) {
-        final start = (index * 0.06).clamp(0.0, 1.0);
-        final end = (start + 0.4).clamp(0.0, 1.0);
+        final double val = widget.drawerAnimation.value;
+        final double startOffset = 10.0 + (index * 4.0);
 
-        final curve = CurvedAnimation(
-          parent: widget.drawerAnimation,
-          curve: Interval(start, end, curve: Curves.easeOutBack),
-        );
-
-        return Transform.scale(
-          scale: 0.8 + (0.2 * curve.value),
-          child: Transform.translate(
-            offset: Offset(-40 * (1 - curve.value), 0),
-            child: Opacity(
-              opacity: curve.value.clamp(0.0, 1.0),
-              child: childWidget,
-            ),
-          ),
+        return Transform.translate(
+          offset: Offset(-startOffset * (1 - val), 0),
+          child: Opacity(opacity: val, child: childWidget),
         );
       },
       child: child,
@@ -153,250 +140,218 @@ class _CustomDrawerState extends State<CustomDrawer> {
     final phone =
         (_profileNotifier.phoneNumber?.isNotEmpty ?? false)
             ? _profileNotifier.phoneNumber!
-            : "";
+            : "No Contact Info";
     final avatar = _profileNotifier.avatarUrl;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Stack(
-      children: [
-        AnimatedBuilder(
-          animation: Listenable.merge([
-            widget.pointerNotifier,
-            widget.drawerAnimation,
-          ]),
-          builder: (context, child) {
-            final pointer = widget.pointerNotifier.value;
-            return Positioned(
-              left: pointer.dx - 250,
-              top: pointer.dy - 250,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: widget.drawerAnimation.value > 0.1 ? 1.0 : 0.0,
-                child: Container(
-                  width: 500,
-                  height: 500,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        AppColors.primaryGreen.withValues(alpha: 0.15),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.only(left: 30, top: 40, bottom: 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildStaggeredItem(
-                  Row(
+    final textColor = isDark ? Colors.white : const Color(0xFF1D2429);
+    final subTextColor = isDark ? Colors.white54 : const Color(0xFF6B7A87);
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 48, 16, 40),
+        child: SizedBox(
+          width: MediaQuery.sizeOf(context).width * 0.60,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStaggeredItem(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primaryGreen.withValues(
-                                alpha: 0.3,
-                              ),
-                              blurRadius: 20,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: CircleAvatar(
-                          radius: 36,
-                          backgroundColor: Colors.white10,
-                          child:
-                              avatar != null && avatar.isNotEmpty
-                                  ? AppNetworkImage(
-                                    imageUrl: avatar,
-                                    width: 72,
-                                    height: 72,
-                                    circular: true,
-                                  )
-                                  : const Icon(
-                                    Icons.person,
-                                    color: Colors.white54,
-                                    size: 36,
-                                  ),
+                      CircleAvatar(
+                        radius: 34,
+                        backgroundColor:
+                            isDark ? Colors.white10 : Colors.black12,
+                        child:
+                            avatar != null && avatar.isNotEmpty
+                                ? AppNetworkImage(
+                                  imageUrl: avatar,
+                                  width: 68,
+                                  height: 68,
+                                  circular: true,
+                                )
+                                : Icon(
+                                  Icons.person,
+                                  color: subTextColor,
+                                  size: 34,
+                                ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        userName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.6,
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              userName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            if (phone.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  phone,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 1.0,
-                                  ),
-                                ),
-                              ),
-                          ],
+                      const SizedBox(height: 4),
+                      Text(
+                        phone,
+                        style: TextStyle(
+                          color: subTextColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ],
                   ),
-                  0,
                 ),
-                const Spacer(),
-                _buildStaggeredItem(
-                  _TactileHUDItem(
-                    icon: Icons.person_outline_rounded,
-                    title: "Doctors",
-                    onTap: () {
-                      widget.onClose();
-                      context.push(AppRoutes.myDoctors);
-                    },
-                  ),
-                  1,
+                0,
+              ),
+              const SizedBox(height: 48),
+              _buildStaggeredItem(
+                _MenuItem(
+                  icon: Icons.medical_services_rounded,
+                  title: "Doctors",
+                  textColor: textColor,
+                  onTap: () {
+                    widget.onClose();
+                    context.push(AppRoutes.myDoctors);
+                  },
                 ),
-                const SizedBox(height: 28),
-                _buildStaggeredItem(
-                  _TactileHUDItem(
-                    icon: Icons.assignment_outlined,
-                    title: "Records",
-                    onTap: () {
-                      widget.onClose();
-                      context.push(AppRoutes.medicalRecords);
-                    },
-                  ),
-                  2,
+                1,
+              ),
+              const SizedBox(height: 6),
+              _buildStaggeredItem(
+                _MenuItem(
+                  icon: Icons.assignment_rounded,
+                  title: "Records",
+                  textColor: textColor,
+                  onTap: () {
+                    widget.onClose();
+                    context.push(AppRoutes.medicalRecords);
+                  },
                 ),
-                const SizedBox(height: 28),
-                _buildStaggeredItem(
-                  _TactileHUDItem(
-                    icon: Icons.calendar_today_rounded,
-                    title: "Schedule",
-                    onTap: () {
-                      widget.onClose();
-                      widget.onNavigateToTab(2);
-                    },
-                  ),
-                  3,
+                2,
+              ),
+              const SizedBox(height: 6),
+              _buildStaggeredItem(
+                _MenuItem(
+                  icon: Icons.calendar_month_rounded,
+                  title: "Schedule",
+                  textColor: textColor,
+                  onTap: () {
+                    widget.onClose();
+                    widget.onNavigateToTab(2);
+                  },
                 ),
-                const SizedBox(height: 28),
-                _buildStaggeredItem(
-                  _TactileHUDItem(
-                    icon: Icons.settings_outlined,
-                    title: "Settings",
-                    onTap: () {
-                      widget.onClose();
-                      context.push(AppRoutes.settings);
-                    },
-                  ),
-                  4,
+                3,
+              ),
+              const SizedBox(height: 6),
+              _buildStaggeredItem(
+                _MenuItem(
+                  icon: Icons.settings_rounded,
+                  title: "Settings",
+                  textColor: textColor,
+                  onTap: () {
+                    widget.onClose();
+                    context.push(AppRoutes.settings);
+                  },
                 ),
-                const Spacer(),
-                _buildStaggeredItem(
-                  _TactileHUDItem(
-                    icon: Icons.logout_rounded,
-                    title: "Log Out",
-                    color: Colors.redAccent,
-                    onTap: () => _showLogoutDialog(context),
-                  ),
-                  5,
+                4,
+              ),
+              const Spacer(),
+              _buildStaggeredItem(
+                _MenuItem(
+                  icon: Icons.logout_rounded,
+                  title: "Log Out",
+                  textColor: Colors.redAccent,
+                  isLogout: true,
+                  onTap: () => _showLogoutDialog(context),
                 ),
-              ],
-            ),
+                5,
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
 
-class _TactileHUDItem extends StatefulWidget {
+class _MenuItem extends StatefulWidget {
   final IconData icon;
   final String title;
   final VoidCallback onTap;
-  final Color? color;
+  final Color textColor;
+  final bool isLogout;
 
-  const _TactileHUDItem({
+  const _MenuItem({
     required this.icon,
     required this.title,
     required this.onTap,
-    this.color,
+    required this.textColor,
+    this.isLogout = false,
   });
 
   @override
-  State<_TactileHUDItem> createState() => _TactileHUDItemState();
+  State<_MenuItem> createState() => _MenuItemState();
 }
 
-class _TactileHUDItemState extends State<_TactileHUDItem> {
-  bool _isPressed = false;
+class _MenuItemState extends State<_MenuItem> {
+  bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = widget.color ?? Colors.white;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconBgColor =
+        widget.isLogout
+            ? Colors.redAccent.withValues(alpha: 0.1)
+            : AppColors.primaryGreen.withValues(alpha: isDark ? 0.15 : 0.1);
+    final iconColor =
+        widget.isLogout ? Colors.redAccent : AppColors.primaryGreen;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (_) {
-        HapticFeedback.heavyImpact();
-        setState(() => _isPressed = true);
+        HapticFeedback.selectionClick();
+        setState(() => _isHovered = true);
       },
       onTapUp: (_) {
-        setState(() => _isPressed = false);
+        setState(() => _isHovered = false);
         Future.delayed(const Duration(milliseconds: 100), widget.onTap);
       },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.90 : 1.0,
+      onTapCancel: () => setState(() => _isHovered = false),
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
-        child: AnimatedOpacity(
-          opacity: _isPressed ? 0.5 : 1.0,
-          duration: const Duration(milliseconds: 150),
-          child: Row(
-            children: [
-              Icon(
-                widget.icon,
-                color: baseColor.withValues(alpha: 0.3),
-                size: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color:
+              _isHovered
+                  ? widget.textColor.withValues(alpha: 0.05)
+                  : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconBgColor,
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 20),
-              Text(
-                widget.title,
-                style: TextStyle(
-                  color: baseColor,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1.0,
-                ),
+              child: Icon(widget.icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              widget.title,
+              style: TextStyle(
+                color: widget.textColor.withValues(alpha: _isHovered ? 0.7 : 1),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

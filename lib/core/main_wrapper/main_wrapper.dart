@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -29,9 +28,6 @@ class _MainWrapperState extends State<MainWrapper>
   final ValueNotifier<double> _depthTensionNotifier = ValueNotifier<double>(
     0.0,
   );
-  final ValueNotifier<Offset> _pointerPosition = ValueNotifier<Offset>(
-    Offset.zero,
-  );
 
   bool _hasFiredThresholdHaptic = false;
 
@@ -42,11 +38,11 @@ class _MainWrapperState extends State<MainWrapper>
 
     _drawerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 320),
     );
     _springController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 320),
     );
 
     AppointmentNotifier.instance.initializeRealtime();
@@ -71,12 +67,28 @@ class _MainWrapperState extends State<MainWrapper>
     _springController.dispose();
     _tabDragNotifier.dispose();
     _depthTensionNotifier.dispose();
-    _pointerPosition.dispose();
     super.dispose();
   }
 
+  void _closeDrawerWithHaptic() {
+    _drawerController
+        .animateTo(0.0, curve: Curves.easeOutQuint)
+        .then((_) => HapticFeedback.selectionClick());
+  }
+
+  void _openDrawerWithHaptic() {
+    _drawerController
+        .animateTo(1.0, curve: Curves.easeOutQuint)
+        .then((_) => HapticFeedback.selectionClick());
+  }
+
   void _goToBranch(int index) {
-    if (index == widget.navigationShell.currentIndex) return;
+    if (index == widget.navigationShell.currentIndex) {
+      if (_drawerController.value > 0) {
+        _closeDrawerWithHaptic();
+      }
+      return;
+    }
 
     if (_springController.isAnimating) _springController.stop();
     _tabDragNotifier.value = 0.0;
@@ -86,30 +98,30 @@ class _MainWrapperState extends State<MainWrapper>
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
     );
-    if (_drawerController.value > 0) _drawerController.reverse();
+
+    if (_drawerController.value > 0) {
+      _closeDrawerWithHaptic();
+    }
   }
 
   void _toggleDrawer() {
     FocusManager.instance.primaryFocus?.unfocus();
     if (_drawerController.isDismissed) {
-      _drawerController.animateTo(1.0, curve: Curves.easeOutQuart);
+      _openDrawerWithHaptic();
     } else {
-      _drawerController.animateTo(0.0, curve: Curves.easeOutQuart);
+      _closeDrawerWithHaptic();
     }
   }
 
   void _onDragStart(DragStartDetails details) {
     if (_springController.isAnimating) _springController.stop();
     _depthTensionNotifier.value = _tabDragNotifier.value.abs();
-    _pointerPosition.value = details.globalPosition;
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
     int currentIndex = widget.navigationShell.currentIndex;
     final screenWidth = MediaQuery.sizeOf(context).width;
-
-    _pointerPosition.value = details.globalPosition;
 
     double drawerDelta = details.primaryDelta! / (screenWidth * 0.65);
     double tabDelta = details.primaryDelta! / screenWidth;
@@ -146,13 +158,11 @@ class _MainWrapperState extends State<MainWrapper>
 
     if (_drawerController.value > 0.0) {
       if (velocity.abs() > 200) {
-        velocity > 0
-            ? _drawerController.animateTo(1.0, curve: Curves.easeOutQuart)
-            : _drawerController.animateTo(0.0, curve: Curves.easeOutQuart);
+        velocity > 0 ? _openDrawerWithHaptic() : _closeDrawerWithHaptic();
       } else {
         _drawerController.value > 0.5
-            ? _drawerController.animateTo(1.0, curve: Curves.easeOutQuart)
-            : _drawerController.animateTo(0.0, curve: Curves.easeOutQuart);
+            ? _openDrawerWithHaptic()
+            : _closeDrawerWithHaptic();
       }
       return;
     }
@@ -185,15 +195,13 @@ class _MainWrapperState extends State<MainWrapper>
 
   void _animateDepthToZero() {
     _hasFiredThresholdHaptic = false;
-    _springController.duration = const Duration(milliseconds: 350);
-
+    _springController.duration = const Duration(milliseconds: 320);
     final Animation<double> anim = Tween<double>(
       begin: _depthTensionNotifier.value,
       end: 0.0,
     ).animate(
-      CurvedAnimation(parent: _springController, curve: Curves.easeOutQuart),
+      CurvedAnimation(parent: _springController, curve: Curves.easeOutQuint),
     );
-
     void listener() => _depthTensionNotifier.value = anim.value;
     anim.addListener(listener);
     _springController
@@ -204,14 +212,12 @@ class _MainWrapperState extends State<MainWrapper>
   void _animateBothToZero() {
     _hasFiredThresholdHaptic = false;
     _springController.duration = const Duration(milliseconds: 250);
-
     final Animation<double> anim = Tween<double>(
       begin: _tabDragNotifier.value,
       end: 0.0,
     ).animate(
       CurvedAnimation(parent: _springController, curve: Curves.easeOutCubic),
     );
-
     void listener() {
       _tabDragNotifier.value = anim.value;
       _depthTensionNotifier.value = anim.value.abs();
@@ -226,183 +232,162 @@ class _MainWrapperState extends State<MainWrapper>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final screenHeight = MediaQuery.sizeOf(context).height;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final canvasColor =
+        isDark ? const Color(0xFF0D1217) : const Color(0xFFF4F7F9);
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(-0.8, -0.3),
-            radius: 1.5,
-            colors: [Color(0xFF0F171A), Colors.black],
-          ),
-        ),
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onHorizontalDragStart: _onDragStart,
-          onHorizontalDragUpdate: _onDragUpdate,
-          onHorizontalDragEnd: _onDragEnd,
-          child: Stack(
-            children: [
-              CustomDrawer(
-                onClose: _toggleDrawer,
-                onNavigateToTab: _goToBranch,
-                drawerAnimation: _drawerController,
-                pointerNotifier: _pointerPosition,
-              ),
-              AnimatedBuilder(
-                animation: Listenable.merge([
-                  _tabDragNotifier,
-                  _depthTensionNotifier,
-                  _drawerController,
-                  _pointerPosition,
-                ]),
-                builder: (context, child) {
-                  final double tabTension = _depthTensionNotifier.value;
-                  final double dragValue = _tabDragNotifier.value;
-                  final double tabScale = 1.0 - (tabTension * 0.06);
-                  final double tabBlur =
-                      math.pow(tabTension, 1.5).toDouble() * 20.0;
+      backgroundColor: canvasColor,
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: _onDragStart,
+        onHorizontalDragUpdate: _onDragUpdate,
+        onHorizontalDragEnd: _onDragEnd,
+        child: Stack(
+          children: [
+            CustomDrawer(
+              onClose: _toggleDrawer,
+              onNavigateToTab: _goToBranch,
+              drawerAnimation: _drawerController,
+            ),
+            AnimatedBuilder(
+              animation: Listenable.merge([
+                _tabDragNotifier,
+                _depthTensionNotifier,
+                _drawerController,
+              ]),
+              builder: (context, child) {
+                final double tabTension = _depthTensionNotifier.value;
+                final double drawerVal = _drawerController.value;
 
-                  final double drawerVal = _drawerController.value;
-                  final double scale = tabScale - (drawerVal * 0.3);
-                  final double translateX = drawerVal * (screenWidth * 0.65);
-                  final double rotateY = drawerVal * -0.15;
-                  final double normalizedY =
-                      (_pointerPosition.value.dy / screenHeight) - 0.5;
-                  final double rotateX = drawerVal * (normalizedY * 0.1);
-                  final double radius =
-                      (tabTension * 45.0) + (drawerVal * 40.0);
-                  final double totalBlur =
-                      math.max(tabBlur, drawerVal * 25.0).toDouble();
+                final double scale =
+                    1.0 - (tabTension * 0.05) - (drawerVal * 0.12);
+                final double translateX = drawerVal * (screenWidth * 0.62);
+                final double radius = (tabTension * 32.0) + (drawerVal * 48.0);
+                final double rotateY = drawerVal * -0.06;
 
-                  return Transform(
-                    alignment: Alignment.center,
-                    transform:
-                        Matrix4.identity()
-                          ..setEntry(3, 2, 0.001)
-                          ..translate(translateX, 0.0, 0.0)
-                          ..scale(scale)
-                          ..rotateY(rotateY)
-                          ..rotateX(rotateX),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(radius),
-                        border:
-                            drawerVal > 0.05
-                                ? Border.all(
+                return Transform(
+                  alignment: Alignment.centerLeft,
+                  transform:
+                      Matrix4.identity()
+                        ..setEntry(3, 2, 0.001)
+                        ..translate(translateX, 0.0, 0.0)
+                        ..scale(scale)
+                        ..rotateY(rotateY),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(radius),
+                      border:
+                          drawerVal > 0.05
+                              ? Border.all(
+                                color: Colors.white.withValues(
+                                  alpha: drawerVal * 0.15,
+                                ),
+                                width: 1.0,
+                              )
+                              : null,
+                      boxShadow:
+                          drawerVal > 0.05 || tabTension > 0.05
+                              ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(
+                                    alpha: isDark ? 0.5 : 0.08,
+                                  ),
+                                  blurRadius: 50,
+                                  spreadRadius: 0,
+                                  offset: const Offset(-20, 0),
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withValues(
+                                    alpha: isDark ? 0.3 : 0.04,
+                                  ),
+                                  blurRadius: 15,
+                                  spreadRadius: -5,
+                                  offset: const Offset(-5, 0),
+                                ),
+                                BoxShadow(
                                   color: Colors.white.withValues(
-                                    alpha: drawerVal * 0.15,
+                                    alpha: isDark ? 0.05 : 0.4,
                                   ),
-                                  width: 1.5,
-                                )
-                                : null,
-                        boxShadow:
-                            drawerVal > 0.05
-                                ? [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(
-                                      alpha: drawerVal * 0.9,
-                                    ),
-                                    blurRadius: 60,
-                                    spreadRadius: 10,
-                                    offset: const Offset(-30, 0),
-                                  ),
-                                ]
-                                : const [],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          RepaintBoundary(
+                                  blurRadius: 2,
+                                  spreadRadius: 0,
+                                  offset: const Offset(-1, 0),
+                                ),
+                              ]
+                              : const [],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        RepaintBoundary(
+                          child: Container(
+                            color: Theme.of(context).scaffoldBackgroundColor,
+                            child: widget.navigationShell,
+                          ),
+                        ),
+                        if (drawerVal > 0)
+                          GestureDetector(
+                            onTap: _toggleDrawer,
+                            child: Container(color: Colors.transparent),
+                          ),
+                        if (tabTension > 0 || drawerVal > 0)
+                          IgnorePointer(
                             child: Container(
-                              color: Theme.of(context).scaffoldBackgroundColor,
-                              child: widget.navigationShell,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Colors.white.withValues(
+                                      alpha: drawerVal * 0.08,
+                                    ),
+                                    Colors.black.withValues(
+                                      alpha: drawerVal * 0.22,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                          if (drawerVal > 0)
-                            GestureDetector(
-                              onTap: _toggleDrawer,
-                              child: Container(color: Colors.transparent),
-                            ),
-                          if (drawerVal > 0)
-                            IgnorePointer(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment(0.5, normalizedY - 1),
-                                    end: Alignment(-0.5, normalizedY + 1),
-                                    colors: [
-                                      Colors.white.withValues(
-                                        alpha: drawerVal * 0.1,
-                                      ),
-                                      Colors.transparent,
-                                      Colors.black.withValues(
-                                        alpha: drawerVal * 0.5,
-                                      ),
-                                    ],
-                                    stops: const [0.0, 0.3, 1.0],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (tabTension > 0 || drawerVal > 0)
-                            IgnorePointer(
-                              child: BackdropFilter(
-                                filter: ui.ImageFilter.blur(
-                                  sigmaX: totalBlur,
-                                  sigmaY: totalBlur,
-                                ),
-                                child: Container(
-                                  color: Colors.black.withValues(
-                                    alpha: math.max(
-                                      tabTension * 0.4,
-                                      drawerVal * 0.3,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            Positioned(
+              bottom: MediaQuery.paddingOf(context).bottom + 20,
+              left: 20,
+              right: 20,
+              child: AnimatedBuilder(
+                animation: _drawerController,
+                builder: (context, child) {
+                  return IgnorePointer(
+                    ignoring: _drawerController.value > 0.0,
+                    child: Transform.translate(
+                      offset: Offset(0, _drawerController.value * 100),
+                      child: Opacity(
+                        opacity:
+                            (1.0 - (_drawerController.value * 2))
+                                .clamp(0.0, 1.0)
+                                .toDouble(),
+                        child: child,
                       ),
                     ),
                   );
                 },
-              ),
-              Positioned(
-                bottom: MediaQuery.paddingOf(context).bottom + 20,
-                left: 20,
-                right: 20,
-                child: AnimatedBuilder(
-                  animation: _drawerController,
-                  builder: (context, child) {
-                    return IgnorePointer(
-                      ignoring: _drawerController.value > 0.0,
-                      child: Transform.translate(
-                        offset: Offset(0, _drawerController.value * 100),
-                        child: Opacity(
-                          opacity:
-                              (1.0 - (_drawerController.value * 2))
-                                  .clamp(0.0, 1.0)
-                                  .toDouble(),
-                          child: child,
-                        ),
-                      ),
-                    );
-                  },
-                  child: RepaintBoundary(
-                    child: _HolographicFluidDock(
-                      selectedIndex: widget.navigationShell.currentIndex,
-                      onTap: _goToBranch,
-                      tabDragNotifier: _tabDragNotifier,
-                      depthTensionNotifier: _depthTensionNotifier,
-                    ),
+                child: RepaintBoundary(
+                  child: _HolographicFluidDock(
+                    selectedIndex: widget.navigationShell.currentIndex,
+                    onTap: _goToBranch,
+                    tabDragNotifier: _tabDragNotifier,
+                    depthTensionNotifier: _depthTensionNotifier,
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
