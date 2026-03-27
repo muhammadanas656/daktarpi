@@ -107,9 +107,13 @@ class _MainWrapperState extends State<MainWrapper>
   void _toggleDrawer() {
     FocusManager.instance.primaryFocus?.unfocus();
     if (_drawerController.isDismissed) {
-      _openDrawerWithHaptic();
+      _drawerController
+          .animateTo(1.0, curve: Curves.easeOutBack)
+          .then((_) => HapticFeedback.mediumImpact());
     } else {
-      _closeDrawerWithHaptic();
+      _drawerController
+          .animateTo(0.0, curve: Curves.easeOutQuint)
+          .then((_) => HapticFeedback.selectionClick());
     }
   }
 
@@ -158,11 +162,21 @@ class _MainWrapperState extends State<MainWrapper>
 
     if (_drawerController.value > 0.0) {
       if (velocity.abs() > 200) {
-        velocity > 0 ? _openDrawerWithHaptic() : _closeDrawerWithHaptic();
+        velocity > 0
+            ? _drawerController
+                .animateTo(1.0, curve: Curves.easeOutBack)
+                .then((_) => HapticFeedback.mediumImpact())
+            : _drawerController
+                .animateTo(0.0, curve: Curves.easeOutQuint)
+                .then((_) => HapticFeedback.selectionClick());
       } else {
         _drawerController.value > 0.5
-            ? _openDrawerWithHaptic()
-            : _closeDrawerWithHaptic();
+            ? _drawerController
+                .animateTo(1.0, curve: Curves.easeOutBack)
+                .then((_) => HapticFeedback.mediumImpact())
+            : _drawerController
+                .animateTo(0.0, curve: Curves.easeOutQuint)
+                .then((_) => HapticFeedback.selectionClick());
       }
       return;
     }
