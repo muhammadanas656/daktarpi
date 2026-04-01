@@ -5,11 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../favorites_notifier.dart';
+import '../doctors_notifier.dart';
+import '../widgets/smart_filter_bar.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../profile/presentation/profile_notifier.dart';
-import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
+import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../data/doctor_repository.dart';
 import '../../../../core/widgets/app_loader.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
@@ -30,7 +31,9 @@ class SpecialtyDoctorsScreen extends StatefulWidget {
   State<SpecialtyDoctorsScreen> createState() => _SpecialtyDoctorsScreenState();
 }
 
-class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
+class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _searchController = TextEditingController();
   final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
@@ -40,6 +43,8 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   List<Map<String, dynamic>> _doctors = [];
   bool _isLoading = true;
   String? _specialtyIconUrl;
+  String _selectedFilter = "All";
+  double? _activeRadiusKm;
 
   @override
   void initState() {
@@ -47,11 +52,8 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
     _specialtyIconUrl = widget.specialtyIconUrl;
     _favNotifier.addListener(_onStateChanged);
     _profileNotifier.addListener(_onStateChanged);
-    
     _fetchData();
-    if (_specialtyIconUrl == null) {
-      _fetchSpecialtyIcon();
-    }
+    if (_specialtyIconUrl == null) _fetchSpecialtyIcon();
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -69,7 +71,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
   }
 
   void _onSearchChanged() {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
       _fetchData(query: _searchController.text);
     });
@@ -86,10 +88,30 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
     if (!_favNotifier.isLoaded) await _favNotifier.loadFavorites();
     try {
       final countryIso = _profileNotifier.profile?.countryIso;
+      
+      double? userLat;
+      double? userLng;
+      
+      if (_activeRadiusKm != null || _selectedFilter == 'Nearest' || _selectedFilter == 'Available Today') {
+        try {
+          final pos = await DoctorsNotifier.instance.getUserPosition();
+          if (pos != null) {
+            userLat = pos.latitude;
+            userLng = pos.longitude;
+          }
+        } catch (e) {
+          debugPrint("Location sorting failed: $e");
+        }
+      }
+
       final doctors = await _doctorRepo.fetchDoctorsBySpecialty(
         widget.specialtyId,
         query: query,
+        filterType: _selectedFilter,
+        maxRadiusKm: _activeRadiusKm,
         countryIso: countryIso,
+        userLat: userLat,
+        userLng: userLng,
       );
       if (mounted) {
         setState(() {
@@ -110,361 +132,412 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> {
     return Icons.medical_services_rounded;
   }
 
-  Widget _buildSpecialtyInfoCard(int doctorCount, bool isLoading) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(20), 
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 32,
-            spreadRadius: 4,
-            offset: const Offset(0, 12), 
-          )
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Hero(
-            tag: 'specialty_icon_${widget.specialtyId}',
-            child: Container(
-              padding: _specialtyIconUrl != null && _specialtyIconUrl!.isNotEmpty ? const EdgeInsets.all(12) : const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: AppColors.primaryGreen.withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: _specialtyIconUrl != null && _specialtyIconUrl!.isNotEmpty
-                  ? SizedBox(
-                      width: 36, height: 36,
-                      child: AppNetworkImage(imageUrl: _specialtyIconUrl!, circular: false, fit: BoxFit.contain),
-                    )
-                  : Icon(_getFallbackIcon(), color: AppColors.primaryGreen, size: 32),
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  widget.specialtyName,
-                  style: AppTextStyles.h2(context).copyWith(fontSize: 22, letterSpacing: -0.4, height: 1.2),
-                  maxLines: 2, overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(isLoading ? Icons.hourglass_empty_rounded : Icons.people_alt_rounded, size: 16, color: AppColors.primaryGreen),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isLoading ? "Searching roster..." : "$doctorCount ${widget.specialtyName}${doctorCount == 1 ? '' : 's'}",
-                        style: const TextStyle(color: AppColors.primaryGreen, fontSize: 14, fontWeight: FontWeight.w700),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final currentIconUrl = _specialtyIconUrl;
+    final hasValidIcon = currentIconUrl != null && currentIconUrl.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            stretch: true,
-            expandedHeight: 200, // 📌 POLISH: Reduced to 200px to kill all vacancy
-            elevation: 0,
-            backgroundColor: Colors.transparent,
-            leadingWidth: 64,
-            leading: Center(
-              child: InkWell(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  context.pop();
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
-                ),
-              ),
-            ),
-            // 📌 POLISH: Added symmetrical action button to frame the top layout
-            actions: [
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(right: 24),
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.more_horiz_rounded, color: Colors.white, size: 20),
-                    onPressed: () => HapticFeedback.lightImpact(),
-                  ),
-                ),
-              ),
-            ],
-            flexibleSpace: LayoutBuilder(
-              builder: (context, constraints) {
-                final top = constraints.biggest.height;
-                final safeArea = MediaQuery.of(context).padding.top;
-                final collapsedHeight = safeArea + kToolbarHeight;
-                const expandedHeight = 200.0;
-
-                final expandRatio = (expandedHeight - collapsedHeight) > 0 
-                    ? ((top - collapsedHeight) / (expandedHeight - collapsedHeight)).clamp(0.0, 1.0)
-                    : 1.0;
-                
-                final collapseRatio = 1.0 - expandRatio;
-
-                final cardOpacity = ((expandRatio - 0.3) / 0.7).clamp(0.0, 1.0);
-                final miniHeaderOpacity = ((collapseRatio - 0.4) / 0.6).clamp(0.0, 1.0);
-
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      top: -500, left: 0, right: 0, 
-                      bottom: 40 * expandRatio, // 📌 Card deeply overlaps the curve
-                      child: ClipPath(
-                        clipper: ShapeBorderClipper(
-                          shape: ContinuousRectangleBorder(
-                            borderRadius: BorderRadius.only(
-                              bottomLeft: Radius.circular(80 * expandRatio),
-                              bottomRight: Radius.circular(80 * expandRatio),
-                            ),
-                          ),
-                        ),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: isDark
-                                      ? [AppColors.primaryGreen.withValues(alpha: 0.8), AppColors.primaryGreen.withValues(alpha: 0.3)]
-                                      : [AppColors.primaryGreen, const Color(0xFF00A884)], 
-                                ),
-                              ),
-                            ),
-                            // 📌 POLISH: The massive, subtle background watermark
-                            Positioned(
-                              right: -30,
-                              top: safeArea - 20,
-                              child: Transform.rotate(
-                                angle: -0.2,
-                                child: Icon(
-                                  _getFallbackIcon(),
-                                  size: 220,
-                                  color: Colors.white.withValues(alpha: 0.06),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    Positioned(
-                      left: 0, right: 0, bottom: 0, // 📌 Lifted to absolute bottom 0 
-                      child: IgnorePointer(
-                        ignoring: cardOpacity == 0.0,
-                        child: Opacity(
-                          opacity: cardOpacity,
-                          child: Transform.scale(
-                            scale: 0.95 + (0.05 * expandRatio),
-                            child: SafeArea(
-                              bottom: false,
-                              child: _buildSpecialtyInfoCard(_doctors.length, _isLoading),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // 📌 POLISH: The "Eyebrow Morph" (Fades out, Mini-Header fades in)
-                    Positioned(
-                      top: safeArea,
-                      left: 64, right: 64,
-                      height: kToolbarHeight,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // 1. The Expanded "Eyebrow" Pill
-                          IgnorePointer(
-                            ignoring: cardOpacity == 0.0,
-                            child: Opacity(
-                              opacity: cardOpacity,
-                              child: Transform.translate(
-                                offset: Offset(0, -10 * (1 - cardOpacity)),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.verified_rounded, color: Colors.white, size: 14),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        "VERIFIED SPECIALISTS",
-                                        style: AppTextStyles.bodySmall(context).copyWith(
-                                          color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.0,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // 2. The Collapsed Mini-Header
-                          IgnorePointer(
-                            ignoring: miniHeaderOpacity == 0.0,
-                            child: Transform.translate(
-                              offset: Offset(0, 15 * (1 - miniHeaderOpacity)), 
-                              child: Opacity(
-                                opacity: miniHeaderOpacity,
-                                child: Transform.scale(
-                                  scale: 0.9 + (0.1 * miniHeaderOpacity), 
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 32, height: 32,
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withValues(alpha: 0.15), 
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
-                                        ),
-                                        padding: const EdgeInsets.all(6),
-                                        child: _specialtyIconUrl != null && _specialtyIconUrl!.isNotEmpty
-                                            ? AppNetworkImage(imageUrl: _specialtyIconUrl!, circular: true, fit: BoxFit.cover)
-                                            : Icon(_getFallbackIcon(), color: Colors.white, size: 16),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Flexible(
-                                        child: Text(
-                                          widget.specialtyName,
-                                          style: AppTextStyles.h3(context).copyWith(color: Colors.white, fontSize: 18, letterSpacing: 0.3),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+      body: Stack(
+        children: [
+          Positioned(
+            top: -150,
+            left: -100,
+            right: -100,
+            height: 400,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.primaryGreen.withOpacity(isDark ? 0.15 : 0.08),
+                    AppColors.primaryGreen.withOpacity(0.0),
                   ],
-                );
-              },
+                  stops: const [0.2, 1.0],
+                ),
+              ),
             ),
           ),
+          CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                // THE FIX 1: Brought the expanded height up to 156.0 so the title doesn't sink too low
+                expandedHeight: 156.0,
+                elevation: 0,
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                leadingWidth: 72,
+                leading: Container(
+                  padding: const EdgeInsets.only(left: 24),
+                  alignment: Alignment.centerLeft,
+                  child: Material(
+                    color:
+                        isDark
+                            ? Colors.white12
+                            : Colors.black.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        context.pop();
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color:
+                              isDark ? Colors.white : const Color(0xFF1D1D1F),
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                flexibleSpace: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final top = constraints.biggest.height;
+                    final safeArea = MediaQuery.of(context).padding.top;
+                    final collapsedHeight = safeArea + kToolbarHeight;
+                    // Must match the expandedHeight above perfectly
+                    const expandedHeight = 156.0;
 
-          SliverPersistentHeader(
-            pinned: true, 
-            delegate: _DynamicGlassShelfDelegate(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
-                child: CustomSearchBar(
-                  controller: _searchController,
-                  hintText: "Search ${widget.specialtyName}s...",
-                  showClearIcon: _searchController.text.isNotEmpty,
-                  onClear: () {
-                    HapticFeedback.lightImpact(); 
-                    _searchController.clear();
-                    _fetchData();
-                    FocusScope.of(context).unfocus();
+                    final expandRatio =
+                        (expandedHeight - collapsedHeight) > 0
+                            ? ((top - collapsedHeight) /
+                                    (expandedHeight - collapsedHeight))
+                                .clamp(0.0, 1.0)
+                            : 1.0;
+                    final collapseRatio = 1.0 - expandRatio;
+
+                    final largeHeaderOpacity = ((expandRatio - 0.3) / 0.7)
+                        .clamp(0.0, 1.0);
+                    final miniHeaderOpacity = ((collapseRatio - 0.5) / 0.5)
+                        .clamp(0.0, 1.0);
+
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Opacity(
+                          opacity: miniHeaderOpacity,
+                          child: ClipRRect(
+                            child: BackdropFilter(
+                              filter: ui.ImageFilter.blur(
+                                sigmaX: 20,
+                                sigmaY: 20,
+                              ),
+                              child: Container(
+                                color: Theme.of(
+                                  context,
+                                ).scaffoldBackgroundColor.withOpacity(0.85),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 24,
+                          right: 24,
+                          bottom: 16, // Snug bottom alignment
+                          child: IgnorePointer(
+                            ignoring: largeHeaderOpacity == 0.0,
+                            child: Opacity(
+                              opacity: largeHeaderOpacity,
+                              child: Transform.translate(
+                                offset: Offset(
+                                  0,
+                                  10 * (1 - largeHeaderOpacity),
+                                ), // Smoother translation
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 72,
+                                      height: 72,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            isDark
+                                                ? Theme.of(
+                                                  context,
+                                                ).colorScheme.surface
+                                                : Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow:
+                                            isDark
+                                                ? []
+                                                : [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withOpacity(0.06),
+                                                    blurRadius: 20,
+                                                    offset: const Offset(0, 10),
+                                                  ),
+                                                ],
+                                      ),
+                                      child: Container(
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color:
+                                                isDark
+                                                    ? Colors.white.withOpacity(
+                                                      0.08,
+                                                    )
+                                                    : Colors.black.withOpacity(
+                                                      0.03,
+                                                    ),
+                                          ),
+                                        ),
+                                        child:
+                                            hasValidIcon
+                                                ? SizedBox(
+                                                  width: 38,
+                                                  height: 38,
+                                                  child: AppNetworkImage(
+                                                    imageUrl: currentIconUrl,
+                                                    circular: false,
+                                                    fit: BoxFit.contain,
+                                                  ),
+                                                )
+                                                : Icon(
+                                                  _getFallbackIcon(),
+                                                  color: AppColors.primaryGreen,
+                                                  size: 32,
+                                                ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            widget.specialtyName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color:
+                                                  isDark
+                                                      ? Colors.white
+                                                      : const Color(0xFF1D1D1F),
+                                              fontSize: 32,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: -0.8,
+                                              height: 1.1,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primaryGreen
+                                                  .withOpacity(0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              _isLoading
+                                                  ? "Searching..."
+                                                  : "${_doctors.length} Verified Specialists",
+                                              style: const TextStyle(
+                                                color: AppColors.primaryGreen,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: safeArea,
+                          left: 72,
+                          right: 72,
+                          height: kToolbarHeight,
+                          child: IgnorePointer(
+                            ignoring: miniHeaderOpacity == 0.0,
+                            child: Opacity(
+                              opacity: miniHeaderOpacity,
+                              child: Transform.translate(
+                                offset: Offset(
+                                  0,
+                                  -10 * (1 - miniHeaderOpacity),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 34,
+                                      height: 34,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryGreen
+                                            .withOpacity(0.12),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child:
+                                          hasValidIcon
+                                              ? SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child: AppNetworkImage(
+                                                  imageUrl: currentIconUrl,
+                                                  circular: false,
+                                                  fit: BoxFit.contain,
+                                                ),
+                                              )
+                                              : Icon(
+                                                _getFallbackIcon(),
+                                                color: AppColors.primaryGreen,
+                                                size: 16,
+                                              ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        widget.specialtyName,
+                                        style: TextStyle(
+                                          color:
+                                              isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF1D1D1F),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.3,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
                   },
                 ),
               ),
-            ),
-          ),
 
-          if (_isLoading)
-            const SliverFillRemaining(child: Center(child: AppLoader(color: AppColors.primaryGreen)))
-          else if (_doctors.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: Text("No ${widget.specialtyName.toLowerCase()}s found.", style: AppTextStyles.h3(context))),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final doctor = _doctors[index];
-                    final docId = doctor['id'] as int;
-                    final specialtyName = doctor['specialties']?['name'] ?? 'Specialist';
-                    
-                    return TweenAnimationBuilder<double>(
-                      key: ValueKey(docId), 
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      duration: Duration(milliseconds: 300 + (index.clamp(0, 8) * 40)), 
-                      curve: Curves.easeOutQuart,
-                      builder: (context, value, child) {
-                        return Transform.translate(
-                          offset: Offset(0, 20 * (1 - value)), 
-                          child: Opacity(opacity: value, child: child),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _DynamicGlassCapsuleDelegate(
+                  child: Container(
+                    // THE FIX 2: Tightened the internal padding of the Glass Capsule so the pills sit nicely
+                    padding: const EdgeInsets.only(top: 12, bottom: 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: CustomSearchBar(
+                            controller: _searchController,
+                            hintText: "Search ${widget.specialtyName}s...",
+                            showClearIcon: _searchController.text.isNotEmpty,
+                            onClear: () {
+                              HapticFeedback.lightImpact();
+                              _searchController.clear();
+                              _fetchData();
+                              FocusScope.of(context).unfocus();
+                            },
+                          ),
+                        ),
+                        const SizedBox(
+                          height: 12,
+                        ), // Reduced gap between search bar and pills
+                        SmartFilterBar(
+                          filters: const ["All", "Nearest", "Available Today", "Top Rated"],
+                          initialFilter: _selectedFilter,
+                          onFilterChanged: (filter, radius) {
+                            setState(() {
+                              _selectedFilter = filter;
+                              _activeRadiusKm = radius;
+                            });
+                            _fetchData(query: _searchController.text);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              if (_isLoading)
+                const SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 300,
+                    child: Center(
+                      child: AppLoader(color: AppColors.primaryGreen),
+                    ),
+                  ),
+                )
+              else if (_doctors.isEmpty)
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 300,
+                    child: Center(
+                      child: Text(
+                        "No ${widget.specialtyName.toLowerCase()}s found.",
+                        style: TextStyle(
+                          color:
+                              isDark ? Colors.white54 : const Color(0xFF86868B),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  // THE FIX 3: Top padding reduced to 8 so the first card hugs the pills beautifully
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 120),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final doctor = _doctors[index];
+                      final docId =
+                          int.tryParse(doctor['id'].toString()) ?? index;
+                      final specialtyName =
+                          doctor['specialties']?['name'] ??
+                          widget.specialtyName;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
                         child: _SquishableDoctorCard(
                           doctor: doctor,
                           docId: docId,
                           specialtyName: specialtyName,
                           favNotifier: _favNotifier,
-                          heroTagPrefix: 'specialty-',
+                          heroTagPrefix: 'specialty-$docId-$index-',
                         ),
-                      ),
-                    );
-                  },
-                  childCount: _doctors.length,
+                      );
+                    }, childCount: _doctors.length),
+                  ),
                 ),
-              ),
-            ),
-          if (!_isLoading && _doctors.isNotEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: const SizedBox(
-                height: 250,
-              ),
-            ),
+            ],
+          ),
         ],
       ),
     );
@@ -513,61 +586,75 @@ class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
           isFavorite: widget.favNotifier.isFavorite(widget.docId),
           heroTagPrefix: widget.heroTagPrefix,
           onFavoriteTap: () {
-            HapticFeedback.selectionClick(); 
+            HapticFeedback.selectionClick();
             widget.favNotifier.toggle(widget.doctor);
           },
           onCardTap: () {
             HapticFeedback.lightImpact();
-            context.push(AppRoutes.doctorDetailsById('${widget.docId}'), extra: widget.doctor);
-          }, 
+            context.push(
+              AppRoutes.doctorDetailsById('${widget.docId}'),
+              extra: widget.doctor,
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _DynamicGlassShelfDelegate extends SliverPersistentHeaderDelegate {
+class _DynamicGlassCapsuleDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
-  _DynamicGlassShelfDelegate({required this.child});
-  
+  _DynamicGlassCapsuleDelegate({required this.child});
+
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     final isPinned = shrinkOffset > 0 || overlapsContent;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: isPinned 
-            ? Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85)
-            : Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.0),
-        boxShadow: isPinned
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            : [],
-      ),
-      child: ClipRRect(
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(
-            sigmaX: isPinned ? 16.0 : 0.0, 
-            sigmaY: isPinned ? 16.0 : 0.0,
+    return SizedBox(
+      // THE FIX 4: With the internal padding tightened, maxExtent drops safely to 150.0, eliminating dead space
+      height: 150.0,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color:
+              isPinned
+                  ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.85)
+                  : Colors.transparent,
+          boxShadow:
+              isPinned
+                  ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                  : [],
+        ),
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(
+              sigmaX: isPinned ? 20.0 : 0.0,
+              sigmaY: isPinned ? 20.0 : 0.0,
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
   }
-  
+
   @override
-  double get maxExtent => 88.0; 
+  double get maxExtent => 150.0;
   @override
-  double get minExtent => 88.0;
+  double get minExtent => 150.0;
   @override
-  bool shouldRebuild(covariant _DynamicGlassShelfDelegate oldDelegate) => oldDelegate.child != child;
+  bool shouldRebuild(covariant _DynamicGlassCapsuleDelegate oldDelegate) =>
+      true;
 }

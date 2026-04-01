@@ -28,7 +28,10 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
     super.initState();
     _profileNotifier.addListener(_onProfileChanged);
     if (!widget.isBackgroundLayer && !_profileNotifier.isLoaded) {
-      _profileNotifier.loadProfile();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _profileNotifier.isLoaded) return;
+        _profileNotifier.loadProfile();
+      });
     }
   }
 
@@ -47,8 +50,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
-    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
+    final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + 20;
 
     if (!_profileNotifier.isLoaded) {
       return Scaffold(
@@ -79,7 +81,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
           child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
+            physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
             padding: EdgeInsets.only(bottom: dynamicBottomPadding),
             child: Column(
             children: [

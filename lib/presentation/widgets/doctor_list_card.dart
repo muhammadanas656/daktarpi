@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../core/theme/app_shapes.dart';
+import '../../core/theme/app_styles.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
 import 'app_network_image.dart';
 
 class DoctorListCard extends StatelessWidget {
@@ -39,129 +40,304 @@ class DoctorListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // PRO FIX: RepaintBoundary forces Flutter to cache this entire complex shadowed card as a flat raster graphic.
-    // This utterly eliminates GPU recalculations during 120fps fast-scrolling!
     return RepaintBoundary(
+      key: ValueKey('${heroTagPrefix}_$id'),
       child: Container(
-      // PRO FIX: Instantly adapts to Dark Mode (removes shadow, shifts to Deep Slate)
-      decoration: AppStyles.surfaceCard(context, borderRadius: AppShapes.xl),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: AppShapes.xl,
-        child: InkWell(
-          onTap: onCardTap,
-          borderRadius: AppShapes.lg,
-          child: Padding(
-            padding: const EdgeInsets.all(AppDimens.spaceMd),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Hero(
-                  tag: '$heroTagPrefix$id',
-                  child: ClipRRect(
-                    borderRadius: AppShapes.md,
-                    child: SizedBox(
-                      width: 80,
-                      height: 80,
+        decoration: BoxDecoration(
+          color: isDark ? Theme.of(context).colorScheme.surface : Colors.white,
+          borderRadius: BorderRadius.circular(22), // Kept the smooth outer curve
+          border: Border.all(
+            color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+            width: 1,
+          ),
+          boxShadow: isDark ? [] : [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03), 
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(22),
+          child: InkWell(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              onCardTap();
+            },
+            highlightColor: Colors.transparent,
+            splashColor: AppColors.primaryGreen.withOpacity(0.06),
+            child: Padding(
+              // THE FIX: Reduced outer padding from 16 to 14 for a sleeker profile
+              padding: const EdgeInsets.all(14.0), 
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  
+                  // --- 1. THE COMPACT SQUIRCLE AVATAR ---
+                  Container(
+                    // THE FIX: Shrunk from 88 to 80 to reduce vertical bloat
+                    width: 80, 
+                    height: 80,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18), 
+                      border: Border.all(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        width: 1,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(17), 
                       child: AppNetworkImage(
                         imageUrl: imageUrl,
                         width: 80,
                         height: 80,
                         fit: BoxFit.cover,
-                        fallbackIconSize: 40,
+                        fallbackIconSize: 32,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: AppDimens.spaceLg),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              name,
-                              style: AppTextStyles.h3(context).copyWith(fontSize: 16),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                  const SizedBox(width: 14),
+
+                  // --- 2. THE EDITORIAL GRID (Tightened) ---
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                name,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF1D1D1F),
+                                  letterSpacing: -0.3,
+                                  height: 1.15,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
+                            trailingWidget ?? Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: AnimatedFavoriteButton(
+                                isFavorite: isFavorite,
+                                onTap: onFavoriteTap,
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        // THE FIX: Reduced vertical gap
+                        const SizedBox(height: 4), 
+                        
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withOpacity(0.05) : AppColors.primaryGreen.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          trailingWidget ??
-                              Material(
-                                // PRO FIX: Context-aware favorite button background
-                                color: isDark 
-                                    ? AppColors.darkBorder 
-                                    : const Color(0xFFF2F4F7),
-                                borderRadius: AppShapes.md,
-                                child: InkWell(
-                                  onTap: onFavoriteTap,
-                                  borderRadius: AppShapes.md,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(
-                                      AppDimens.spaceXs,
-                                    ),
-                                    child: Icon(
-                                      isFavorite
-                                          ? Icons.favorite
-                                          : Icons.favorite_border,
-                                      color: isFavorite
-                                          ? AppColors.dangerRed
-                                          : (isDark ? AppColors.darkTextSecondary : const Color(0xFF9CA3AF)),
-                                      size: 20,
-                                    ),
-                                  ),
+                          child: Text(
+                            specialty,
+                            style: TextStyle(
+                              color: AppColors.primaryGreen,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.1,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        
+                        // THE FIX: Reduced vertical gap
+                        const SizedBox(height: 10), 
+
+                        // --- 3. THE STRUCTURAL DIVIDER ---
+                        Container(
+                          height: 1,
+                          width: double.infinity,
+                          color: isDark ? Colors.white12 : Colors.black.withOpacity(0.04), 
+                        ),
+                        
+                        // THE FIX: Reduced vertical gap
+                        const SizedBox(height: 10), 
+
+                        // --- 4. THE CLEAN METRICS LINE ---
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.star_rounded, color: Colors.amber, size: 15),
+                            const SizedBox(width: 4),
+                            Text(
+                              rating,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              child: Container(
+                                width: 3.5,
+                                height: 3.5,
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white30 : Colors.black.withOpacity(0.15),
+                                  shape: BoxShape.circle,
                                 ),
                               ),
-                        ],
-                      ),
-                      const SizedBox(height: AppDimens.space2xs),
-                      Text(
-                        specialty,
-                        style: AppTextStyles.bodySmall(context).copyWith(
-                          color: context.colorTextLight, // Already context-aware!
+                            ),
+
+                            Icon(
+                              Icons.visibility_outlined,
+                              color: isDark ? Colors.white54 : const Color(0xFF86868B), 
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              views,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                                color: isDark ? Colors.white54 : const Color(0xFF86868B),
+                              ),
+                            ),
+                          ],
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: AppDimens.spaceXs),
-                      Row(
-                        children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            rating,
-                            style: AppTextStyles.bodyBold(context).copyWith(
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.visibility_outlined,
-                            // PRO FIX: Shifted to a color that works on both light and dark
-                            color: isDark ? AppColors.darkTextSecondary : const Color(0xFF9FA8DA),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            views,
-                            style: AppTextStyles.bodySmall(context).copyWith(
-                              fontSize: 12,
-                              color: context.colorTextLight,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ));
+    );
+  }
+}
+
+// ----------------------------------------------------------------------
+// ZERO-LATENCY (Optimistic UI) Animated Favorite Button
+// ----------------------------------------------------------------------
+
+class AnimatedFavoriteButton extends StatefulWidget {
+  final bool isFavorite;
+  final VoidCallback onTap;
+
+  const AnimatedFavoriteButton({
+    super.key,
+    required this.isFavorite,
+    required this.onTap,
+  });
+
+  @override
+  State<AnimatedFavoriteButton> createState() => _AnimatedFavoriteButtonState();
+}
+
+class _AnimatedFavoriteButtonState extends State<AnimatedFavoriteButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  
+  late bool _localIsFavorite;
+
+  @override
+  void initState() {
+    super.initState();
+    _localIsFavorite = widget.isFavorite;
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.8).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 20),
+      TweenSequenceItem(tween: Tween(begin: 0.8, end: 1.25).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 30),
+      TweenSequenceItem(tween: Tween(begin: 1.25, end: 1.0).chain(CurveTween(curve: Curves.elasticOut)), weight: 50),
+    ]).animate(_controller);
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedFavoriteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isFavorite != oldWidget.isFavorite && widget.isFavorite != _localIsFavorite) {
+      setState(() {
+        _localIsFavorite = widget.isFavorite;
+      });
+      if (_localIsFavorite) {
+        _controller.forward(from: 0.0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleOptimisticTap() {
+    HapticFeedback.lightImpact();
+
+    setState(() {
+      _localIsFavorite = !_localIsFavorite;
+    });
+
+    if (_localIsFavorite) {
+      _controller.forward(from: 0.0);
+    }
+
+    widget.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: _handleOptimisticTap, 
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: _scaleAnimation,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _localIsFavorite ? _scaleAnimation.value : 1.0,
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.all(8), 
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _localIsFavorite
+                    ? AppColors.dangerRed.withOpacity(0.12) 
+                    : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04)),
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                child: Icon(
+                  _localIsFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  key: ValueKey(_localIsFavorite),
+                  color: _localIsFavorite ? AppColors.dangerRed : (isDark ? Colors.white54 : const Color(0xFF86868B)), 
+                  size: 20, 
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }

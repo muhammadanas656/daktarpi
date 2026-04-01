@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 
 class SettingsSectionHeader extends StatelessWidget {
   final String title;
@@ -12,10 +13,9 @@ class SettingsSectionHeader extends StatelessWidget {
       padding: EdgeInsets.only(bottom: 16, left: 4),
       child: Text(
         title,
-        style: TextStyle(
+        style: AppTextStyles.h3(context).copyWith(
           fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: context.colorTextDark,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );

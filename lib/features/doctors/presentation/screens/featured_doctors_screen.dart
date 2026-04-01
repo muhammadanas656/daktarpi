@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../favorites_notifier.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -9,7 +10,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../doctors_notifier.dart'; // PRO FIX: Central Notifier
-import '../../../../presentation/widgets/featured_doctor_card.dart';
+import '../widgets/smart_filter_bar.dart';
+
+import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../core/widgets/app_loader.dart';
 
@@ -30,6 +33,8 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
   // Data State
   bool _isLoading = true; // Only block UI if the vault is completely empty
   bool _showClearIcon = false;
+  String _selectedFilter = 'All';
+  double? _activeRadiusKm;
 
   @override
   void initState() {
@@ -70,6 +75,21 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
     });
   }
 
+  // --- FILTER CHIPS ---
+  Widget _buildFilterChips() {
+    return SmartFilterBar(
+      filters: const ['All', 'Nearest', 'Available Today', 'Top Rated'],
+      initialFilter: _selectedFilter,
+      onFilterChanged: (filter, radius) {
+        setState(() {
+          _selectedFilter = filter;
+          _activeRadiusKm = radius;
+        });
+        _fetchData(query: _searchController.text);
+      },
+    );
+  }
+
   // --- CLEAR SEARCH ---
   void _clearSearch() {
     _searchController.clear();
@@ -85,6 +105,8 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
     try {
       await _docsNotifier.fetchFeaturedDoctors(
         query: query ?? '',
+        filter: _selectedFilter,
+        maxRadiusKm: _activeRadiusKm,
         forceRefresh: forceRefresh,
       );
 
@@ -166,12 +188,14 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
                 ),
               ),
 
+              _buildFilterChips(),
+
               // --- DOCTOR LIST ---
               Expanded(
                 child: ListenableBuilder(
                   listenable: _docsNotifier,
                   builder: (context, _) {
-                    final doctors = _docsNotifier.featuredDoctors;
+                    final doctors = _docsNotifier.exploreFeaturedDoctors;
                     // Only show loading spinner if it's the very first time and vault is empty
                     if (_isLoading && doctors.isEmpty) {
                       return const Center(
@@ -197,17 +221,23 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
 
                           final isFavorite = _favNotifier.isFavorite(docId);
 
-                          return FeaturedDoctorCard(
+                          return DoctorListCard(
                             id: docId,
                             name: doctor['full_name'] ?? 'Unknown',
                             specialty: " $specialtyName",
                             rating: doctor['rating']?.toString() ?? '0.0',
                             views: doctor['views_count']?.toString() ?? '0',
-                            price: doctor['hourly_rate']?.toString() ?? '20',
                             imageUrl: doctor['profile_picture_url'],
                             isFavorite: isFavorite,
-                            onFavoriteTap: () => _favNotifier.toggle(doctor),
-                            onCardTap: () => _navigateToDoctorDetails(docId, doctor),
+                            heroTagPrefix: 'featured-',
+                            onFavoriteTap: () {
+                              HapticFeedback.selectionClick();
+                              _favNotifier.toggle(doctor);
+                            },
+                            onCardTap: () {
+                              HapticFeedback.lightImpact();
+                              _navigateToDoctorDetails(docId, doctor);
+                            },
                           );
                         },
                       ),

@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../profile/presentation/profile_notifier.dart';
+import '../../doctors/presentation/doctors_notifier.dart';
+import '../../doctors/presentation/favorites_notifier.dart';
+import '../../appointments/presentation/appointment_notifier.dart';
 
 /// Centralised authentication repository.
 ///
@@ -150,6 +153,9 @@ class AuthRepository {
   Future<void> signOut() async {
     try {
       ProfileNotifier.instance.clear();
+      DoctorsNotifier.instance.clear();
+      FavoritesNotifier.instance.clear();
+      await AppointmentNotifier.instance.clear();
       await _client.auth.signOut();
     } catch (e) {
       debugPrint('AuthRepository: sign-out error: $e');

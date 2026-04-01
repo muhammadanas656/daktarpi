@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -23,6 +24,7 @@ class DoctorDetailsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final specialty =
         doctor['specialty']?.toString() ??
         doctor['specialties']?['name']?.toString() ??
@@ -57,14 +59,24 @@ class DoctorDetailsHeader extends StatelessWidget {
               children: [
                 Text(
                   doctorName,
-                  style: AppTextStyles.h3(context).copyWith(fontSize: 18),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : const Color(0xFF1D1D1F),
+                    letterSpacing: -0.3,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 SizedBox(height: 4),
                 Text(
-                  " $specialty",
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  specialty,
+                  style: TextStyle(
+                    color: AppColors.primaryGreen,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.1,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -81,8 +93,9 @@ class DoctorDetailsHeader extends StatelessWidget {
                       "${ProfileNotifier.instance.currencySymbol} $displayPrice/visit",
                       style: TextStyle(
                         color: AppColors.primaryGreen,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         fontSize: 13,
+                        letterSpacing: 0.2,
                       ),
                     ),
                   ],
@@ -105,9 +118,9 @@ class DoctorDetailsHeader extends StatelessWidget {
                         ),
                         child: Text(
                           "Book Now",
-                          style: TextStyle(
+                          style: GoogleFonts.poppins(
                             color: Colors.white,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             fontSize: 12,
                           ),
                         ),

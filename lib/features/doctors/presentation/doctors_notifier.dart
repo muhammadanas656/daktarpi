@@ -17,8 +17,10 @@ class DoctorsNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> _clinics = [];
 
   // PRO FIX: Centralized data points for HomeScreen and Specialty Lists
-  List<Map<String, dynamic>> _popularDoctors = [];
-  List<Map<String, dynamic>> _featuredDoctors = [];
+  List<Map<String, dynamic>> _homePopularDoctors = [];
+  List<Map<String, dynamic>> _explorePopularDoctors = [];
+  List<Map<String, dynamic>> _homeFeaturedDoctors = [];
+  List<Map<String, dynamic>> _exploreFeaturedDoctors = [];
   List<Map<String, dynamic>> _specialties = [];
 
   bool _isLoading = false;
@@ -31,17 +33,54 @@ class DoctorsNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> get hospitals => _hospitals;
   List<Map<String, dynamic>> get clinics => _clinics;
 
-  List<Map<String, dynamic>> get popularDoctors => _popularDoctors;
-  List<Map<String, dynamic>> get featuredDoctors => _featuredDoctors;
+  List<Map<String, dynamic>> get homePopularDoctors => _homePopularDoctors;
+  List<Map<String, dynamic>> get explorePopularDoctors => _explorePopularDoctors;
+  List<Map<String, dynamic>> get homeFeaturedDoctors => _homeFeaturedDoctors;
+  List<Map<String, dynamic>> get exploreFeaturedDoctors => _exploreFeaturedDoctors;
   List<Map<String, dynamic>> get specialties => _specialties;
 
   bool get isLoading => _isLoading;
 
+  /// Delegates to DoctorRepository. Lets SmartFilterBar call this without needing to import
+  /// DoctorRepository directly, avoiding circular imports.
+  Future<double> fetchSmartClusterRadius({
+    required double userLat,
+    required double userLng,
+    required String countryIso,
+  }) {
+    return _doctorRepo.fetchSmartClusterRadius(
+      userLat: userLat,
+      userLng: userLng,
+      countryIso: countryIso,
+    );
+  }
+
   /// Fetch all required data once. Safe to be called by multiple screens.
+
+  Future<Position?> getUserPosition() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null;
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return null;
+      }
+      if (permission == LocationPermission.deniedForever) return null;
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      debugPrint("Location sorting failed -> $e");
+      return null;
+    }
+  }
+
   /// Fetch all required data once. Safe to be called by multiple screens.
   Future<void> fetchDoctors({
     String query = '',
     String filter = 'All',
+    double? maxRadiusKm, // Used for boundary constraint
     bool forceRefresh = false,
   }) async {
     // Optimization: Skip fetching if the exact constraints are already hot in RAM, unless forced
@@ -61,39 +100,12 @@ class DoctorsNotifier extends ChangeNotifier {
       double? userLat;
       double? userLng;
 
-      if (filter == 'Nearest') {
-        try {
-          // --- PRO FIX: The GPS Permission Gatekeeper ---
-          // 1. Check if the physical GPS hardware is turned on
-          bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-          if (!serviceEnabled) {
-            throw Exception('Location services are physically disabled.');
-          }
-
-          // 2. Check app permissions
-          LocationPermission permission = await Geolocator.checkPermission();
-          if (permission == LocationPermission.denied) {
-            // 3. Request permission from the user
-            permission = await Geolocator.requestPermission();
-            if (permission == LocationPermission.denied) {
-              throw Exception('User denied location permissions.');
-            }
-          }
-
-          if (permission == LocationPermission.deniedForever) {
-            throw Exception('Location permissions are permanently denied.');
-          }
-
-          // 4. If all checks pass, grab the exact coordinates!
-          Position position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high, // Upgraded to high for better sorting
-          );
-          userLat = position.latitude;
-          userLng = position.longitude;
-        } catch (e) {
-          debugPrint("DoctorsNotifier: Location sorting failed -> $e");
-          // It will safely fall back to userLat/userLng being null, 
-          // which the repository handles by returning the unsorted list.
+      // GPS is needed for location-based sorting AND whenever a spatial boundary (maxRadiusKm) is enforced
+      if (maxRadiusKm != null || filter == 'Nearest' || filter == 'Hospital' || filter == 'Clinic' || filter == 'Available Today') {
+        final pos = await getUserPosition();
+        if (pos != null) {
+          userLat = pos.latitude;
+          userLng = pos.longitude;
         }
       }
 
@@ -103,6 +115,8 @@ class DoctorsNotifier extends ChangeNotifier {
       final results = await Future.wait([
         _doctorRepo.fetchAllDoctors(
           query: query,
+          filterType: filter,
+          maxRadiusKm: maxRadiusKm, // <--- Passes dynamic boundary payload
           userLat: userLat,
           userLng: userLng,
           userLocation: userLocation,
@@ -110,9 +124,15 @@ class DoctorsNotifier extends ChangeNotifier {
         ),
         _doctorRepo.fetchHospitals(
           query: query,
+          userLat: userLat,
+          userLng: userLng,
+          maxRadiusKm: maxRadiusKm,
         ),
         _doctorRepo.fetchClinicsList(
           query: query,
+          userLat: userLat,
+          userLng: userLng,
+          maxRadiusKm: maxRadiusKm,
         ),
       ]);
 
@@ -131,17 +151,20 @@ class DoctorsNotifier extends ChangeNotifier {
     }
   }
 
-  // --- PRO FIX: Centralized Sub-Searches ---
+  // --- Centralized Sub-Fetchers (RPC-Powered) ---
 
   Future<void> fetchPopularDoctors({
     String query = '',
+    String filter = 'All',
+    double? maxRadiusKm,
     int? limit,
     bool forceRefresh = false,
+    bool isHomeFeed = false,
   }) async {
-    // PRO FIX: The RAM Cache Guard! If we have data and aren't forcing a refresh, escape instantly!
-    if (!forceRefresh && _popularDoctors.isNotEmpty) return;
+    final currentList = isHomeFeed ? _homePopularDoctors : _explorePopularDoctors;
+    if (!forceRefresh && currentList.isNotEmpty && query.isEmpty && filter == 'All') return;
 
-    if (_popularDoctors.isEmpty) {
+    if (currentList.isEmpty) {
       _isLoading = true;
       notifyListeners();
     }
@@ -150,17 +173,41 @@ class DoctorsNotifier extends ChangeNotifier {
       final userLocation = _profileNotifier.profile?.location;
       final countryIso = _profileNotifier.profile?.countryIso;
 
-      _popularDoctors = await _doctorRepo.fetchPopularDoctors(
+      double? userLat;
+      double? userLng;
+      if (maxRadiusKm != null || filter == 'Nearest' || filter == 'Available Today') {
+        final pos = await getUserPosition();
+        if (pos != null) {
+          userLat = pos.latitude;
+          userLng = pos.longitude;
+        }
+      }
+
+      final fetchedData = await _doctorRepo.fetchPopularDoctors(
         query: query,
+        filterType: filter,
+        maxRadiusKm: maxRadiusKm, // Pass to DB wrapper
         limit: limit,
         forceRefresh: forceRefresh,
         userLocation: userLocation,
         countryIso: countryIso,
+        userLat: userLat,
+        userLng: userLng,
         onFreshData: (fresh) {
-          _popularDoctors = fresh;
+          if (isHomeFeed) {
+            _homePopularDoctors = fresh;
+          } else {
+            _explorePopularDoctors = fresh;
+          }
           notifyListeners();
         },
       );
+      
+      if (isHomeFeed) {
+        _homePopularDoctors = fetchedData;
+      } else {
+        _explorePopularDoctors = fetchedData;
+      }
     } catch (e) {
       debugPrint("DoctorsNotifier Popular Fetch Error: $e");
     } finally {
@@ -171,13 +218,16 @@ class DoctorsNotifier extends ChangeNotifier {
 
   Future<void> fetchFeaturedDoctors({
     String query = '',
+    String filter = 'All',
+    double? maxRadiusKm,
     int? limit,
     bool forceRefresh = false,
+    bool isHomeFeed = false,
   }) async {
-    // PRO FIX: The RAM Cache Guard!
-    if (!forceRefresh && _featuredDoctors.isNotEmpty) return;
+    final currentList = isHomeFeed ? _homeFeaturedDoctors : _exploreFeaturedDoctors;
+    if (!forceRefresh && currentList.isNotEmpty && query.isEmpty && filter == 'All') return;
 
-    if (_featuredDoctors.isEmpty) {
+    if (currentList.isEmpty) {
       _isLoading = true;
       notifyListeners();
     }
@@ -186,17 +236,41 @@ class DoctorsNotifier extends ChangeNotifier {
       final userLocation = _profileNotifier.profile?.location;
       final countryIso = _profileNotifier.profile?.countryIso;
 
-      _featuredDoctors = await _doctorRepo.fetchFeaturedDoctors(
+      double? userLat;
+      double? userLng;
+      if (maxRadiusKm != null || filter == 'Nearest' || filter == 'Available Today') {
+        final pos = await getUserPosition();
+        if (pos != null) {
+          userLat = pos.latitude;
+          userLng = pos.longitude;
+        }
+      }
+
+      final fetchedData = await _doctorRepo.fetchFeaturedDoctors(
         query: query,
+        filterType: filter,
+        maxRadiusKm: maxRadiusKm,
         limit: limit,
         forceRefresh: forceRefresh,
         userLocation: userLocation,
         countryIso: countryIso,
+        userLat: userLat,
+        userLng: userLng,
         onFreshData: (fresh) {
-          _featuredDoctors = fresh;
+          if (isHomeFeed) {
+            _homeFeaturedDoctors = fresh;
+          } else {
+            _exploreFeaturedDoctors = fresh;
+          }
           notifyListeners();
         },
       );
+      
+      if (isHomeFeed) {
+        _homeFeaturedDoctors = fetchedData;
+      } else {
+        _exploreFeaturedDoctors = fetchedData;
+      }
     } catch (e) {
       debugPrint("DoctorsNotifier Featured Fetch Error: $e");
     } finally {
@@ -204,6 +278,8 @@ class DoctorsNotifier extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+
 
   Future<void> fetchSpecialties({bool forceRefresh = false}) async {
     // PRO FIX: The RAM Cache Guard!
@@ -233,8 +309,10 @@ class DoctorsNotifier extends ChangeNotifier {
     _doctors = [];
     _hospitals = [];
     _clinics = [];
-    _popularDoctors = [];
-    _featuredDoctors = [];
+    _homePopularDoctors = [];
+    _explorePopularDoctors = [];
+    _homeFeaturedDoctors = [];
+    _exploreFeaturedDoctors = [];
     _specialties = [];
     _isLoading = false;
     _lastQuery = '';

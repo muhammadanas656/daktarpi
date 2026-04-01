@@ -77,8 +77,8 @@ class _SnackbarOverlay extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Positioned(
-      // Respects the keyboard and adds standard spacing
-      bottom: MediaQuery.of(context).viewInsets.bottom + AppDimens.space4xl,
+      // Respects the keyboard, safe area, and adds standard spacing
+      bottom: MediaQuery.viewInsetsOf(context).bottom + MediaQuery.paddingOf(context).bottom + AppDimens.space4xl,
       left: AppDimens.spaceXl,
       right: AppDimens.spaceXl,
       child: Material(

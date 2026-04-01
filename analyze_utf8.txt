@@ -1,0 +1,537 @@
+﻿Analyzing daktarpi...
+dart : An unexpected error 
+was encountered by the 
+Analysis Server.
+At line:1 char:1
++ dart analyze > 
+analyze.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~
+    + CategoryInfo         
+     : NotSpecified    : 
+(An unexpected e.    
+..nalysis Server.:S    
+tring) [], RemoteEx    
+ception
+    + FullyQualifiedErr    
+orId : NativeComman    
+dError
+ 
+Please file an issue at htt
+ps://github.com/dart-lang/s
+dk/issues/new/choose with 
+the following details:
+
+Internal error: Bad state: 
+No definition of type 
+String
+#0      TypeProviderImpl._g
+etClassElement (package:ana
+lyzer/src/dart/element/type
+_provider.dart:595:7)
+#1      
+TypeProviderImpl._getType (
+package:analyzer/src/dart/e
+lement/type_provider.dart:6
+03:19)
+#2      TypeProviderImpl.st
+ringType (package:analyzer/
+src/dart/element/type_provi
+der.dart:492:28)
+#3      StaticTypeAnalyzer.
+visitSimpleStringLiteral (p
+ackage:analyzer/src/generat
+ed/static_type_analyzer.dar
+t:231:41)
+#4      ResolverVisitor.vis
+itSimpleStringLiteral (pack
+age:analyzer/src/generated/
+resolver.dart:3653:18)
+#5      SimpleStringLiteral
+Impl.resolveExpression (pac
+kage:analyzer/src/dart/ast/
+ast.dart:16184:14)
+#6      ResolverVisitor.dis
+patchExpression (package:an
+alyzer/src/generated/resolv
+er.dart:786:16)
+#7      TypeAnalyzer.analyz
+eExpression (package:_fe_an
+alyzer_shared/src/type_infe
+rence/type_analyzer.dart:58
+0:9)
+#8      ResolverVisitor.ana
+lyzeExpression (package:ana
+lyzer/src/generated/resolve
+r.dart:491:18)
+#9      InvocationInferrer.
+_visitArguments (package:an
+alyzer/src/dart/resolver/in
+vocation_inferrer.dart:581:
+18)
+#10     FullInvocationInfer
+rer.resolveInvocation (pack
+age:analyzer/src/dart/resol
+ver/invocation_inferrer.dar
+t:253:36)
+#11     InstanceCreationExp
+ressionResolver._resolveIns
+tanceCreationExpression (pa
+ckage:analyzer/src/dart/res
+olver/instance_creation_exp
+ression_resolver.dart:70:10
+)
+#12     InstanceCreationExp
+ressionResolver.resolve (pa
+ckage:analyzer/src/dart/res
+olver/instance_creation_exp
+ression_resolver.dart:49:5)
+#13     ResolverVisitor.vis
+itInstanceCreationExpressio
+n (package:analyzer/src/gen
+erated/resolver.dart:3085:4
+1)
+#14     InstanceCreationExp
+ressionImpl.resolveExpressi
+on (package:analyzer/src/da
+rt/ast/ast.dart:10403:14)
+#15     ResolverVisitor.dis
+patchExpression (package:an
+alyzer/src/generated/resolv
+er.dart:786:16)
+#16     TypeAnalyzer.analyz
+eExpression (package:_fe_an
+alyzer_shared/src/type_infe
+rence/type_analyzer.dart:58
+0:9)
+#17     ResolverVisitor.ana
+lyzeExpression (package:ana
+lyzer/src/generated/resolve
+r.dart:491:18)
+#18     AstResolver.resolve
+Expression (package:analyze
+r/src/summary2/ast_resolver
+.dart:113:22)
+#19     _PropertyInducingEl
+ementTypeInference.perform 
+(package:analyzer/src/summa
+ry2/top_level_inference.dar
+t:265:17)
+#20     PropertyInducingEle
+mentImpl.type (package:anal
+yzer/src/dart/element/eleme
+nt.dart:10031:28)
+#21     _InitializerInferen
+ce.perform (package:analyze
+r/src/summary2/top_level_in
+ference.dart:155:15)
+#22     
+TopLevelInference.infer (pa
+ckage:analyzer/src/summary2
+/top_level_inference.dart:1
+08:26)
+#23     Linker._performTopL
+evelInference (package:anal
+yzer/src/summary2/link.dart
+:426:29)
+#24     
+Linker._buildOutlines (pack
+age:analyzer/src/summary2/l
+ink.dart:270:5)
+<asynchronous suspension>
+#25     
+Linker.link.<anonymous 
+closure> (package:analyzer/
+src/summary2/link.dart:125:
+7)
+<asynchronous suspension>
+#26     OperationPerformanc
+eImpl.runAsync (package:ana
+lyzer/src/util/performance/
+operation_performance.dart:
+174:14)
+<asynchronous suspension>
+#27     Linker.link (packag
+e:analyzer/src/summary2/lin
+k.dart:124:5)
+<asynchronous suspension>
+#28     link (package:analy
+zer/src/summary2/link.dart:
+43:3)
+<asynchronous suspension>
+#29     LibraryContext.load
+.loadBundle.<anonymous 
+closure> (package:analyzer/
+src/dart/analysis/library_c
+ontext.dart:201:22)
+<asynchronous suspension>
+#30     OperationPerformanc
+eImpl.runAsync (package:ana
+lyzer/src/util/performance/
+operation_performance.dart:
+174:14)
+<asynchronous suspension>
+#31     LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:198:24)
+<asynchronous suspension>
+#32     LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#33     LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#34     LibraryContext.load
+.<anonymous closure> (packa
+ge:analyzer/src/dart/analys
+is/library_context.dart:286
+:7)
+<asynchronous suspension>
+#35     
+PerformanceLog.runAsync (pa
+ckage:analyzer/src/dart/ana
+lysis/performance_logger.da
+rt:50:14)
+<asynchronous suspension>
+#36     
+LibraryContext.load (packag
+e:analyzer/src/dart/analysi
+s/library_context.dart:277:
+5)
+<asynchronous suspension>
+#37     AnalysisDriver._pro
+duceErrors (package:analyze
+r/src/dart/analysis/driver.
+dart:1933:5)
+<asynchronous suspension>
+#38     
+AnalysisDriver.performWork 
+(package:analyzer/src/dart/
+analysis/driver.dart:1265:7
+)
+<asynchronous suspension>
+#39     AnalysisDriverSched
+uler._run (package:analyzer
+/src/dart/analysis/driver.d
+art:2438:7)
+<asynchronous suspension>
+
+
+#0      LibraryContext._thr
+owLibraryCycleLinkException
+ (package:analyzer/src/dart
+/analysis/library_context.d
+art:415:5)
+#1      LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:212:11)
+<asynchronous suspension>
+#2      LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#3      LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#4      LibraryContext.load
+.<anonymous closure> (packa
+ge:analyzer/src/dart/analys
+is/library_context.dart:286
+:7)
+<asynchronous suspension>
+#5      
+PerformanceLog.runAsync (pa
+ckage:analyzer/src/dart/ana
+lysis/performance_logger.da
+rt:50:14)
+<asynchronous suspension>
+#6      
+LibraryContext.load (packag
+e:analyzer/src/dart/analysi
+s/library_context.dart:277:
+5)
+<asynchronous suspension>
+#7      AnalysisDriver._pro
+duceErrors (package:analyze
+r/src/dart/analysis/driver.
+dart:1933:5)
+<asynchronous suspension>
+#8      
+AnalysisDriver.performWork 
+(package:analyzer/src/dart/
+analysis/driver.dart:1265:7
+)
+<asynchronous suspension>
+#9      AnalysisDriverSched
+uler._run (package:analyzer
+/src/dart/analysis/driver.d
+art:2438:7)
+<asynchronous suspension>
+
+Unhandled exception:
+Bad state: No definition 
+of type String
+#0      TypeProviderImpl._g
+etClassElement (package:ana
+lyzer/src/dart/element/type
+_provider.dart:595:7)
+#1      
+TypeProviderImpl._getType (
+package:analyzer/src/dart/e
+lement/type_provider.dart:6
+03:19)
+#2      TypeProviderImpl.st
+ringType (package:analyzer/
+src/dart/element/type_provi
+der.dart:492:28)
+#3      StaticTypeAnalyzer.
+visitSimpleStringLiteral (p
+ackage:analyzer/src/generat
+ed/static_type_analyzer.dar
+t:231:41)
+#4      ResolverVisitor.vis
+itSimpleStringLiteral (pack
+age:analyzer/src/generated/
+resolver.dart:3653:18)
+#5      SimpleStringLiteral
+Impl.resolveExpression (pac
+kage:analyzer/src/dart/ast/
+ast.dart:16184:14)
+#6      ResolverVisitor.dis
+patchExpression (package:an
+alyzer/src/generated/resolv
+er.dart:786:16)
+#7      TypeAnalyzer.analyz
+eExpression (package:_fe_an
+alyzer_shared/src/type_infe
+rence/type_analyzer.dart:58
+0:9)
+#8      ResolverVisitor.ana
+lyzeExpression (package:ana
+lyzer/src/generated/resolve
+r.dart:491:18)
+#9      InvocationInferrer.
+_visitArguments (package:an
+alyzer/src/dart/resolver/in
+vocation_inferrer.dart:581:
+18)
+#10     FullInvocationInfer
+rer.resolveInvocation (pack
+age:analyzer/src/dart/resol
+ver/invocation_inferrer.dar
+t:253:36)
+#11     InstanceCreationExp
+ressionResolver._resolveIns
+tanceCreationExpression (pa
+ckage:analyzer/src/dart/res
+olver/instance_creation_exp
+ression_resolver.dart:70:10
+)
+#12     InstanceCreationExp
+ressionResolver.resolve (pa
+ckage:analyzer/src/dart/res
+olver/instance_creation_exp
+ression_resolver.dart:49:5)
+#13     ResolverVisitor.vis
+itInstanceCreationExpressio
+n (package:analyzer/src/gen
+erated/resolver.dart:3085:4
+1)
+#14     InstanceCreationExp
+ressionImpl.resolveExpressi
+on (package:analyzer/src/da
+rt/ast/ast.dart:10403:14)
+#15     ResolverVisitor.dis
+patchExpression (package:an
+alyzer/src/generated/resolv
+er.dart:786:16)
+#16     TypeAnalyzer.analyz
+eExpression (package:_fe_an
+alyzer_shared/src/type_infe
+rence/type_analyzer.dart:58
+0:9)
+#17     ResolverVisitor.ana
+lyzeExpression (package:ana
+lyzer/src/generated/resolve
+r.dart:491:18)
+#18     AstResolver.resolve
+Expression (package:analyze
+r/src/summary2/ast_resolver
+.dart:113:22)
+#19     _PropertyInducingEl
+ementTypeInference.perform 
+(package:analyzer/src/summa
+ry2/top_level_inference.dar
+t:265:17)
+#20     PropertyInducingEle
+mentImpl.type (package:anal
+yzer/src/dart/element/eleme
+nt.dart:10031:28)
+#21     _InitializerInferen
+ce.perform (package:analyze
+r/src/summary2/top_level_in
+ference.dart:155:15)
+#22     
+TopLevelInference.infer (pa
+ckage:analyzer/src/summary2
+/top_level_inference.dart:1
+08:26)
+#23     Linker._performTopL
+evelInference (package:anal
+yzer/src/summary2/link.dart
+:426:29)
+#24     
+Linker._buildOutlines (pack
+age:analyzer/src/summary2/l
+ink.dart:270:5)
+<asynchronous suspension>
+#25     
+Linker.link.<anonymous 
+closure> (package:analyzer/
+src/summary2/link.dart:125:
+7)
+<asynchronous suspension>
+#26     OperationPerformanc
+eImpl.runAsync (package:ana
+lyzer/src/util/performance/
+operation_performance.dart:
+174:14)
+<asynchronous suspension>
+#27     Linker.link (packag
+e:analyzer/src/summary2/lin
+k.dart:124:5)
+<asynchronous suspension>
+#28     link (package:analy
+zer/src/summary2/link.dart:
+43:3)
+<asynchronous suspension>
+#29     LibraryContext.load
+.loadBundle.<anonymous 
+closure> (package:analyzer/
+src/dart/analysis/library_c
+ontext.dart:201:22)
+<asynchronous suspension>
+#30     OperationPerformanc
+eImpl.runAsync (package:ana
+lyzer/src/util/performance/
+operation_performance.dart:
+174:14)
+<asynchronous suspension>
+#31     LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:198:24)
+<asynchronous suspension>
+#32     LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#33     LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#34     LibraryContext.load
+.<anonymous closure> (packa
+ge:analyzer/src/dart/analys
+is/library_context.dart:286
+:7)
+<asynchronous suspension>
+#35     
+PerformanceLog.runAsync (pa
+ckage:analyzer/src/dart/ana
+lysis/performance_logger.da
+rt:50:14)
+<asynchronous suspension>
+#36     
+LibraryContext.load (packag
+e:analyzer/src/dart/analysi
+s/library_context.dart:277:
+5)
+<asynchronous suspension>
+#37     AnalysisDriver._pro
+duceErrors (package:analyze
+r/src/dart/analysis/driver.
+dart:1933:5)
+<asynchronous suspension>
+#38     
+AnalysisDriver.performWork 
+(package:analyzer/src/dart/
+analysis/driver.dart:1265:7
+)
+<asynchronous suspension>
+#39     AnalysisDriverSched
+uler._run (package:analyzer
+/src/dart/analysis/driver.d
+art:2438:7)
+<asynchronous suspension>
+
+
+#0      LibraryContext._thr
+owLibraryCycleLinkException
+ (package:analyzer/src/dart
+/analysis/library_context.d
+art:415:5)
+#1      LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:212:11)
+<asynchronous suspension>
+#2      LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#3      LibraryContext.load
+.loadBundle (package:analyz
+er/src/dart/analysis/librar
+y_context.dart:148:9)
+<asynchronous suspension>
+#4      LibraryContext.load
+.<anonymous closure> (packa
+ge:analyzer/src/dart/analys
+is/library_context.dart:286
+:7)
+<asynchronous suspension>
+#5      
+PerformanceLog.runAsync (pa
+ckage:analyzer/src/dart/ana
+lysis/performance_logger.da
+rt:50:14)
+<asynchronous suspension>
+#6      
+LibraryContext.load (packag
+e:analyzer/src/dart/analysi
+s/library_context.dart:277:
+5)
+<asynchronous suspension>
+#7      AnalysisDriver._pro
+duceErrors (package:analyze
+r/src/dart/analysis/driver.
+dart:1933:5)
+<asynchronous suspension>
+#8      
+AnalysisDriver.performWork 
+(package:analyzer/src/dart/
+analysis/driver.dart:1265:7
+)
+<asynchronous suspension>
+#9      AnalysisDriverSched
+uler._run (package:analyzer
+/src/dart/analysis/driver.d
+art:2438:7)
+<asynchronous suspension>
+Bad state: The analysis 
+server crashed unexpectedly
+
+.

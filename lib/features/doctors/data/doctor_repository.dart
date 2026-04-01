@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/errors/app_failure.dart';
 import '../../../core/network/network_notifier.dart';
@@ -215,99 +217,246 @@ class DoctorRepository {
     }
   }
 
-  // ─── Doctor Lists ──────────────────────────────────────────────────────────
+  // ─── Micro-RPC: Smart Cluster Radius ──────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> fetchAllDoctors({
+  /// Calculates the optimal search radius (in km) to capture roughly
+  /// [targetClusterSize] unique doctors near the user's location.
+  /// Returns a value clamped between 2.0 and [maxAllowedRadius] km.
+  Future<double> fetchSmartClusterRadius({
+    required double userLat,
+    required double userLng,
+    required String countryIso,
+    int targetClusterSize = 6,
+    double maxAllowedRadius = 50.0,
+  }) async {
+    if (NetworkNotifier.instance.isOffline) return maxAllowedRadius;
+    try {
+      final result = await _client.rpc('get_smart_cluster_radius', params: {
+        'p_user_lat': userLat,
+        'p_user_lng': userLng,
+        'p_user_country': countryIso,
+        'p_target_cluster_size': targetClusterSize,
+        'p_max_allowed_radius': maxAllowedRadius,
+      });
+      return (result as num?)?.toDouble() ?? maxAllowedRadius;
+    } catch (e) {
+      debugPrint('Smart cluster radius failed: $e');
+      return maxAllowedRadius;
+    }
+  }
+
+  // ─── Master RPC: Production Doctor Fetcher ────────────────────────────────
+
+  /// The unified RPC gateway. All doctor fetching flows through here.
+  /// PostgREST's foreign-key embedding on SETOF return type allows
+  /// `.select('*, specialties(name), ...')` to work natively on top.
+  Future<List<Map<String, dynamic>>> fetchProductionDoctors({
     String? query,
-    String sortBy = 'rating',
-    bool ascending = false,
+    String filterType = 'All',
+    String? category,        // 'Popular', 'Featured', or null
+    String? countryIso,
+    String? userLocation,
     double? userLat,
     double? userLng,
-    String? userLocation,
-    String? countryIso,
+    double? maxRadiusKm,     // From micro-RPC or user slider
+    String? localDay,
+    String? localTime,
+    int? specialtyId,
+    int? clinicId,
+    int limit = 50,
+    int offset = 0,
+    bool forceRefresh = false,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
   }) async {
     final isSearch = query != null && query.isNotEmpty;
-    final cacheKey =
-        (isSearch || userLat != null) ? null : 'all_doctors_$countryIso';
+
+    // Build a stable cache key for non-search, non-filtered requests
+    String? cacheKey;
+    if (!isSearch && filterType == 'All' && offset == 0 && maxRadiusKm == null) {
+      if (category != null) {
+        cacheKey = '${category.toLowerCase()}_doctors_$countryIso';
+      } else if (specialtyId != null) {
+        cacheKey = 'specialty_${specialtyId}_$countryIso';
+      } else if (clinicId != null) {
+        cacheKey = 'clinic_$clinicId';
+      } else {
+        cacheKey = 'all_doctors_$countryIso';
+      }
+    }
 
     return _fetchWithCache(
       cacheKey: cacheKey,
+      forceRefresh: forceRefresh,
+      onFreshData: onFreshData,
       fetcher: () async {
-        // PRO FIX: Removed !inner so doctors without a specialty don't disappear
-        var dbQuery = _client
-            .from('doctors')
-            .select(
-              '*, specialties(name), doctor_clinics(clinics(latitude, longitude))',
-            );
+        // Build the RPC params map — only include non-null values
+        final Map<String, dynamic> params = {
+          'p_filter_type': filterType,
+          'p_limit': limit,
+          'p_offset': offset,
+        };
+        if (query != null && query.isNotEmpty) params['p_search_query'] = query;
+        if (category != null) params['p_category'] = category;
+        if (countryIso != null) params['p_user_country'] = countryIso;
+        if (userLocation != null) params['p_user_location'] = userLocation;
+        if (userLat != null) params['p_user_lat'] = userLat;
+        if (userLng != null) params['p_user_lng'] = userLng;
+        if (maxRadiusKm != null) params['p_max_radius_km'] = maxRadiusKm;
+        if (localDay != null) params['p_local_day'] = localDay;
+        if (localTime != null) params['p_local_time'] = localTime;
+        if (specialtyId != null) params['p_specialty_id'] = specialtyId;
+        if (clinicId != null) params['p_clinic_id'] = clinicId;
 
-        if (isSearch) {
-          // PRO FIX: Safe Relational Search - Step 1: Find matching specialties
-          final specResponse = await _client
-              .from('specialties')
-              .select('id')
-              .ilike('name', '%$query%');
+        // The magic: PostgREST embeds foreign keys on SETOF returns
+        final response = await _client
+            .rpc('get_production_doctors', params: params)
+            .select('*, specialties(name), doctor_clinics(clinics(latitude, longitude))');
 
-          final specIds =
-              List<Map<String, dynamic>>.from(
-                specResponse,
-              ).map((e) => e['id']).toList();
-
-          // PRO FIX: Safe Relational Search - Step 2: Apply secure OR filter
-          if (specIds.isNotEmpty) {
-            // Double quotes ("%$query%") prevent spaces from crashing the Supabase parser!
-            dbQuery = dbQuery.or(
-              'full_name.ilike."%$query%",specialty_id.in.(${specIds.join(',')})',
-            );
-          } else {
-            dbQuery = dbQuery.ilike('full_name', '%$query%');
-          }
-        }
-
-        if (countryIso != null && countryIso.isNotEmpty) {
-          dbQuery = dbQuery.eq('country_iso', countryIso);
-        } else if (userLocation != null && userLocation.isNotEmpty) {
-          dbQuery = dbQuery.eq('location', userLocation);
-        }
-
-        if (userLat == null || userLng == null) {
-          final response = await dbQuery.order(sortBy, ascending: ascending);
-          return List<Map<String, dynamic>>.from(response);
-        } else {
-          final response = await dbQuery;
-          var data = List<Map<String, dynamic>>.from(response);
-          return await compute(_isolateDistanceSort, {
-            'data': data,
-            'userLat': userLat,
-            'userLng': userLng,
-          });
-        }
+        return List<Map<String, dynamic>>.from(response);
       },
     );
   }
 
-  double _getMinDistance(
-    Map<String, dynamic> doctor,
-    double userLat,
-    double userLng,
-  ) {
-    final clinicsJunction = doctor['doctor_clinics'] as List<dynamic>? ?? [];
-    if (clinicsJunction.isEmpty) return double.maxFinite;
-    double minParamsDiff = double.maxFinite;
-    for (var junction in clinicsJunction) {
-      final clinic = junction['clinics'];
-      if (clinic != null &&
-          clinic['latitude'] != null &&
-          clinic['longitude'] != null) {
-        final dist = Geolocator.distanceBetween(
-          userLat,
-          userLng,
-          (clinic['latitude'] as num).toDouble(),
-          (clinic['longitude'] as num).toDouble(),
-        );
-        if (dist < minParamsDiff) minParamsDiff = dist;
-      }
-    }
-    return minParamsDiff;
+  // ─── Convenience Wrappers (Preserve existing API surface) ─────────────────
+
+  Future<List<Map<String, dynamic>>> fetchAllDoctors({
+    String? query,
+    String filterType = 'All',
+    double? userLat,
+    double? userLng,
+    double? maxRadiusKm,
+    String? userLocation,
+    String? countryIso,
+    bool forceRefresh = false,
+  }) {
+    final now = DateTime.now();
+    return fetchProductionDoctors(
+      query: query,
+      filterType: filterType,
+      countryIso: countryIso,
+      userLocation: userLocation,
+      userLat: userLat,
+      userLng: userLng,
+      maxRadiusKm: maxRadiusKm,
+      localDay: DateFormat('EEEE').format(now),
+      localTime: DateFormat('HH:mm:ss').format(now),
+      forceRefresh: forceRefresh,
+      limit: 100,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPopularDoctors({
+    String? query,
+    String filterType = 'All',
+    int? limit,
+    bool forceRefresh = false,
+    String? userLocation,
+    String? countryIso,
+    double? userLat,
+    double? userLng,
+    double? maxRadiusKm,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
+  }) async {
+    final now = DateTime.now();
+    final data = await fetchProductionDoctors(
+      query: query,
+      filterType: filterType,
+      category: 'Popular',
+      countryIso: countryIso,
+      userLocation: userLocation,
+      userLat: userLat,
+      userLng: userLng,
+      maxRadiusKm: maxRadiusKm,
+      localDay: DateFormat('EEEE').format(now),
+      localTime: DateFormat('HH:mm:ss').format(now),
+      forceRefresh: forceRefresh,
+      limit: limit ?? 50,
+      onFreshData: onFreshData != null && limit != null
+          ? (fresh) => onFreshData(fresh.take(limit).toList())
+          : onFreshData,
+    );
+    return limit != null ? data.take(limit).toList() : data;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchFeaturedDoctors({
+    String? query,
+    String filterType = 'All',
+    int? limit,
+    bool forceRefresh = false,
+    String? userLocation,
+    String? countryIso,
+    double? userLat,
+    double? userLng,
+    double? maxRadiusKm,
+    void Function(List<Map<String, dynamic>>)? onFreshData,
+  }) async {
+    final now = DateTime.now();
+    final data = await fetchProductionDoctors(
+      query: query,
+      filterType: filterType,
+      category: 'Featured',
+      countryIso: countryIso,
+      userLocation: userLocation,
+      userLat: userLat,
+      userLng: userLng,
+      maxRadiusKm: maxRadiusKm,
+      localDay: DateFormat('EEEE').format(now),
+      localTime: DateFormat('HH:mm:ss').format(now),
+      forceRefresh: forceRefresh,
+      limit: limit ?? 50,
+      onFreshData: onFreshData != null && limit != null
+          ? (fresh) => onFreshData(fresh.take(limit).toList())
+          : onFreshData,
+    );
+    return limit != null ? data.take(limit).toList() : data;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDoctorsBySpecialty(
+    String specialtyId, {
+    String? query,
+    String filterType = 'All',
+    String? userLocation,
+    String? countryIso,
+    double? userLat,
+    double? userLng,
+    double? maxRadiusKm,
+  }) {
+    final now = DateTime.now();
+    return fetchProductionDoctors(
+      query: query,
+      filterType: filterType,
+      specialtyId: int.tryParse(specialtyId),
+      countryIso: countryIso,
+      userLocation: userLocation,
+      userLat: userLat,
+      userLng: userLng,
+      maxRadiusKm: maxRadiusKm,
+      localDay: DateFormat('EEEE').format(now),
+      localTime: DateFormat('HH:mm:ss').format(now),
+      limit: 100,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDoctorsByClinic(
+    int clinicId, {
+    String? query,
+    String filterType = 'All',
+    double? userLat,
+    double? userLng,
+    double? maxRadiusKm,
+  }) {
+    final now = DateTime.now();
+    return fetchProductionDoctors(
+      query: query,
+      filterType: filterType,
+      clinicId: clinicId,
+      userLat: userLat,
+      userLng: userLng,
+      maxRadiusKm: maxRadiusKm,
+      localDay: DateFormat('EEEE').format(now),
+      localTime: DateFormat('HH:mm:ss').format(now),
+      limit: 100,
+    );
   }
 
   Future<List<Map<String, dynamic>>> fetchGlobalSearch({
@@ -316,7 +465,7 @@ class DoctorRepository {
     double? userLng,
     String? userLocation,
     String? countryIso,
-  }) async {
+  }) {
     if (NetworkNotifier.instance.isOffline) {
       throw const AppFailure(
         type: AppFailureType.network,
@@ -324,83 +473,14 @@ class DoctorRepository {
         technicalMessage: 'offline',
       );
     }
-    try {
-      var dbQuery = _client
-          .from('doctors')
-          .select(
-            '*, specialties(name), doctor_clinics(clinics(name, latitude, longitude))',
-          );
-
-      if (query.isNotEmpty) {
-        // PRO FIX: 1. Safely find matching specialties
-        final specResponse = await _client
-            .from('specialties')
-            .select('id')
-            .ilike('name', '%$query%');
-        final specIds =
-            List<Map<String, dynamic>>.from(
-              specResponse,
-            ).map((e) => e['id']).toList();
-
-        // PRO FIX: 2. Safely find matching clinics
-        final clinicResponse = await _client
-            .from('clinics')
-            .select('id')
-            .ilike('name', '%$query%');
-        final clinicIds =
-            List<Map<String, dynamic>>.from(
-              clinicResponse,
-            ).map((e) => e['id']).toList();
-
-        // PRO FIX: 3. Find doctors that work in those clinics
-        List<int> docIdsFromClinics = [];
-        if (clinicIds.isNotEmpty) {
-          final junctionResponse = await _client
-              .from('doctor_clinics')
-              .select('doctor_id')
-              .inFilter('clinic_id', clinicIds);
-          docIdsFromClinics =
-              List<Map<String, dynamic>>.from(
-                junctionResponse,
-              ).map((e) => e['doctor_id'] as int).toList();
-        }
-
-        // PRO FIX: 4. Construct the ultimate safe OR query using ONLY local doctor table columns
-        List<String> orConditions = ['full_name.ilike."%$query%"'];
-        if (specIds.isNotEmpty) {
-          orConditions.add('specialty_id.in.(${specIds.join(',')})');
-        }
-        if (docIdsFromClinics.isNotEmpty) {
-          orConditions.add('id.in.(${docIdsFromClinics.join(',')})');
-        }
-
-        dbQuery = dbQuery.or(orConditions.join(','));
-      }
-
-      if (countryIso != null && countryIso.isNotEmpty) {
-        dbQuery = dbQuery.eq('country_iso', countryIso);
-      } else if (userLocation != null && userLocation.isNotEmpty) {
-        dbQuery = dbQuery.eq('location', userLocation);
-      }
-
-      if (userLat == null || userLng == null) {
-        final response = await dbQuery.order('rating', ascending: false);
-        return List<Map<String, dynamic>>.from(response);
-      } else {
-        final response = await dbQuery;
-        var data = List<Map<String, dynamic>>.from(response);
-        return await compute(_isolateDistanceSort, {
-          'data': data,
-          'userLat': userLat,
-          'userLng': userLng,
-        });
-      }
-    } catch (error) {
-      throw AppFailure.fromError(
-        error,
-        fallbackUserMessage: 'Unable to perform global search right now.',
-      );
-    }
+    return fetchProductionDoctors(
+      query: query,
+      countryIso: countryIso,
+      userLocation: userLocation,
+      userLat: userLat,
+      userLng: userLng,
+      limit: 50,
+    );
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> fetchSearchHints({
@@ -428,125 +508,6 @@ class DoctorRepository {
     } catch (error) {
       return {'doctors': [], 'clinics': []};
     }
-  }
-
-  Future<List<Map<String, dynamic>>> fetchPopularDoctors({
-    String? query,
-    int? limit,
-    bool forceRefresh = false,
-    String? userLocation,
-    String? countryIso,
-    void Function(List<Map<String, dynamic>>)? onFreshData,
-  }) async {
-    final isSearch = query != null && query.isNotEmpty;
-    final data = await _fetchWithCache(
-      cacheKey: isSearch ? null : 'popular_doctors_$countryIso',
-      forceRefresh: forceRefresh,
-      onFreshData: onFreshData != null ? ((fresh) => onFreshData(limit != null ? fresh.take(limit).toList() : fresh)) : null,
-      fetcher: () async {
-        var dbQuery = _client
-            .from('doctors')
-            .select('*, specialties(name)')
-            .eq('is_popular', true);
-        if (isSearch) {
-          dbQuery = dbQuery.ilike('full_name', '%$query%');
-        }
-
-        if (countryIso != null && countryIso.isNotEmpty) {
-          dbQuery = dbQuery.eq('country_iso', countryIso);
-        } else if (userLocation != null && userLocation.isNotEmpty) {
-          dbQuery = dbQuery.eq('location', userLocation);
-        }
-
-        final response = await dbQuery.order('rating', ascending: false);
-        return List<Map<String, dynamic>>.from(response);
-      },
-    );
-    return limit != null ? data.take(limit).toList() : data;
-  }
-
-  Future<List<Map<String, dynamic>>> fetchFeaturedDoctors({
-    String? query,
-    int? limit,
-    bool forceRefresh = false,
-    String? userLocation,
-    String? countryIso,
-    void Function(List<Map<String, dynamic>>)? onFreshData,
-  }) async {
-    final isSearch = query != null && query.isNotEmpty;
-    final data = await _fetchWithCache(
-      cacheKey: isSearch ? null : 'featured_doctors_$countryIso',
-      forceRefresh: forceRefresh,
-      onFreshData: onFreshData != null ? ((fresh) => onFreshData(limit != null ? fresh.take(limit).toList() : fresh)) : null,
-      fetcher: () async {
-        var dbQuery = _client
-            .from('doctors')
-            .select('*, specialties(name)')
-            .eq('is_featured', true);
-        if (isSearch) {
-          dbQuery = dbQuery.ilike('full_name', '%$query%');
-        }
-
-        if (countryIso != null && countryIso.isNotEmpty) {
-          dbQuery = dbQuery.eq('country_iso', countryIso);
-        } else if (userLocation != null && userLocation.isNotEmpty) {
-          dbQuery = dbQuery.eq('location', userLocation);
-        }
-
-        final response = await dbQuery.order('rating', ascending: false);
-        return List<Map<String, dynamic>>.from(response);
-      },
-    );
-    return limit != null ? data.take(limit).toList() : data;
-  }
-
-  Future<List<Map<String, dynamic>>> fetchDoctorsBySpecialty(
-    String specialtyId, {
-    String? query,
-    String? userLocation,
-    String? countryIso,
-  }) async {
-    final isSearch = query != null && query.isNotEmpty;
-    return _fetchWithCache(
-      cacheKey: isSearch ? null : 'specialty_${specialtyId}_$countryIso',
-      fetcher: () async {
-        var dbQuery = _client
-            .from('doctors')
-            .select('*, specialties(name)')
-            .eq('specialty_id', specialtyId);
-        if (isSearch) {
-          dbQuery = dbQuery.ilike('full_name', '%$query%');
-        }
-
-        if (countryIso != null && countryIso.isNotEmpty) {
-          dbQuery = dbQuery.eq('country_iso', countryIso);
-        } else if (userLocation != null && userLocation.isNotEmpty) {
-          dbQuery = dbQuery.eq('location', userLocation);
-        }
-
-        final response = await dbQuery.order('rating', ascending: false);
-        return List<Map<String, dynamic>>.from(response);
-      },
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> fetchDoctorsByClinic(
-    int clinicId, {
-    String? query,
-  }) async {
-    final isSearch = query != null && query.isNotEmpty;
-    return _fetchWithCache(
-      cacheKey: isSearch ? null : 'clinic_$clinicId',
-      fetcher: () async {
-        var dbQuery = _client
-            .from('doctors')
-            .select('*, specialties(name), doctor_clinics!inner(*)')
-            .eq('doctor_clinics.clinic_id', clinicId);
-        if (isSearch) dbQuery = dbQuery.ilike('full_name', '%$query%');
-        final response = await dbQuery;
-        return List<Map<String, dynamic>>.from(response);
-      },
-    );
   }
 
   Future<List<Map<String, dynamic>>> fetchSpecialties({
@@ -609,10 +570,16 @@ class DoctorRepository {
   Future<List<Map<String, dynamic>>> fetchFacilities({
     required String type,
     String? query,
+    double? userLat,
+    double? userLng,
+    double? maxRadiusKm,
+    String sortBy = 'views_count',
   }) async {
     final isSearch = query != null && query.isNotEmpty;
-    return _fetchWithCache(
-      cacheKey: isSearch ? null : 'facilities_$type',
+    // We only fetch facilities from DB/Cache globally.
+    // Spatial mapping, sorting, and bounding must occur AFTER the cache retrieves data.
+    final List<Map<String, dynamic>> rawFacilities = await _fetchWithCache(
+      cacheKey: isSearch ? null : 'facilities_$type', // Base cache key
       fetcher: () async {
         var dbQuery = _client.from('clinics').select().eq('type', type);
         if (isSearch) dbQuery = dbQuery.ilike('name', '%$query%');
@@ -620,12 +587,24 @@ class DoctorRepository {
         return List<Map<String, dynamic>>.from(response);
       },
     );
+
+    // Apply native boundary isolation independently of network layer
+    if (userLat == null || userLng == null) {
+      return rawFacilities;
+    }
+
+    return await compute(_isolateFacilityDistanceSort, {
+      'data': rawFacilities,
+      'userLat': userLat,
+      'userLng': userLng,
+      'maxRadiusKm': maxRadiusKm,
+    });
   }
 
-  Future<List<Map<String, dynamic>>> fetchHospitals({String? query}) async =>
-      fetchFacilities(type: 'hospital', query: query);
-  Future<List<Map<String, dynamic>>> fetchClinicsList({String? query}) async =>
-      fetchFacilities(type: 'clinic', query: query);
+  Future<List<Map<String, dynamic>>> fetchHospitals({String? query, double? userLat, double? userLng, double? maxRadiusKm}) async =>
+      fetchFacilities(type: 'hospital', query: query, userLat: userLat, userLng: userLng, maxRadiusKm: maxRadiusKm);
+  Future<List<Map<String, dynamic>>> fetchClinicsList({String? query, double? userLat, double? userLng, double? maxRadiusKm}) async =>
+      fetchFacilities(type: 'clinic', query: query, userLat: userLat, userLng: userLng, maxRadiusKm: maxRadiusKm);
 
   Future<List<Map<String, dynamic>>> fetchSchedulesByClinic(
     String doctorId,
@@ -786,31 +765,53 @@ class DoctorRepository {
   }
 }
 
-// --- PRO FIX: 120fps Background Isolate Sorter ---
-List<Map<String, dynamic>> _isolateDistanceSort(Map<String, dynamic> params) {
-  final data = params['data'] as List<Map<String, dynamic>>;
+
+
+List<Map<String, dynamic>> _isolateFacilityDistanceSort(Map<String, dynamic> params) {
+  // Isolate maps deeply unbox over execution boundaries, we must safely decode
+  final rawList = params['data'] as List<dynamic>;
+  final data = rawList.map((e) => Map<String, dynamic>.from(e)).toList();
+  
   final userLat = params['userLat'] as double;
   final userLng = params['userLng'] as double;
+  final maxRadiusKm = params['maxRadiusKm'] as double?;
 
-  data.sort((a, b) => _getMinDistanceHelper(a, userLat, userLng)
-      .compareTo(_getMinDistanceHelper(b, userLat, userLng)));
-  return data;
-}
+  final distances = <Map<String, dynamic>, double>{};
 
-double _getMinDistanceHelper(Map<String, dynamic> doctor, double userLat, double userLng) {
-  final clinicsJunction = doctor['doctor_clinics'] as List<dynamic>? ?? [];
-  if (clinicsJunction.isEmpty) return double.maxFinite;
-  double minParamsDiff = double.maxFinite;
-  for (var junction in clinicsJunction) {
-    final clinic = junction['clinics'];
-    if (clinic != null && clinic['latitude'] != null && clinic['longitude'] != null) {
-      final dist = Geolocator.distanceBetween(
-        userLat, userLng,
-        (clinic['latitude'] as num).toDouble(),
-        (clinic['longitude'] as num).toDouble(),
-      );
-      if (dist < minParamsDiff) minParamsDiff = dist;
+  // Pure dart math to heavily bypass Geolocator MethodChannel crash in isolated memory threads
+  double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371; // km
+    final dLat = (lat2 - lat1) * math.pi / 180.0;
+    final dLon = (lon2 - lon1) * math.pi / 180.0;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180.0) * math.cos(lat2 * math.pi / 180.0) *
+        math.sin(dLon / 2) * math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    // 1.3x Heuristic to convert straight-line map displacement to estimated driving commute
+    return 1.3 * (R * c);
+  }
+
+  for (var item in data) {
+    if (item['latitude'] != null && item['longitude'] != null) {
+      final double lat = (item['latitude'] as num).toDouble();
+      final double lng = (item['longitude'] as num).toDouble();
+      distances[item] = haversineDistance(userLat, userLng, lat, lng);
     }
   }
-  return minParamsDiff;
+
+  var filteredList = data;
+  if (maxRadiusKm != null) {
+    filteredList = data.where((item) {
+      if (!distances.containsKey(item)) return false; 
+      return distances[item]! <= maxRadiusKm;
+    }).toList();
+  }
+
+  filteredList.sort((a, b) {
+    if (!distances.containsKey(a)) return 1;
+    if (!distances.containsKey(b)) return -1;
+    return distances[a]!.compareTo(distances[b]!);
+  });
+
+  return filteredList;
 }

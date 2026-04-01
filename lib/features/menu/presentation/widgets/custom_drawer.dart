@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -47,16 +49,34 @@ class _CustomDrawerState extends State<CustomDrawer> {
     if (mounted) setState(() {});
   }
 
-  Widget _buildStaggeredItem(Widget child, int index) {
+  Widget _buildOrbitalItem(Widget child, int index, int totalItems) {
     return AnimatedBuilder(
       animation: widget.drawerAnimation,
       builder: (context, childWidget) {
         final double val = widget.drawerAnimation.value;
-        final double startOffset = 10.0 + (index * 4.0);
+        final double clampedVal = val.clamp(0.0, 1.0).toDouble();
+        final double startX = 80.0 + (index * 15.0);
+        final double startY = 40.0 + (index * 10.0);
+        final double startRot = 0.15;
+        final double offsetX = -startX * (1 - val);
+        final double offsetY = startY * (1 - val);
+        final double rotZ = -startRot * (1 - val);
+        final double curveOffset =
+            math.sin((index / (totalItems - 1)) * math.pi) * 35.0;
 
-        return Transform.translate(
-          offset: Offset(-startOffset * (1 - val), 0),
-          child: Opacity(opacity: val, child: childWidget),
+        return Transform(
+          alignment: Alignment.centerLeft,
+          transform:
+              Matrix4.identity()
+                ..translate(offsetX, offsetY, 0.0)
+                ..rotateZ(rotZ),
+          child: Padding(
+            padding: EdgeInsets.only(left: curveOffset),
+            child: Opacity(
+              opacity: math.pow(clampedVal, 1.5).toDouble().clamp(0.0, 1.0),
+              child: childWidget,
+            ),
+          ),
         );
       },
       child: child,
@@ -146,16 +166,17 @@ class _CustomDrawerState extends State<CustomDrawer> {
 
     final textColor = isDark ? Colors.white : const Color(0xFF1D2429);
     final subTextColor = isDark ? Colors.white54 : const Color(0xFF6B7A87);
+    const int totalItems = 6;
 
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 48, 16, 40),
         child: SizedBox(
-          width: MediaQuery.sizeOf(context).width * 0.60,
+          width: MediaQuery.sizeOf(context).width * 0.65,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildStaggeredItem(
+              _buildOrbitalItem(
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Column(
@@ -205,9 +226,10 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   ),
                 ),
                 0,
+                totalItems,
               ),
               const SizedBox(height: 48),
-              _buildStaggeredItem(
+              _buildOrbitalItem(
                 _MenuItem(
                   icon: Icons.medical_services_rounded,
                   title: "Doctors",
@@ -218,9 +240,10 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   },
                 ),
                 1,
+                totalItems,
               ),
               const SizedBox(height: 6),
-              _buildStaggeredItem(
+              _buildOrbitalItem(
                 _MenuItem(
                   icon: Icons.assignment_rounded,
                   title: "Records",
@@ -231,9 +254,10 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   },
                 ),
                 2,
+                totalItems,
               ),
               const SizedBox(height: 6),
-              _buildStaggeredItem(
+              _buildOrbitalItem(
                 _MenuItem(
                   icon: Icons.calendar_month_rounded,
                   title: "Schedule",
@@ -244,9 +268,10 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   },
                 ),
                 3,
+                totalItems,
               ),
               const SizedBox(height: 6),
-              _buildStaggeredItem(
+              _buildOrbitalItem(
                 _MenuItem(
                   icon: Icons.settings_rounded,
                   title: "Settings",
@@ -257,9 +282,10 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   },
                 ),
                 4,
+                totalItems,
               ),
               const Spacer(),
-              _buildStaggeredItem(
+              _buildOrbitalItem(
                 _MenuItem(
                   icon: Icons.logout_rounded,
                   title: "Log Out",
@@ -268,6 +294,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   onTap: () => _showLogoutDialog(context),
                 ),
                 5,
+                totalItems,
               ),
             ],
           ),
@@ -323,32 +350,33 @@ class _MenuItemState extends State<_MenuItem> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color:
               _isHovered
                   ? widget.textColor.withValues(alpha: 0.05)
                   : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: iconBgColor,
                 shape: BoxShape.circle,
               ),
-              child: Icon(widget.icon, color: iconColor, size: 22),
+              child: Icon(widget.icon, color: iconColor, size: 24),
             ),
             const SizedBox(width: 16),
             Text(
               widget.title,
               style: TextStyle(
                 color: widget.textColor.withValues(alpha: _isHovered ? 0.7 : 1),
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.2,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
               ),
             ),
           ],

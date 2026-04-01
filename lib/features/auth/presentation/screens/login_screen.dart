@@ -674,21 +674,16 @@ class _ForgotPasswordSheetContentState
       children: [
         Text(
           'Forgot password',
-          style: TextStyle(
+          style: AppTextStyles.h1(context).copyWith(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            // PRO FIX: Dynamic text color
-            color: context.colorTextDark,
           ),
         ),
         const SizedBox(height: 12),
         Text(
           'Enter your email to receive an 8-digit code.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            // PRO FIX: Dynamic secondary text color
-            color: context.colorTextLight,
+          style: AppTextStyles.body(context).copyWith(
             height: 1.5,
           ),
         ),
@@ -713,22 +708,16 @@ class _ForgotPasswordSheetContentState
       children: [
         Text(
           'Enter 8-Digit Code',
-          style: TextStyle(
+          style: AppTextStyles.h1(context).copyWith(
             fontSize: 22,
             fontWeight: FontWeight.bold,
-            // PRO FIX: Dynamic text color
-            color: context.colorTextDark,
           ),
         ),
         const SizedBox(height: 12),
         Text(
           'Enter the 8-digit code sent to your email.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: context.colorTextLight,
-            height: 1.5,
-          ),
+          style: AppTextStyles.body(context).copyWith(height: 1.5),
         ),
         const SizedBox(height: 30),
 
@@ -789,22 +778,16 @@ class _ForgotPasswordSheetContentState
       children: [
         Text(
           'Reset Password',
-          style: TextStyle(
+          style: AppTextStyles.h1(context).copyWith(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            // PRO FIX: Dynamic text color
-            color: context.colorTextDark,
           ),
         ),
         const SizedBox(height: 12),
         Text(
           'Set your new password.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: context.colorTextLight,
-            height: 1.5,
-          ),
+          style: AppTextStyles.body(context).copyWith(height: 1.5),
         ),
         const SizedBox(height: 30),
         AppTextField(

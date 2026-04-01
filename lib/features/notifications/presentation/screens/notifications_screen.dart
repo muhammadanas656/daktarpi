@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -153,7 +154,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       ),
                       child: Text(
                         "$unreadCount",
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ]
@@ -292,8 +297,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               Expanded(
                                 child: Text(
                                   notif['title'],
-                                  style: TextStyle(
-                                    fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: isRead ? FontWeight.w400 : FontWeight.w600,
                                     fontSize: 16,
                                     color: context.colorTextDark,
                                     letterSpacing: -0.2,
@@ -304,10 +309,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 _formatTime(notif['timestamp']),
-                                style: TextStyle(
+                                style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   color: isRead ? Colors.grey : contextColor,
-                                  fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
+                                  fontWeight: isRead ? FontWeight.w400 : FontWeight.w500,
                                 ),
                               ),
                             ],
@@ -315,7 +320,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           const SizedBox(height: 6),
                           Text(
                             notif['body'],
-                            style: TextStyle(
+                            style: GoogleFonts.poppins(
                               fontSize: 14,
                               color: isRead ? context.colorTextLight : context.colorTextDark.withValues(alpha: 0.85),
                               height: 1.3,
@@ -367,13 +372,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           const SizedBox(height: 24),
           Text(
             "You're all caught up",
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.colorTextDark, letterSpacing: -0.5),
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              color: context.colorTextDark,
+              letterSpacing: -0.5,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             "When you get updates, alerts, or\nreminders, they'll show up here.",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, color: context.colorTextLight, height: 1.5),
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              color: context.colorTextLight,
+              height: 1.5,
+            ),
           ),
         ],
       ),
@@ -406,9 +420,9 @@ class _StickyDateHeaderDelegate extends SliverPersistentHeaderDelegate {
             ),
             child: Text(
               title,
-              style: TextStyle(
+              style: GoogleFonts.poppins(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
                 color: isDark ? Colors.white70 : context.colorTextDark,
                 letterSpacing: 0.5,
               ),

@@ -49,33 +49,19 @@ class _HomeScreenState extends State<HomeScreen>
       duration: const Duration(milliseconds: 1600),
     );
 
-    _launchController.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        setState(() {});
-      }
-    });
-
     if (!widget.isBackgroundLayer) {
-      _fetchAllData();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_fetchAllData());
+      });
     }
-    
-    _favNotifier.addListener(_onNotifierChanged);
-    _profileNotifier.addListener(_onNotifierChanged);
-    _docsNotifier.addListener(_onNotifierChanged);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _favNotifier.removeListener(_onNotifierChanged);
-    _profileNotifier.removeListener(_onNotifierChanged);
-    _docsNotifier.removeListener(_onNotifierChanged);
     _launchController.dispose();
     super.dispose();
-  }
-
-  void _onNotifierChanged() {
-    if (mounted) setState(() {});
   }
 
   Future<void> _refreshData() async {
@@ -98,8 +84,8 @@ class _HomeScreenState extends State<HomeScreen>
 
       final results = await Future.wait([
         _docsNotifier.fetchSpecialties(forceRefresh: forceRefresh),
-        _docsNotifier.fetchPopularDoctors(limit: 5, forceRefresh: forceRefresh),
-        _docsNotifier.fetchFeaturedDoctors(limit: 5, forceRefresh: forceRefresh),
+        _docsNotifier.fetchPopularDoctors(limit: 5, forceRefresh: forceRefresh, isHomeFeed: true),
+        _docsNotifier.fetchFeaturedDoctors(limit: 5, forceRefresh: forceRefresh, isHomeFeed: true),
         _homeRepo.fetchBanners(
               countryIso,
               forceRefresh: forceRefresh,
@@ -136,8 +122,6 @@ class _HomeScreenState extends State<HomeScreen>
     return AnimatedBuilder(
       animation: _launchController,
       builder: (context, child) {
-        // 🔥 The "Kill Switch": Unlocks native scrolling by removing animation wrappers once complete
-        // This is what guarantees the Impeller smear bug never returns.
         if (_launchController.isCompleted || widget.isBackgroundLayer) return child!;
 
         final slideOffset = slideDown ? const Offset(0, -0.3) : const Offset(0, 0.15);
@@ -159,128 +143,138 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
-    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
+    final dynamicBottomPadding = bottomSafeArea +17;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      // 🚀 THE ULTIMATE FIX: Pure, clean, restricted native layout.
       body: RefreshIndicator(
         onRefresh: _refreshData,
         color: AppColors.primaryGreen,
         backgroundColor: Theme.of(context).colorScheme.surface,
-        // Drops naturally from the top, resting below the notch
         displacement: MediaQuery.paddingOf(context).top + 40,
         edgeOffset: 0, 
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
           child: SingleChildScrollView(
-            // 🛡️ THE PHYSICS LOCK: Clamping prevents the infinite overscroll completely. 
-            // AlwaysScrollable allows the refresh spinner to work without dragging the screen down.
             physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-          padding: EdgeInsets.only(bottom: dynamicBottomPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildStaggered(
-                start: 0.1,
-                end: 0.6,
-                slideDown: true,
-                child: _buildHeader(), // No hacks, just the header.
-              ),
-              _buildStaggered(
-                start: 0.2,
-                end: 0.7,
-                child: HomeBanner(banners: _banners),
-              ),
-              _buildStaggered(
-                start: 0.3,
-                end: 0.8,
-                child: _buildSpecialtiesSection(),
-              ),
-              _buildStaggered(
-                start: 0.4,
-                end: 0.9,
-                child: _buildPopularSection(),
-              ),
-              _buildStaggered(
-                start: 0.5,
-                end: 1.0,
-                child: _buildFeaturedSection(),
-              ),
-            ],
+            padding: EdgeInsets.only(bottom: dynamicBottomPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStaggered(
+                  start: 0.1,
+                  end: 0.6,
+                  slideDown: true,
+                  child: _buildHeader(), 
+                ),
+                _buildStaggered(
+                  start: 0.2,
+                  end: 0.7,
+                  child: HomeBanner(banners: _banners),
+                ),
+                _buildStaggered(
+                  start: 0.3,
+                  end: 0.8,
+                  child: _buildSpecialtiesSection(),
+                ),
+                _buildStaggered(
+                  start: 0.4,
+                  end: 0.9,
+                  child: _buildPopularSection(),
+                ),
+                _buildStaggered(
+                  start: 0.5,
+                  end: 1.0,
+                  child: _buildFeaturedSection(),
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
   }
 
   Widget _buildHeader() {
-    return HomeHeader(
-      fullName: !_profileNotifier.isLoaded ? "Loading..." : _profileNotifier.fullName,
-      avatarUrl: _profileNotifier.avatarUrl,
-      searchController: _searchController,
-      onSearchTap: () async {
-        await context.push(AppRoutes.globalSearch);
-        if (mounted) _refreshData();
+    return ListenableBuilder(
+      listenable: _profileNotifier,
+      builder: (context, _) {
+        return HomeHeader(
+          fullName: !_profileNotifier.isLoaded ? "Loading..." : _profileNotifier.fullName,
+          avatarUrl: _profileNotifier.avatarUrl,
+          searchController: _searchController,
+          onSearchTap: () async {
+            await context.push(AppRoutes.globalSearch);
+            if (mounted) _refreshData();
+          },
+        );
       },
     );
   }
 
   Widget _buildSpecialtiesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
-          child: Text(
-            "Specialities most relevant to you",
-            style: AppTextStyles.h3(context),
-          ),
-        ),
-        HomeSpecialtiesRow(
-          specialties: _docsNotifier.specialties,
-          onSpecialtyTap: (id, name, iconUrl) async {
-            await context.push(
-              AppRoutes.specialtyDoctorsById('$id'),
-              extra: SpecialtyRouteArgs(name: name, iconUrl: iconUrl),
-            );
-            if (mounted) _refreshData();
-          },
-        ),
-      ],
+    return ListenableBuilder(
+      listenable: _docsNotifier,
+      builder: (context, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const HomeSectionHeader(
+              title: "Specialities most relevant to you",
+            ),
+            HomeSpecialtiesRow(
+              specialties: _docsNotifier.specialties,
+              onSpecialtyTap: (id, name, iconUrl) async {
+                await context.push(
+                  AppRoutes.specialtyDoctorsById('$id'),
+                  extra: SpecialtyRouteArgs(name: name, iconUrl: iconUrl),
+                );
+                if (mounted) _refreshData();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildPopularSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        HomeSectionHeader(
-          title: "Popular Doctor",
-          onTap: () async {
-            await context.push(AppRoutes.popularDoctors);
-            if (mounted) _refreshData();
-          },
-        ),
-        _buildPopularList(_docsNotifier.popularDoctors),
-      ],
+    return ListenableBuilder(
+      listenable: _docsNotifier,
+      builder: (context, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            HomeSectionHeader(
+              title: "Popular Doctor",
+              onTap: () async {
+                await context.push(AppRoutes.popularDoctors);
+              },
+            ),
+            _buildPopularList(_docsNotifier.homePopularDoctors),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildFeaturedSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        HomeSectionHeader(
-          title: "Feature Doctor",
-          onTap: () async {
-            await context.push(AppRoutes.featuredDoctors);
-            if (mounted) _refreshData();
-          },
-        ),
-        _buildFeaturedList(_docsNotifier.featuredDoctors),
-      ],
+    return ListenableBuilder(
+      listenable: Listenable.merge([_docsNotifier, _favNotifier]),
+      builder: (context, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            HomeSectionHeader(
+              title: "Feature Doctor",
+              onTap: () async {
+                await context.push(AppRoutes.featuredDoctors);
+              },
+            ),
+            _buildFeaturedList(_docsNotifier.homeFeaturedDoctors),
+          ],
+        );
+      },
     );
   }
 
@@ -292,10 +286,10 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }
     return SizedBox(
-      height: 265,
+      height: 275, // OVERFLOW FIX: Accommodates your new card physics
       child: ListView.separated(
         clipBehavior: Clip.none,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 19),
         scrollDirection: Axis.horizontal,
         itemCount: popular.length,
         separatorBuilder: (_, __) => const SizedBox(width: 16),
@@ -321,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }
     return SizedBox(
-      height: 185,
+      height: 230, // OVERFLOW FIX: Accommodates your new card physics & specialty text
       child: ListView.separated(
         clipBehavior: Clip.none,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -333,6 +327,7 @@ class _HomeScreenState extends State<HomeScreen>
           return HomeFeaturedDoctorCard(
             id: doc['id'],
             name: doc['full_name'] ?? 'Unknown',
+            specialty: doc['specialties']?['name'] ?? 'Specialist', 
             price: doc['hourly_rate']?.toString() ?? '20',
             rating: doc['rating']?.toString() ?? '4.8',
             imageUrl: doc['profile_picture_url'],

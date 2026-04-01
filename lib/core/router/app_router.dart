@@ -148,7 +148,12 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.accountActivity,
       parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => const AccountActivityScreen(),
+      pageBuilder: (context, state) {
+        return ModernDepthTransitionPage(
+          key: state.pageKey,
+          child: const AccountActivityScreen(),
+        );
+      },
     ),
 
     GoRoute(
@@ -233,7 +238,11 @@ final appRouter = GoRouter(
         final extra = state.extra as SpecialtyRouteArgs?;
         final name = extra?.name ?? 'Doctors';
         final iconUrl = extra?.iconUrl; // Grabs the instantly cached URL!
-        return SpecialtyDoctorsScreen(specialtyId: id, specialtyName: name, specialtyIconUrl: iconUrl);
+        return SpecialtyDoctorsScreen(
+          specialtyId: id,
+          specialtyName: name,
+          specialtyIconUrl: iconUrl,
+        );
       },
     ),
 
@@ -332,6 +341,40 @@ final appRouter = GoRouter(
     ),
   ],
 );
+
+class ModernDepthTransitionPage<T> extends CustomTransitionPage<T> {
+  ModernDepthTransitionPage({required LocalKey key, required Widget child})
+    : super(
+        key: key,
+        child: child,
+        transitionDuration: const Duration(milliseconds: 400),
+        reverseTransitionDuration: Duration.zero,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curve = CurvedAnimation(
+            parent: animation,
+            curve: Curves.fastLinearToSlowEaseIn,
+            reverseCurve: Curves.fastOutSlowIn,
+          );
+
+          final scaleAnimation = Tween<double>(
+            begin: 0.96,
+            end: 1.0,
+          ).animate(curve);
+
+          final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+            CurvedAnimation(
+              parent: animation,
+              curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+            ),
+          );
+
+          return ScaleTransition(
+            scale: scaleAnimation,
+            child: FadeTransition(opacity: fadeAnimation, child: child),
+          );
+        },
+      );
+}
 
 // --- PRO FIX: Global Notification Router ---
 void handleNotificationTap(String? payload) {

@@ -385,7 +385,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
             child: SingleChildScrollView(
-              physics: const ClampingScrollPhysics(),
+              physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
               child: Column(
                 children: [
                 // --- HEADER ---

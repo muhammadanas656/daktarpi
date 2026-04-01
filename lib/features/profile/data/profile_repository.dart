@@ -7,6 +7,10 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/network/network_notifier.dart';
 import 'user_profile.dart';
+import '../presentation/profile_notifier.dart';
+import '../../doctors/presentation/doctors_notifier.dart';
+import '../../doctors/presentation/favorites_notifier.dart';
+import '../../appointments/presentation/appointment_notifier.dart';
 
 class ProfileRepository {
   final SupabaseClient _client;
@@ -23,6 +27,10 @@ class ProfileRepository {
   String? get currentUserEmail => _client.auth.currentUser?.email;
 
   Future<void> signOut() async {
+    ProfileNotifier.instance.clear();
+    DoctorsNotifier.instance.clear();
+    FavoritesNotifier.instance.clear();
+    await AppointmentNotifier.instance.clear();
     await _client.auth.signOut();
   }
 

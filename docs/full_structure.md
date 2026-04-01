@@ -5,20 +5,22 @@ This document is the repository-level source of truth for:
 - the app bootstrap and runtime spine
 - the route table and shell navigation model
 - shared state ownership, persistence, and background services
-- feature ownership by directory
+- feature ownership by directory and screen surface
 - backend, platform, asset, and test surfaces
 
 It is intended to answer both of these questions in one place:
 1. Where does this code live?
 2. Which part of the app currently owns this behavior?
 
-Last reconciled: March 25, 2026.
+Last reconciled: March 31, 2026.
 
 Ground rules for this file:
 - The structure snapshot is based on tracked files from git ls-files.
 - Tracked generated files such as *.g.dart and *.freezed.dart are included.
 - Tracked temporary infra files that are still in version control, such as supabase/.temp/*, are included because they are part of the repo as-is.
+- Tracked helper, diagnostic, and scratch files are included if they are versioned in the repo today.
 - Untracked/transient local folders such as .git/, .dart_tool/, and build/ are intentionally excluded.
+- Local directories with no tracked files, such as assets/fonts/ or lib/services/, are intentionally omitted from the tree.
 - Functional descriptions below describe current ownership in the codebase, not future architectural intentions.
 
 ## 1. Runtime Spine
@@ -43,7 +45,7 @@ The live runtime path through the app is:
 3. lib/app.dart
    - Builds MaterialApp.router.
    - Applies global light/dark theme from SettingsNotifier.
-   - Applies localization delegates and the current locale configuration.
+   - Applies localization delegates and the currently hardcoded supported locales (en_US and bn_BD).
    - Applies global bouncy scroll physics.
    - Wraps the routed app with OfflineModeGuard and InactivityLockGuard.
 4. lib/core/router/app_router.dart
@@ -54,7 +56,7 @@ The live runtime path through the app is:
    - Centralizes notification payload navigation through handleNotificationTap.
 5. lib/core/main_wrapper/main_wrapper.dart
    - Hosts the shell UI.
-   - Owns the animated drawer and branch switching.
+   - Owns the animated drawer, gesture-driven branch switching, and floating dock.
    - Hydrates appointments and profile state after shell mount.
    - Starts appointment realtime subscriptions.
    - Performs silent refreshes on app resume.
@@ -200,6 +202,7 @@ Directory contents:
 
 Current ownership:
 - login/signup
+- Google sign-in entrypoints
 - 2FA verification
 - auth route resolution
 - security gating
@@ -223,6 +226,7 @@ Directory contents:
 
 Current ownership:
 - non-domain one-off shared screen(s)
+- location permission onboarding
 
 Directory contents:
 - presentation/screens/enable_location_screen.dart
@@ -236,8 +240,15 @@ Current ownership:
 - clinic/facility rosters
 - doctor detail pages
 - favorites
+- global search and recent search handoff
 - route/map helpers for clinic locations
 - caching and offline sync for doctor/favorite data
+
+Notable user-facing surfaces:
+- DoctorsScreen supports All, Nearest, Hospital, Clinic, and Best Rated filters.
+- GlobalSearchScreen is the full doctor/specialty/clinic search surface.
+- DoctorDetailsScreen owns booking handoff, clinic cards, schedules, map, and favorite actions.
+- MyDoctorsScreen owns the user-specific doctors/favorites surface.
 
 Directory contents:
 - data/
@@ -272,6 +283,12 @@ Current ownership:
 - specialties row
 - curated doctor highlights
 
+User-facing surfaces:
+- home banners
+- specialties carousel/row
+- featured doctors preview
+- popular doctors preview
+
 Directory contents:
 - data/home_repository.dart
 - presentation/screens/home_screen.dart
@@ -296,6 +313,7 @@ Current ownership:
 - attachment upload/download handling
 - local caching and offline queueing
 - record create/edit flows
+- biometric-gated record visibility
 
 Directory contents:
 - data/
@@ -320,6 +338,12 @@ Current ownership:
 - review dialog and settings sections
 - repository for destructive/security settings actions
 
+User-facing surfaces:
+- main drawer and shell navigation handoff
+- settings preferences and support/legal sections
+- linked providers/accounts
+- privacy policy and account activity
+
 Directory contents:
 - data/settings_repository.dart
 - presentation/screens/account_activity_screen.dart
@@ -339,7 +363,7 @@ Directory contents:
 Current ownership:
 - notification inbox
 - local-first cache and dedup
-- background-isolate merge behavior
+- foreground/background FCM merge behavior
 - remote read/delete sync
 
 Directory contents:
@@ -353,6 +377,9 @@ Current ownership:
 - signed-in profile fetch/edit state
 - secure profile cache
 - profile view/edit screens
+- avatar upload
+- location capture and reverse geocoding
+- saved-patient management for booking
 - shared profile-derived convenience values
 
 Directory contents:
@@ -369,6 +396,14 @@ Directory contents:
 
 Current ownership:
 - global settings state owner only
+
+Tracked settings state concerns:
+- theme mode
+- inactivity lock timeout
+- medical record lock
+- biometric/trusted-device state
+- notification and reminder preferences
+- drawer hint/tutorial visibility
 
 Directory contents:
 - presentation/settings_notifier.dart
@@ -401,20 +436,22 @@ This directory owns app-wide infrastructure:
 - constants/: route constants and legal text constants
 - errors/: shared failure model (AppFailure)
 - localization/: localization wiring
-- main_wrapper/: shell wrapper, drawer, and root-tab orchestration
+- main_wrapper/: shell wrapper, drawer, floating dock, and root-tab orchestration
 - network/: offline guard plus connectivity/offline queue sync
 - router/: GoRouter configuration and auth refresh stream
 - security/: biometrics, device integrity, inactivity lock, and step-up auth
 - services/: notifications, FCM, and error telemetry
 - theme/: colors, typography, dimensions, shapes, styles, motion, and themes
-- utils/: route/security formatting helpers
-- widgets/: app-wide UI helpers such as loaders, premium loaders, route-error screens, and error fallbacks
+- utils/: route/security formatting helpers and small shared utilities
+- widgets/: app-wide UI helpers such as loaders, cards, route-error screens, and error fallbacks
 
 ### 5.2 lib/presentation/widgets/
 
 This is the shared UI primitive layer used across features.
 
-Tracked shared widgets:
+Tracked shared widgets and sublayers:
+- animations/dynamic_glass_shelf_delegate.dart
+- physics/app_scroll_behavior.dart
 - appointment_card.dart
 - app_floating_dialog.dart
 - app_network_image.dart
@@ -432,6 +469,10 @@ Tracked shared widgets:
 - primary_button.dart
 - social_button.dart
 
+Note:
+- app.dart currently injects bounce physics inline through MaterialScrollBehavior().copyWith(...).
+- lib/presentation/widgets/physics/app_scroll_behavior.dart exists as a reusable shared scroll-behavior helper, even though that is not the current global injection path.
+
 ### 5.3 Legacy / Misc Shared Code
 
 - lib/data/services/user_service.dart: legacy/shared service code outside the feature folders
@@ -446,6 +487,8 @@ Tracked backend-side code:
 - supabase/functions/client-error-log/index.ts: backend target for client telemetry
 - supabase/functions/route-proxy/index.ts: route helper/proxy for doctor route flows
 - supabase/functions/send-reminders/index.ts: reminder-sending function
+- supabase/functions/send-reminders/deno.json
+- supabase/functions/send-reminders/.npmrc
 - supabase/migrations/20260221183000_add_trusted_devices.sql
 - supabase_add_country_iso.sql
 
@@ -465,8 +508,11 @@ Firebase is used for app boot initialization, FCM background message handling, a
 
 ### 6.3 Assets
 
-Current tracked asset inventory:
+Current tracked runtime asset inventory:
 - assets/images/logo.png
+
+Important runtime note:
+- .env is declared under pubspec.yaml assets and loaded from main.dart, but the file itself is not tracked, so it is intentionally absent from the structure snapshot.
 
 ### 6.4 Documentation Surface
 
@@ -513,25 +559,36 @@ Tracked Flutter platform shells:
 - windows/
 
 These contain the expected runner/config/generated-plugin files for each platform.
+They also include tracked launcher/splash resources on Android and Apple platform asset catalogs.
 
 ### 6.7 Root-Level Tracked Diagnostic / Project Files
 
 Tracked root-level non-source and helper files currently include:
 - .gitignore
+- .metadata
 - README.md
 - pubspec.yaml
 - pubspec.lock
 - analysis_options.yaml
+- .vscode/*
+- .github/workflows/test.yml
 - analyze_out.txt
 - analyze_output.txt
 - errors.txt
-- .metadata
-- .vscode/*
-- .github/workflows/test.yml
+- .gemini_diff_left.txt
+- .gemini_git_status.txt
+- .gemini_utf8.txt
 - missing_methods.dart
 - restored_doctor_repo.dart
+- temp_diff.txt
+- tmp_wrapper.dart
+- wrapper_diff.txt
+- wrapper_diff_history.txt
+- wrapper_log.txt
+- tmp/update_clinic.py
+- tmp/update_specialty.py
 
-Untracked local helpers such as tmp/*.py are intentionally excluded from this source-of-truth snapshot because this file is reconciled against tracked files only.
+These files are part of the tracked repository snapshot and are therefore intentionally registered here even when they are helper, recovery, or investigation artifacts.
 
 ## 7. Full Tracked Repository Tree
 ```text
@@ -539,6 +596,9 @@ daktarpi/
 |-- .github/
 |   \-- workflows/
 |       \-- test.yml
+|-- .gemini_diff_left.txt
+|-- .gemini_git_status.txt
+|-- .gemini_utf8.txt
 |-- .gitignore
 |-- .metadata
 |-- .vscode/
@@ -562,6 +622,34 @@ daktarpi/
 |   |       |   |           \-- daktarpi/
 |   |       |   |               \-- MainActivity.kt
 |   |       |   \-- res/
+|   |       |       |-- drawable-night-v21/
+|   |       |       |   |-- background.png
+|   |       |       |   \-- launch_background.xml
+|   |       |       |-- drawable-night/
+|   |       |       |   |-- background.png
+|   |       |       |   \-- launch_background.xml
+|   |       |       |-- drawable-v21/
+|   |       |       |   |-- background.png
+|   |       |       |   \-- launch_background.xml
+|   |       |       |-- drawable/
+|   |       |       |   |-- background.png
+|   |       |       |   \-- launch_background.xml
+|   |       |       |-- mipmap-hdpi/
+|   |       |       |   \-- ic_launcher.png
+|   |       |       |-- mipmap-mdpi/
+|   |       |       |   \-- ic_launcher.png
+|   |       |       |-- mipmap-xhdpi/
+|   |       |       |   \-- ic_launcher.png
+|   |       |       |-- mipmap-xxhdpi/
+|   |       |       |   \-- ic_launcher.png
+|   |       |       |-- mipmap-xxxhdpi/
+|   |       |       |   \-- ic_launcher.png
+|   |       |       |-- values-night-v31/
+|   |       |       |   \-- styles.xml
+|   |       |       |-- values-night/
+|   |       |       |   \-- styles.xml
+|   |       |       |-- values-v31/
+|   |       |       |   \-- styles.xml
 |   |       |       \-- values/
 |   |       |           |-- strings.xml
 |   |       |           \-- styles.xml
@@ -856,6 +944,10 @@ daktarpi/
 |   |-- main.dart
 |   |-- presentation/
 |   |   \-- widgets/
+|   |       |-- animations/
+|   |       |   \-- dynamic_glass_shelf_delegate.dart
+|   |       |-- physics/
+|   |       |   \-- app_scroll_behavior.dart
 |   |       |-- appointment_card.dart
 |   |       |-- app_floating_dialog.dart
 |   |       |-- app_network_image.dart
@@ -959,6 +1051,7 @@ daktarpi/
 |   \-- migrations/
 |       \-- 20260221183000_add_trusted_devices.sql
 |-- supabase_add_country_iso.sql
+|-- temp_diff.txt
 |-- test/
 |   |-- core/
 |   |   |-- errors/
@@ -980,6 +1073,10 @@ daktarpi/
 |   |               \-- medical_record_route_args_test.dart
 |   |-- test_db_diagnostic_test.dart
 |   \-- widget_test.dart
+|-- tmp/
+|   |-- update_clinic.py
+|   \-- update_specialty.py
+|-- tmp_wrapper.dart
 |-- web/
 |   |-- favicon.png
 |   |-- icons/
@@ -989,6 +1086,9 @@ daktarpi/
 |   |   \-- Icon-maskable-512.png
 |   |-- index.html
 |   \-- manifest.json
+|-- wrapper_diff.txt
+|-- wrapper_diff_history.txt
+|-- wrapper_log.txt
 \-- windows/
     |-- .gitignore
     |-- CMakeLists.txt

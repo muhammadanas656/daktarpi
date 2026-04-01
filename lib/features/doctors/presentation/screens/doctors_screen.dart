@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -11,9 +12,8 @@ import '../../../../presentation/widgets/app_network_image.dart';
 
 import '../favorites_notifier.dart';
 import '../doctors_notifier.dart';
+import '../widgets/smart_filter_bar.dart';
 import '../models/doctors_route_args.dart';
-import '../../../profile/presentation/profile_notifier.dart';
-import '../../../notifications/presentation/notification_notifier.dart';
 import '../../../../core/widgets/app_loader.dart';
 
 class DoctorsScreen extends StatefulWidget {
@@ -25,31 +25,28 @@ class DoctorsScreen extends StatefulWidget {
   State<DoctorsScreen> createState() => _DoctorsScreenState();
 }
 
-class _DoctorsScreenState extends State<DoctorsScreen> {
+class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _favNotifier = FavoritesNotifier.instance;
-  final _profileNotifier = ProfileNotifier.instance;
   final _docsNotifier = DoctorsNotifier.instance;
-
   final TextEditingController _searchController = TextEditingController();
 
   String _selectedFilter = 'All';
+  double? _activeRadiusKm;
   Timer? _debounce;
-
-  final List<String> _filters = [
-    'All',
-    'Nearest',
-    'Hospital',
-    'Clinic',
-    'Best Rated',
-  ];
 
   @override
   void initState() {
     super.initState();
-    _docsNotifier.fetchDoctors();
+    if (!widget.isBackgroundLayer) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_docsNotifier.fetchDoctors());
+      });
+    }
     _searchController.addListener(_onSearchChanged);
     _favNotifier.addListener(_onFavoritesChanged);
-    _profileNotifier.addListener(_onProfileChanged);
   }
 
   @override
@@ -57,12 +54,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     _searchController.dispose();
     _debounce?.cancel();
     _favNotifier.removeListener(_onFavoritesChanged);
-    _profileNotifier.removeListener(_onProfileChanged);
     super.dispose();
   }
 
   void _onFavoritesChanged() => mounted ? setState(() {}) : null;
-  void _onProfileChanged() => mounted ? setState(() {}) : null;
 
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
@@ -71,6 +66,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         _docsNotifier.fetchDoctors(
           query: _searchController.text.trim(),
           filter: _selectedFilter,
+          maxRadiusKm: _activeRadiusKm,
         );
       }
     });
@@ -91,138 +87,66 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              // 🔥 PRO FIX: Removed RepaintBoundary armor. 
-              // Since there is no frosted glass here, the boundary was causing the glitch!
-              _buildHeader(),
-              _buildSearchBar(),
-              _buildFilterChips(),
-              Expanded(
-                child: ListenableBuilder(
-                  listenable: _docsNotifier,
-                  builder: (context, _) {
-                    if (_docsNotifier.isLoading &&
-                        _docsNotifier.doctors.isEmpty) {
-                      return const Center(
-                        child: AppLoader(color: AppColors.primaryGreen),
-                      );
-                    }
-
-                    return Stack(
-                      children: [
-                        RefreshIndicator(
-                          onRefresh: _fetchDoctors,
-                          color: AppColors.primaryGreen,
-                          child:
-                              _selectedFilter == 'Hospital'
-                                  ? _buildHospitalGrid()
-                                  : _selectedFilter == 'Clinic'
-                                  ? _buildClinicGrid()
-                                  : _buildDoctorList(),
-                        ),
-                        if (_docsNotifier.isLoading &&
-                            _docsNotifier.doctors.isNotEmpty)
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            child: LinearProgressIndicator(
-                              color: AppColors.primaryGreen,
-                              backgroundColor: AppColors.primaryGreen
-                                  .withValues(alpha: 0.1),
-                              minHeight: 3,
-                            ),
-                          ),
-                      ],
+      // THE FIX: Pure, solid background. No more cyan gradients!
+backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _buildSearchBar(),
+            _buildFilterChips(),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: _docsNotifier,
+                builder: (context, _) {
+                  if (_docsNotifier.isLoading &&
+                      _docsNotifier.doctors.isEmpty) {
+                    return const Center(
+                      child: AppLoader(color: AppColors.primaryGreen),
                     );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+                  }
 
-  Widget _buildHeader() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            "Find a Doctor",
-            style: AppTextStyles.h1(
-              context,
-            ).copyWith(fontSize: 26, letterSpacing: -0.5),
-          ),
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isDark ? AppColors.darkBorder : context.colorBorder,
-              ),
-              boxShadow: AppStyles.cardShadow(context),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.notifications_none_rounded,
-                    color: context.colorTextDark,
-                    size: 22,
-                  ),
-                  onPressed: () => context.push(AppRoutes.notifications),
-                ),
-                AnimatedBuilder(
-                  animation: NotificationNotifier.instance,
-                  builder: (context, child) {
-                    if (NotificationNotifier.instance.unreadCount == 0) {
-                      return const SizedBox.shrink();
-                    }
-                    return Positioned(
-                      right: 10,
-                      top: 10,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: AppColors.dangerRed,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.surface,
-                            width: 1.5,
-                          ),
-                        ),
+                  return Stack(
+                    children: [
+                      RefreshIndicator(
+                        onRefresh: _fetchDoctors,
+                        color: AppColors.primaryGreen,
+                        child:
+                            _selectedFilter == 'Hospital'
+                                ? _buildHospitalGrid()
+                                : _selectedFilter == 'Clinic'
+                                ? _buildClinicGrid()
+                                : _buildDoctorList(),
                       ),
-                    );
-                  },
-                ),
-              ],
+                      if (_docsNotifier.isLoading &&
+                          _docsNotifier.doctors.isNotEmpty)
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: LinearProgressIndicator(
+                            color: AppColors.primaryGreen,
+                            backgroundColor: AppColors.primaryGreen
+                                .withOpacity(0.1),
+                            minHeight: 2,
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
       child: CustomSearchBar(
         controller: _searchController,
         hintText: "Search doctor, specialty...",
@@ -233,76 +157,24 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
+  // THE FIX: Intelligent Boundary Filter integration
   Widget _buildFilterChips() {
-    return Container(
-      height: 54,
-      margin: const EdgeInsets.only(top: 16, bottom: 12),
-      child: ListView.separated(
-        clipBehavior: Clip.none,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
-        scrollDirection: Axis.horizontal,
-        itemCount: _filters.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final filter = _filters[index];
-          final isSelected = _selectedFilter == filter;
-
-          return GestureDetector(
-            onTap: () => _onFilterTap(filter),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color:
-                    isSelected
-                        ? AppColors.primaryGreen
-                        : Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                border:
-                    isSelected
-                        ? null
-                        : Border.all(
-                          color: context.colorBorder.withValues(alpha: 0.6),
-                        ),
-                boxShadow:
-                    isSelected
-                        ? [
-                          BoxShadow(
-                            color: AppColors.primaryGreen.withValues(
-                              alpha: 0.35,
-                            ),
-                            blurRadius: 14,
-                            offset: const Offset(0, 6),
-                          ),
-                        ]
-                        : [],
-              ),
-              child: Text(
-                filter,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : context.colorTextLight,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  fontSize: 14,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _onFilterTap(String filter) {
-    if (widget.isBackgroundLayer) return;
-    setState(() {
-      _selectedFilter = filter;
-    });
-    _docsNotifier.fetchDoctors(
-      query: _searchController.text.trim(),
-      filter: filter,
+    return SmartFilterBar(
+      filters: const ['All', 'Nearest', 'Hospital', 'Clinic', 'Top Rated'],
+      initialFilter: _selectedFilter,
+      isBackgroundLayer: widget.isBackgroundLayer,
+      onFilterChanged: (filter, radius) {
+        if (widget.isBackgroundLayer) return;
+        setState(() {
+          _selectedFilter = filter;
+          _activeRadiusKm = radius;
+        });
+        _docsNotifier.fetchDoctors(
+          query: _searchController.text.trim(),
+          filter: filter,
+          maxRadiusKm: radius,
+        );
+      },
     );
   }
 
@@ -312,16 +184,15 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       return Center(
         child: Text(
           "No doctors found",
-          style: TextStyle(color: context.colorTextLight),
+          style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
         ),
       );
     }
-    final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
-    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
+
+    final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + 20;
 
     return ListView.separated(
-      // 📌 PRO FIX: Added 120px bottom padding to escape the glass dock
-      padding: EdgeInsets.fromLTRB(24, 0, 24, dynamicBottomPadding),
+      padding: EdgeInsets.fromLTRB(24, 4, 24, dynamicBottomPadding),
       itemCount: doctors.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
@@ -354,17 +225,16 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     List<Map<String, dynamic>> items, {
     required bool isHospital,
   }) {
-    final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
-    final dynamicBottomPadding = bottomSafeArea + 76 + 20 + 24;
+    final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + 20;
 
     return GridView.builder(
-      // 📌 PRO FIX: Added 120px bottom padding to escape the glass dock
-      padding: EdgeInsets.fromLTRB(24, 24, 24, dynamicBottomPadding),
+      clipBehavior: Clip.none, // Allows the grid card shadows to render properly
+      padding: EdgeInsets.fromLTRB(24, 4, 24, dynamicBottomPadding),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.72,
+        childAspectRatio: 0.80, // Optimized ratio for the new split card
       ),
       itemCount: items.length,
       itemBuilder:
@@ -372,95 +242,125 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     );
   }
 
+  // --- REVERTED: The Premium Full-Bleed Cinematic Card ---
   Widget _buildFacilityCard(Map<String, dynamic> facility, bool isHospital) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hasImage =
-        facility['image_url'] != null &&
-        facility['image_url'].toString().isNotEmpty;
+    final hasImage = facility['image_url'] != null && facility['image_url'].toString().isNotEmpty;
 
     final fallbackIcon = Icon(
-      isHospital
-          ? Icons.local_hospital_rounded
-          : Icons.medical_services_rounded,
+      isHospital ? Icons.local_hospital_rounded : Icons.medical_services_rounded,
       size: 40,
-      color: AppColors.primaryGreen.withValues(alpha: 0.4),
+      color: Colors.white.withOpacity(0.9),
     );
 
     return InkWell(
-      onTap:
-          () => context.push(
-            AppRoutes.clinicDoctorsById('${facility['id']}'),
-            extra: ClinicRouteArgs(
-              name: facility['name'],
-              logoUrl: facility['logo_url']?.toString(),
-            ),
+      onTap: () {
+        HapticFeedback.lightImpact(); // Kept the premium tactile feel
+        context.push(
+          AppRoutes.clinicDoctorsById('${facility['id']}'),
+          extra: ClinicRouteArgs(
+            name: facility['name'],
+            logoUrl: facility['logo_url']?.toString(),
           ),
+        );
+      },
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        decoration: AppStyles.surfaceCard(
-          context,
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 1. Image Cover
-            Expanded(
-              flex: 5,
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color:
-                      isDark ? AppColors.darkBorder : const Color(0xFFE8F1F2),
-                ),
-                child:
-                    hasImage
-                        ? AppNetworkImage(
-                          imageUrl: facility['image_url'],
-                          fit: BoxFit.cover,
-                          cacheKey: 'facility_${facility['id']}',
-                        )
-                        : fallbackIcon,
-              ),
+          border: Border.all(
+            color: isDark ? AppColors.darkBorder : Colors.black.withOpacity(0.05),
+            width: 1.0, 
+          ),
+          boxShadow: isDark ? [] : [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04), // Soft shadow for floating effect
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
-            // 2. Info Section
-            Expanded(
-              flex: 5,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(19), // Perfectly nested inside the 20px border
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 1. Full-Bleed Image Background
+              if (hasImage)
+                AppNetworkImage(
+                  imageUrl: facility['image_url'],
+                  fit: BoxFit.cover,
+                  cacheKey: 'facility_${facility['id']}',
+                )
+              else
+                Container(
+                  color: AppColors.primaryGreen.withOpacity(0.85),
+                  child: Center(child: fallbackIcon),
+                ),
+
+              // 2. The Dark Cinematic Gradient (Restored)
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.0), 
+                      Colors.black.withOpacity(0.5), 
+                      Colors.black.withOpacity(0.9), 
+                    ],
+                    stops: const [0.0, 0.45, 0.75, 1.0], 
+                  ),
+                ),
+              ),
+
+              // 3. Bold White Typography over Gradient (Restored)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 16,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       facility['name'] ?? 'Unknown',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodyBold(
-                        context,
-                      ).copyWith(fontSize: 13, height: 1.2),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                        letterSpacing: -0.2,
+                        shadows: [
+                          Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2)), 
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
                           Icons.location_on_rounded,
-                          size: 14,
-                          color: context.colorTextLight,
+                          size: 13,
+                          color: Colors.white.withOpacity(0.9),
                         ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             facility['address'] ?? 'Tap to view doctors',
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 11,
-                              height: 1.3,
-                              color: context.colorTextLight,
+                              color: Colors.white.withOpacity(0.9),
                               fontWeight: FontWeight.w500,
+                              shadows: const [
+                                Shadow(color: Colors.black45, blurRadius: 3, offset: Offset(0, 1)),
+                              ],
                             ),
                           ),
                         ),
@@ -469,8 +369,8 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

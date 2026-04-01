@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
+import '../../../../core/theme/app_styles.dart';
 
 class SettingsTile extends StatelessWidget {
   final IconData icon;
@@ -50,23 +51,20 @@ class SettingsTile extends StatelessWidget {
         ),
         title: Text(
           title,
-          style: TextStyle(
+          style: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color:
-                isDestructive
-                    ? Colors.red
-                    : context.colorTextDark, // Context-aware text
+            color: isDestructive ? Colors.red : context.colorTextDark,
           ),
         ),
         subtitle:
             subtitle != null
                 ? Text(
                   subtitle!,
-                  style: TextStyle(
+                  style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: context.colorTextLight,
-                  ), // Context-aware text
+                  ),
                 )
                 : null,
         trailing: Row(
@@ -75,10 +73,10 @@ class SettingsTile extends StatelessWidget {
             if (value != null)
               Text(
                 value!,
-                style: TextStyle(
+                style: GoogleFonts.poppins(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: context.colorTextLight, // Context-aware text
+                  color: context.colorTextLight,
                 ),
               ),
             if (value != null) const SizedBox(width: 8),

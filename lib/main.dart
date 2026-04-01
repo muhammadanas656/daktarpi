@@ -126,7 +126,9 @@ Future<void> _startDeferredServices() async {
     ),
   );
 
-  if (Supabase.instance.client.auth.currentSession != null) {
+  final hasFirebaseApp = Firebase.apps.isNotEmpty;
+
+  if (hasFirebaseApp && Supabase.instance.client.auth.currentSession != null) {
     unawaited(
       _runStartupStepVoid(
         'fcm.initialize.current_session',
@@ -136,7 +138,7 @@ Future<void> _startDeferredServices() async {
   }
 
   Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-    if (data.session != null) {
+    if (hasFirebaseApp && data.session != null) {
       unawaited(
         _runStartupStepVoid(
           'fcm.initialize.auth_change',

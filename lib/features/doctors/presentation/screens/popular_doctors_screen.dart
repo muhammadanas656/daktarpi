@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
@@ -8,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../favorites_notifier.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../doctors_notifier.dart'; // PRO FIX: Central Notifier
+import '../widgets/smart_filter_bar.dart';
 
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
@@ -30,6 +32,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   // Data State
   bool _isLoading = true; // Only block UI if the vault is completely empty
   bool _showClearIcon = false;
+  String _selectedFilter = 'All';
+  double? _activeRadiusKm;
 
   @override
   void initState() {
@@ -71,6 +75,22 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
     });
   }
 
+  // --- FILTER CHIPS ---
+  // THE FIX: Intelligent Boundary Filter integration
+  Widget _buildFilterChips() {
+    return SmartFilterBar(
+      filters: const ['All', 'Nearest', 'Available Today', 'Top Rated'],
+      initialFilter: _selectedFilter,
+      onFilterChanged: (filter, radius) {
+        setState(() {
+          _selectedFilter = filter;
+          _activeRadiusKm = radius;
+        });
+        _fetchData(query: _searchController.text);
+      },
+    );
+  }
+
   // --- CLEAR SEARCH ---
   void _clearSearch() {
     _searchController.clear();
@@ -86,6 +106,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
 
       await _docsNotifier.fetchPopularDoctors(
         query: query ?? '',
+        filter: _selectedFilter,
+        maxRadiusKm: _activeRadiusKm,
         forceRefresh: forceRefresh,
       );
 
@@ -162,12 +184,14 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                 ),
               ),
 
+              _buildFilterChips(),
+
               // --- DOCTOR LIST ---
               Expanded(
                 child: ListenableBuilder(
                   listenable: _docsNotifier,
                   builder: (context, _) {
-                    final doctors = _docsNotifier.popularDoctors;
+                    final doctors = _docsNotifier.explorePopularDoctors;
                     // Only show loading spinner if it's the very first time and vault is empty
                     if (_isLoading && doctors.isEmpty) {
                       return const Center(

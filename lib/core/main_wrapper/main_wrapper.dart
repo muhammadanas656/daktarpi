@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -38,16 +39,19 @@ class _MainWrapperState extends State<MainWrapper>
 
     _drawerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 350),
     );
     _springController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 350),
     );
 
-    AppointmentNotifier.instance.initializeRealtime();
-    unawaited(AppointmentNotifier.instance.fetchAppointments());
-    unawaited(ProfileNotifier.instance.loadProfile());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AppointmentNotifier.instance.initializeRealtime();
+      unawaited(AppointmentNotifier.instance.fetchAppointments());
+      unawaited(ProfileNotifier.instance.loadProfile());
+    });
   }
 
   @override
@@ -72,14 +76,22 @@ class _MainWrapperState extends State<MainWrapper>
 
   void _closeDrawerWithHaptic() {
     _drawerController
-        .animateTo(0.0, curve: Curves.easeOutQuint)
+        .animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutQuint,
+        )
         .then((_) => HapticFeedback.selectionClick());
   }
 
   void _openDrawerWithHaptic() {
     _drawerController
-        .animateTo(1.0, curve: Curves.easeOutQuint)
-        .then((_) => HapticFeedback.selectionClick());
+        .animateTo(
+          1.0,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutBack,
+        )
+        .then((_) => HapticFeedback.mediumImpact());
   }
 
   void _goToBranch(int index) {
@@ -107,13 +119,15 @@ class _MainWrapperState extends State<MainWrapper>
   void _toggleDrawer() {
     FocusManager.instance.primaryFocus?.unfocus();
     if (_drawerController.isDismissed) {
-      _drawerController
-          .animateTo(1.0, curve: Curves.easeOutBack)
-          .then((_) => HapticFeedback.mediumImpact());
+      _openDrawerWithHaptic();
     } else {
       _drawerController
-          .animateTo(0.0, curve: Curves.easeOutQuint)
-          .then((_) => HapticFeedback.selectionClick());
+          .animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutQuint,
+          )
+          .then((_) => HapticFeedback.lightImpact());
     }
   }
 
@@ -163,20 +177,24 @@ class _MainWrapperState extends State<MainWrapper>
     if (_drawerController.value > 0.0) {
       if (velocity.abs() > 200) {
         velocity > 0
-            ? _drawerController
-                .animateTo(1.0, curve: Curves.easeOutBack)
-                .then((_) => HapticFeedback.mediumImpact())
+            ? _openDrawerWithHaptic()
             : _drawerController
-                .animateTo(0.0, curve: Curves.easeOutQuint)
-                .then((_) => HapticFeedback.selectionClick());
+                .animateTo(
+                  0.0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutQuint,
+                )
+                .then((_) => HapticFeedback.lightImpact());
       } else {
         _drawerController.value > 0.5
-            ? _drawerController
-                .animateTo(1.0, curve: Curves.easeOutBack)
-                .then((_) => HapticFeedback.mediumImpact())
+            ? _openDrawerWithHaptic()
             : _drawerController
-                .animateTo(0.0, curve: Curves.easeOutQuint)
-                .then((_) => HapticFeedback.selectionClick());
+                .animateTo(
+                  0.0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutQuint,
+                )
+                .then((_) => HapticFeedback.lightImpact());
       }
       return;
     }
@@ -248,7 +266,7 @@ class _MainWrapperState extends State<MainWrapper>
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canvasColor =
-        isDark ? const Color(0xFF0D1217) : const Color(0xFFF4F7F9);
+        isDark ? const Color(0xFF0A0E12) : const Color(0xFFEEF2F5);
 
     return Scaffold(
       backgroundColor: canvasColor,
@@ -273,59 +291,49 @@ class _MainWrapperState extends State<MainWrapper>
               builder: (context, child) {
                 final double tabTension = _depthTensionNotifier.value;
                 final double drawerVal = _drawerController.value;
+                final double clampedDrawerVal =
+                    drawerVal.clamp(0.0, 1.0).toDouble();
+                final double fluidSquish =
+                    math.sin(clampedDrawerVal * math.pi) * 0.02;
 
-                final double scale =
-                    1.0 - (tabTension * 0.05) - (drawerVal * 0.12);
-                final double translateX = drawerVal * (screenWidth * 0.62);
-                final double radius = (tabTension * 32.0) + (drawerVal * 48.0);
-                final double rotateY = drawerVal * -0.06;
+                final double baseScale =
+                    1.0 - (tabTension * 0.05) - (drawerVal * 0.20);
+                final double scaleX = baseScale - fluidSquish;
+                final double scaleY = baseScale + fluidSquish;
+                final double translateX = drawerVal * (screenWidth * 0.58);
+                final double translateY = drawerVal * -30.0;
+                final double rotateZ = drawerVal * 0.04;
+                final double radius =
+                    (tabTension * 32.0) + (clampedDrawerVal * 64.0);
 
                 return Transform(
                   alignment: Alignment.centerLeft,
                   transform:
                       Matrix4.identity()
-                        ..setEntry(3, 2, 0.001)
-                        ..translate(translateX, 0.0, 0.0)
-                        ..scale(scale)
-                        ..rotateY(rotateY),
+                        ..translate(translateX, translateY, 0.0)
+                        ..rotateZ(rotateZ)
+                        ..scale(scaleX, scaleY),
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(radius),
-                      border:
-                          drawerVal > 0.05
-                              ? Border.all(
-                                color: Colors.white.withValues(
-                                  alpha: drawerVal * 0.15,
-                                ),
-                                width: 1.0,
-                              )
-                              : null,
                       boxShadow:
-                          drawerVal > 0.05 || tabTension > 0.05
+                          clampedDrawerVal > 0.05 || tabTension > 0.05
                               ? [
                                 BoxShadow(
                                   color: Colors.black.withValues(
-                                    alpha: isDark ? 0.5 : 0.08,
+                                    alpha: isDark ? 0.3 : 0.08,
                                   ),
-                                  blurRadius: 50,
-                                  spreadRadius: 0,
-                                  offset: const Offset(-20, 0),
+                                  blurRadius: 40,
+                                  spreadRadius: -5,
+                                  offset: const Offset(-10, 15),
                                 ),
                                 BoxShadow(
                                   color: Colors.black.withValues(
-                                    alpha: isDark ? 0.3 : 0.04,
+                                    alpha: isDark ? 0.2 : 0.03,
                                   ),
                                   blurRadius: 15,
                                   spreadRadius: -5,
-                                  offset: const Offset(-5, 0),
-                                ),
-                                BoxShadow(
-                                  color: Colors.white.withValues(
-                                    alpha: isDark ? 0.05 : 0.4,
-                                  ),
-                                  blurRadius: 2,
-                                  spreadRadius: 0,
-                                  offset: const Offset(-1, 0),
+                                  offset: const Offset(-5, 5),
                                 ),
                               ]
                               : const [],
@@ -337,30 +345,27 @@ class _MainWrapperState extends State<MainWrapper>
                         RepaintBoundary(
                           child: Container(
                             color: Theme.of(context).scaffoldBackgroundColor,
-                            child: widget.navigationShell,
+                            // Inject bottom padding so nested pages clear the floating dock perfectly
+                            child: MediaQuery(
+                              data: MediaQuery.of(context).copyWith(
+                                padding: MediaQuery.of(context).padding.copyWith(
+                                  bottom: MediaQuery.paddingOf(context).bottom + 110.0,
+                                ),
+                              ),
+                              child: widget.navigationShell,
+                            ),
                           ),
                         ),
-                        if (drawerVal > 0)
+                        if (clampedDrawerVal > 0)
                           GestureDetector(
                             onTap: _toggleDrawer,
                             child: Container(color: Colors.transparent),
                           ),
-                        if (tabTension > 0 || drawerVal > 0)
+                        if (tabTension > 0 || clampedDrawerVal > 0)
                           IgnorePointer(
                             child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Colors.white.withValues(
-                                      alpha: drawerVal * 0.08,
-                                    ),
-                                    Colors.black.withValues(
-                                      alpha: drawerVal * 0.22,
-                                    ),
-                                  ],
-                                ),
+                              color: Colors.black.withValues(
+                                alpha: clampedDrawerVal * 0.1,
                               ),
                             ),
                           ),
@@ -377,15 +382,21 @@ class _MainWrapperState extends State<MainWrapper>
               child: AnimatedBuilder(
                 animation: _drawerController,
                 builder: (context, child) {
+                  final double val = _drawerController.value;
+                  final double clampedVal = val.clamp(0.0, 1.0).toDouble();
+                  final double dockY = val * -100.0;
+                  final double dockScale = 1.0 - (clampedVal * 0.3);
+
                   return IgnorePointer(
-                    ignoring: _drawerController.value > 0.0,
-                    child: Transform.translate(
-                      offset: Offset(0, _drawerController.value * 100),
+                    ignoring: val > 0.0,
+                    child: Transform(
+                      alignment: Alignment.bottomCenter,
+                      transform:
+                          Matrix4.identity()
+                            ..translate(0.0, dockY, 0.0)
+                            ..scale(dockScale),
                       child: Opacity(
-                        opacity:
-                            (1.0 - (_drawerController.value * 2))
-                                .clamp(0.0, 1.0)
-                                .toDouble(),
+                        opacity: math.max(0.0, 1.0 - (clampedVal * 2.5)),
                         child: child,
                       ),
                     ),
@@ -574,62 +585,73 @@ class _HolographicFluidDockState extends State<_HolographicFluidDock>
               child: BackdropFilter(
                 filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 10,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.65)
+                          : Colors.white.withValues(alpha: 0.8),
+                    ),
+                    
+                    // --- THE OVERFLOW FIX ---
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: constraints.maxWidth,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _FluidTab(
+                                  icon: Icons.home_rounded,
+                                  label: "Home",
+                                  expansionRatio: widget.selectedIndex == 0
+                                      ? (1.0 - dragValue.abs())
+                                      : (targetIndex == 0 ? dragValue.abs() : 0.0),
+                                  activeColor: AppColors.primaryGreen,
+                                  onTap: () => _handleTabTap(0),
+                                ),
+                                _FluidTab(
+                                  icon: Icons.medical_services_rounded,
+                                  label: "Doctors",
+                                  expansionRatio: widget.selectedIndex == 1
+                                      ? (1.0 - dragValue.abs())
+                                      : (targetIndex == 1 ? dragValue.abs() : 0.0),
+                                  activeColor: const Color(0xFF007BFF),
+                                  onTap: () => _handleTabTap(1),
+                                ),
+                                _FluidTab(
+                                  icon: Icons.assignment_rounded,
+                                  label: "Schedule",
+                                  expansionRatio: widget.selectedIndex == 2
+                                      ? (1.0 - dragValue.abs())
+                                      : (targetIndex == 2 ? dragValue.abs() : 0.0),
+                                  activeColor: const Color(0xFFFF9F00),
+                                  onTap: () => _handleTabTap(2),
+                                ),
+                                _FluidTab(
+                                  icon: Icons.account_circle_rounded,
+                                  label: "Profile",
+                                  expansionRatio: widget.selectedIndex == 3
+                                      ? (1.0 - dragValue.abs())
+                                      : (targetIndex == 3 ? dragValue.abs() : 0.0),
+                                  activeColor: const Color(0xFF8E44AD),
+                                  onTap: () => _handleTabTap(3),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    // --- END OVERFLOW FIX ---
+                    
                   ),
-                  decoration: BoxDecoration(
-                    color:
-                        isDark
-                            ? Colors.black.withValues(alpha: 0.65)
-                            : Colors.white.withValues(alpha: 0.8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _FluidTab(
-                        icon: Icons.home_rounded,
-                        label: "Home",
-                        expansionRatio:
-                            widget.selectedIndex == 0
-                                ? (1.0 - dragValue.abs())
-                                : (targetIndex == 0 ? dragValue.abs() : 0.0),
-                        activeColor: AppColors.primaryGreen,
-                        onTap: () => _handleTabTap(0),
-                      ),
-                      _FluidTab(
-                        icon: Icons.medical_services_rounded,
-                        label: "Doctors",
-                        expansionRatio:
-                            widget.selectedIndex == 1
-                                ? (1.0 - dragValue.abs())
-                                : (targetIndex == 1 ? dragValue.abs() : 0.0),
-                        activeColor: const Color(0xFF007BFF),
-                        onTap: () => _handleTabTap(1),
-                      ),
-                      _FluidTab(
-                        icon: Icons.assignment_rounded,
-                        label: "Schedule",
-                        expansionRatio:
-                            widget.selectedIndex == 2
-                                ? (1.0 - dragValue.abs())
-                                : (targetIndex == 2 ? dragValue.abs() : 0.0),
-                        activeColor: const Color(0xFFFF9F00),
-                        onTap: () => _handleTabTap(2),
-                      ),
-                      _FluidTab(
-                        icon: Icons.account_circle_rounded,
-                        label: "Profile",
-                        expansionRatio:
-                            widget.selectedIndex == 3
-                                ? (1.0 - dragValue.abs())
-                                : (targetIndex == 3 ? dragValue.abs() : 0.0),
-                        activeColor: const Color(0xFF8E44AD),
-                        onTap: () => _handleTabTap(3),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ),
           ),
