@@ -1,7 +1,7 @@
-import 'package:daktarpi/features/appointments/data/appointment.dart';
-import 'package:daktarpi/features/appointments/data/appointment_secure_cache_repository.dart';
-import 'package:daktarpi/features/doctors/data/clinic.dart';
-import 'package:daktarpi/features/doctors/data/doctor.dart';
+import 'package:aeviapulse/features/appointments/data/appointment.dart';
+import 'package:aeviapulse/features/appointments/data/appointment_secure_cache_repository.dart';
+import 'package:aeviapulse/features/doctors/data/clinic.dart';
+import 'package:aeviapulse/features/doctors/data/doctor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

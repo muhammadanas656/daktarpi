@@ -6,12 +6,12 @@ class AppRoutes {
   AppRoutes._(); // Prevent instantiation
 
   // Public / Auth
-  static const splash = '/';
   static const login = '/login';
   static const signup = '/signup';
   static const verify2fa = '/verify-2fa';
 
   // Main tabs (shell routes)
+  static const splash = '/splash';
   static const home = '/home';
   static const doctors = '/doctors';
   static const myDoctors = '/my_doctors';

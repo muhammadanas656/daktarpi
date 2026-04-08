@@ -160,7 +160,7 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
   // THE FIX: Intelligent Boundary Filter integration
   Widget _buildFilterChips() {
     return SmartFilterBar(
-      filters: const ['All', 'Nearest', 'Hospital', 'Clinic', 'Top Rated'],
+      filters: FilterConfig.withFacilities,
       initialFilter: _selectedFilter,
       isBackgroundLayer: widget.isBackgroundLayer,
       onFilterChanged: (filter, radius) {

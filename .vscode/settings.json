@@ -5,5 +5,5 @@
   "deno.enablePaths": [
     "supabase/functions"
   ],
-  "cmake.sourceDirectory": "C:/skills development/daktarpi/linux"
+  "cmake.sourceDirectory": "C:/skills development/AeviaPulse/linux"
 }

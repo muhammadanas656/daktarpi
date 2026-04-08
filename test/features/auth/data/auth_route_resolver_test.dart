@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:daktarpi/core/constants/app_routes.dart';
-import 'package:daktarpi/features/auth/data/auth_route_resolver.dart';
+import 'package:aeviapulse/core/constants/app_routes.dart';
+import 'package:aeviapulse/features/auth/data/auth_route_resolver.dart';
 
 class _FakeAuthRouteStateProvider implements AuthRouteStateProvider {
   @override

@@ -365,28 +365,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark; // PRO FIX
 
-    if (_isInitialLoad) {
-      return Scaffold(
-        backgroundColor: context.colorScaffoldBackground,
-        body: const AppLoader(),
-      );
-    }
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
+        if (_isInitialLoad) return;
         _onBackPress();
       },
       child: Scaffold(
         backgroundColor: context.colorScaffoldBackground,
-        body: Container(
-          decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-              child: Column(
+        body: AbsorbPointer(
+          absorbing: _isInitialLoad,
+          child: Container(
+            decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                child: Column(
                 children: [
                 // --- HEADER ---
                 Container(
@@ -417,7 +413,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           InkWell(
-                            onTap: _onBackPress,
+                            onTap: _isInitialLoad ? null : _onBackPress,
                             borderRadius: BorderRadius.circular(12),
                             child: Container(
                               padding: EdgeInsets.all(8),
@@ -620,6 +616,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SizedBox(height: 40),
               ],
             ),
+          ),
           ),
           ),
         ),

@@ -41,6 +41,24 @@ class DoctorsNotifier extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
 
+  /// Applies a guaranteed client-side sort overlay on top of whatever the RPC returned.
+  /// This ensures consistent ordering regardless of backend category combinations.
+  List<Map<String, dynamic>> _sorted(List<Map<String, dynamic>> list, String filter) {
+    final out = List<Map<String, dynamic>>.from(list);
+    if (filter == 'All') {
+      out.sort((a, b) =>
+          ((b['views_count'] as int?) ?? 0).compareTo((a['views_count'] as int?) ?? 0));
+    } else if (filter == 'Top Rated') {
+      out.sort((a, b) {
+        final ra = (a['rating'] as num?)?.toDouble() ?? 0.0;
+        final rb = (b['rating'] as num?)?.toDouble() ?? 0.0;
+        return rb.compareTo(ra);
+      });
+    }
+    // Nearest / Available Today: trust the RPC's spatial/temporal ordering.
+    return out;
+  }
+
   /// Delegates to DoctorRepository. Lets SmartFilterBar call this without needing to import
   /// DoctorRepository directly, avoiding circular imports.
   Future<double> fetchSmartClusterRadius({
@@ -137,7 +155,7 @@ class DoctorsNotifier extends ChangeNotifier {
       ]);
 
       if (_lastQuery == query && _lastFilter == filter) {
-        _doctors = results[0] as List<Map<String, dynamic>>;
+        _doctors = _sorted(results[0] as List<Map<String, dynamic>>, filter);
         _hospitals = results[1] as List<Map<String, dynamic>>;
         _clinics = results[2] as List<Map<String, dynamic>>;
       }
@@ -162,7 +180,11 @@ class DoctorsNotifier extends ChangeNotifier {
     bool isHomeFeed = false,
   }) async {
     final currentList = isHomeFeed ? _homePopularDoctors : _explorePopularDoctors;
-    if (!forceRefresh && currentList.isNotEmpty && query.isEmpty && filter == 'All') return;
+    
+    // Only block initial duplicate network calls if the vault explicitly has exactly what we need
+    if (!forceRefresh && currentList.isNotEmpty && query.isEmpty && filter == 'All' && currentList.length > 5 && maxRadiusKm == null) {
+      // Defer to repository cache checking instead of explicitly returning here unless we are 100% sure it's the base query
+    }
 
     if (currentList.isEmpty) {
       _isLoading = true;
@@ -194,19 +216,21 @@ class DoctorsNotifier extends ChangeNotifier {
         userLat: userLat,
         userLng: userLng,
         onFreshData: (fresh) {
+          final sorted = _sorted(fresh, filter);
           if (isHomeFeed) {
-            _homePopularDoctors = fresh;
+            _homePopularDoctors = sorted;
           } else {
-            _explorePopularDoctors = fresh;
+            _explorePopularDoctors = sorted;
           }
           notifyListeners();
         },
       );
-      
+
+      final sorted = _sorted(fetchedData, filter);
       if (isHomeFeed) {
-        _homePopularDoctors = fetchedData;
+        _homePopularDoctors = sorted;
       } else {
-        _explorePopularDoctors = fetchedData;
+        _explorePopularDoctors = sorted;
       }
     } catch (e) {
       debugPrint("DoctorsNotifier Popular Fetch Error: $e");
@@ -225,7 +249,11 @@ class DoctorsNotifier extends ChangeNotifier {
     bool isHomeFeed = false,
   }) async {
     final currentList = isHomeFeed ? _homeFeaturedDoctors : _exploreFeaturedDoctors;
-    if (!forceRefresh && currentList.isNotEmpty && query.isEmpty && filter == 'All') return;
+    
+    // Only block initial duplicate network calls if the vault explicitly has exactly what we need
+    if (!forceRefresh && currentList.isNotEmpty && query.isEmpty && filter == 'All' && currentList.length > 5 && maxRadiusKm == null) {
+      // Defer to repository cache checking instead of explicitly returning here unless we are 100% sure it's the base query
+    }
 
     if (currentList.isEmpty) {
       _isLoading = true;
@@ -257,19 +285,21 @@ class DoctorsNotifier extends ChangeNotifier {
         userLat: userLat,
         userLng: userLng,
         onFreshData: (fresh) {
+          final sorted = _sorted(fresh, filter);
           if (isHomeFeed) {
-            _homeFeaturedDoctors = fresh;
+            _homeFeaturedDoctors = sorted;
           } else {
-            _exploreFeaturedDoctors = fresh;
+            _exploreFeaturedDoctors = sorted;
           }
           notifyListeners();
         },
       );
-      
+
+      final sorted = _sorted(fetchedData, filter);
       if (isHomeFeed) {
-        _homeFeaturedDoctors = fetchedData;
+        _homeFeaturedDoctors = sorted;
       } else {
-        _exploreFeaturedDoctors = fetchedData;
+        _exploreFeaturedDoctors = sorted;
       }
     } catch (e) {
       debugPrint("DoctorsNotifier Featured Fetch Error: $e");

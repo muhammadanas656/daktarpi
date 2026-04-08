@@ -1,4 +1,4 @@
-name: daktarpi
+name: AeviaPulse
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -74,7 +74,7 @@ dependencies:
   firebase_core: ^4.5.0
   firebase_messaging: ^16.1.2
   skeletonizer: ^1.4.3
-  flutter_native_splash: ^2.4.6
+  lottie: ^3.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -104,7 +104,8 @@ flutter:
   uses-material-design: true
   assets:
     - .env
-    - assets/images/logo.png
+    - assets/images/
+    - assets/animations/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

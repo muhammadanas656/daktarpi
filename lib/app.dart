@@ -37,7 +37,7 @@ class MyApp extends StatelessWidget {
         return GestureDetector(
           onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
           child: MaterialApp.router(
-            title: 'DaktarPai',
+            title: 'AeviaPulse',
             debugShowCheckedModeBanner: false,
             
             // PRO FIX: Inject pure 120Hz iOS bouncy scrolling physics globally

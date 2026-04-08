@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_refresh_stream.dart';
 import '../constants/app_routes.dart';
 
-import '../../features/splash/presentation/screens/splash_screen.dart';
+
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/verify_2fa_screen.dart';
@@ -13,6 +13,7 @@ import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profileview_screen.dart';
 import '../../core/main_wrapper/main_wrapper.dart';
+import '../../features/splash/presentation/screens/splash_screen.dart';
 
 // --- COMMON IMPORTS ---
 import '../../features/common/presentation/screens/enable_location_screen.dart'; // Assume moved or check
@@ -63,16 +64,19 @@ final _shellNavigatorProfileKey = GlobalKey<NavigatorState>(
 
 final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
-  initialLocation: '/',
+  initialLocation: AppRoutes.splash,
   refreshListenable: GoRouterRefreshStream(
     Supabase.instance.client.auth.onAuthStateChange,
   ),
   redirect: (context, state) {
     final loc = state.matchedLocation;
+    
+    // Allow splash screen without auth redirect
+    if (loc == AppRoutes.splash) return null;
+    
     final isGoingToAuthScreen =
         loc == AppRoutes.login ||
         loc == AppRoutes.signup ||
-        loc == AppRoutes.splash ||
         loc == AppRoutes.verify2fa;
 
     final isSignedIn = Supabase.instance.client.auth.currentSession != null;

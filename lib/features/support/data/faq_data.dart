@@ -68,12 +68,12 @@ const List<FAQItem> kFaqList = [
     category: "General",
     question: "Is my medical data safe?",
     answer:
-        "Absolutely. DaktarPi uses strictly enforced Row Level Security (RLS) and encryption. Only you and your authorized doctors can view your records. We never sell your data.",
+        "Absolutely. AeviaPulse uses strictly enforced Row Level Security (RLS) and encryption. Only you and your authorized doctors can view your records. We never sell your data.",
   ),
   FAQItem(
     category: "General",
     question: "What should I do in an emergency?",
     answer:
-        "Do NOT use DaktarPi for emergencies. If you have a medical emergency, call 911 or your local emergency number immediately.",
+        "Do NOT use AeviaPulse for emergencies. If you have a medical emergency, call 911 or your local emergency number immediately.",
   ),
 ];

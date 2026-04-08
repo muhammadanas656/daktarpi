@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:daktarpi/features/auth/data/security_gate_service.dart';
+import 'package:aeviapulse/features/auth/data/security_gate_service.dart';
 
 class _FakeSecurityAuthProvider implements SecurityAuthProvider {
   @override

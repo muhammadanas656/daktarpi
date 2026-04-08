@@ -9,7 +9,6 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
-import '../../../../core/widgets/app_loader.dart';
 
 class ProfileViewScreen extends StatefulWidget {
   final bool isBackgroundLayer;
@@ -51,13 +50,6 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + 20;
-
-    if (!_profileNotifier.isLoaded) {
-      return Scaffold(
-        backgroundColor: context.colorScaffoldBackground,
-        body: const AppLoader(),
-      );
-    }
 
     // Use Notifier Data
     final profile = _profileNotifier.profile;

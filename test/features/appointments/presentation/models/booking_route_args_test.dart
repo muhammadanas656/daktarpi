@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:daktarpi/features/appointments/presentation/models/booking_route_args.dart';
+import 'package:aeviapulse/features/appointments/presentation/models/booking_route_args.dart';
 
 void main() {
   group('AppointmentBookingArgs', () {

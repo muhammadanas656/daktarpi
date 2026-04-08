@@ -7,7 +7,7 @@ import '../../features/auth/data/auth_repository.dart';
 /// Detects rooted/jailbroken devices and enforces secure wipe + logout.
 class DeviceIntegrityService {
   static const MethodChannel _channel = MethodChannel(
-    'com.daktarpi/device_integrity',
+    'com.AeviaPulse/device_integrity',
   );
 
   final AuthRepository _authRepository;

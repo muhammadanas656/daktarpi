@@ -5,8 +5,8 @@ class LegalText {
 Last Updated: February 19, 2026
 
 ## 1. Medical Disclaimer
-**DaktarPi is a booking platform, not a medical provider.**
-The content and services provided in this app are for informational and scheduling purposes only. DaktarPi does not provide medical advice, diagnosis, or treatment. 
+**AeviaPulse is a booking platform, not a medical provider.**
+The content and services provided in this app are for informational and scheduling purposes only. AeviaPulse does not provide medical advice, diagnosis, or treatment. 
 
 **DO NOT USE THIS APP FOR EMERGENCIES.**
 If you have a medical emergency, call 911 or your local emergency services immediately.
@@ -22,8 +22,8 @@ If you have a medical emergency, call 911 or your local emergency services immed
 - You agree not to use the app for any unlawful purpose.
 
 ## 4. Limitation of Liability
-The app is provided on an "AS IS" and "AS AVAILABLE" basis. DaktarPi makes no warranties regarding the uptime or availability of the service.
-To the maximum extent permitted by law, DaktarPi shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses.
+The app is provided on an "AS IS" and "AS AVAILABLE" basis. AeviaPulse makes no warranties regarding the uptime or availability of the service.
+To the maximum extent permitted by law, AeviaPulse shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses.
 
 ## 5. Contact Us
 If you have any questions about these Terms, please contact us at support@daktarpai.com.

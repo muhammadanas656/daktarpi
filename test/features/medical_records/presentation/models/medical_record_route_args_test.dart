@@ -1,5 +1,5 @@
-import 'package:daktarpi/features/medical_records/data/medical_record.dart';
-import 'package:daktarpi/features/medical_records/presentation/models/medical_record_route_args.dart';
+import 'package:aeviapulse/features/medical_records/data/medical_record.dart';
+import 'package:aeviapulse/features/medical_records/presentation/models/medical_record_route_args.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -84,15 +84,36 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
     }
   }
 
-  Future<void> _fetchData({String? query}) async {
+  List<Map<String, dynamic>> _applySortOverlay(
+      List<Map<String, dynamic>> list, String filter) {
+    final out = List<Map<String, dynamic>>.from(list);
+    if (filter == 'All') {
+      out.sort((a, b) =>
+          ((b['views_count'] as int?) ?? 0)
+              .compareTo((a['views_count'] as int?) ?? 0));
+    } else if (filter == 'Top Rated') {
+      out.sort((a, b) {
+        final ra = (a['rating'] as num?)?.toDouble() ?? 0.0;
+        final rb = (b['rating'] as num?)?.toDouble() ?? 0.0;
+        return rb.compareTo(ra);
+      });
+    }
+    return out;
+  }
+
+  Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
+    if (mounted) setState(() => _isLoading = true);
     if (!_favNotifier.isLoaded) await _favNotifier.loadFavorites();
     try {
       final countryIso = _profileNotifier.profile?.countryIso;
-      
+
       double? userLat;
       double? userLng;
-      
-      if (_activeRadiusKm != null || _selectedFilter == 'Nearest' || _selectedFilter == 'Available Today') {
+
+      // Only fetch GPS for filters that actually need it
+      if (_activeRadiusKm != null ||
+          _selectedFilter == 'Nearest' ||
+          _selectedFilter == 'Available Today') {
         try {
           final pos = await DoctorsNotifier.instance.getUserPosition();
           if (pos != null) {
@@ -100,11 +121,11 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
             userLng = pos.longitude;
           }
         } catch (e) {
-          debugPrint("Location sorting failed: $e");
+          debugPrint('Location fetch failed: $e');
         }
       }
 
-      final doctors = await _doctorRepo.fetchDoctorsBySpecialty(
+      final rawDoctors = await _doctorRepo.fetchDoctorsBySpecialty(
         widget.specialtyId,
         query: query,
         filterType: _selectedFilter,
@@ -112,14 +133,16 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
         countryIso: countryIso,
         userLat: userLat,
         userLng: userLng,
+        forceRefresh: forceRefresh,
       );
       if (mounted) {
         setState(() {
-          _doctors = doctors;
+          _doctors = _applySortOverlay(rawDoctors, _selectedFilter);
           _isLoading = false;
         });
       }
     } catch (e) {
+      debugPrint('Specialty fetch error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -468,14 +491,17 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                           height: 12,
                         ), // Reduced gap between search bar and pills
                         SmartFilterBar(
-                          filters: const ["All", "Nearest", "Available Today", "Top Rated"],
+                          filters: FilterConfig.standard,
                           initialFilter: _selectedFilter,
                           onFilterChanged: (filter, radius) {
                             setState(() {
                               _selectedFilter = filter;
                               _activeRadiusKm = radius;
                             });
-                            _fetchData(query: _searchController.text);
+                            _fetchData(
+                              query: _searchController.text,
+                              forceRefresh: true,
+                            );
                           },
                         ),
                       ],

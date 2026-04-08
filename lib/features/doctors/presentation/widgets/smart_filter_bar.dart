@@ -5,6 +5,11 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../doctors_notifier.dart';
 
+class FilterConfig {
+  static const List<String> standard = ['All', 'Nearest', 'Available Today', 'Top Rated'];
+  static const List<String> withFacilities = ['All', 'Nearest', 'Hospital', 'Clinic', 'Top Rated'];
+}
+
 class SmartFilterBar extends StatefulWidget {
   final List<String> filters;
   final String initialFilter;
@@ -50,13 +55,13 @@ class _SmartFilterBarState extends State<SmartFilterBar> {
   }
 
   void _checkAndFetchRadiusIfNeeded() {
-    // We now compute radius for ALL filters if it's auto-calculated, 
-    // so the spatial boundary pill is always available for Hospitals & Clinics too.
-    if (_isRadiusAutoCalculated && _activeRadiusKm == null) {
+    // Always fire the callback immediately with whatever radius we have (or null).
+    // This ensures pill taps are never silently dropped, even mid-GPS-fetch.
+    widget.onFilterChanged(_selectedFilter, _activeRadiusKm);
+    // If we don't have a radius yet, kick off the GPS fetch in the background,
+    // which will fire onFilterChanged again once radius arrives.
+    if (_activeRadiusKm == null && _isRadiusAutoCalculated && !_isFetchingRadius) {
       _fetchOptimalRadius();
-    } else {
-      // Fire normal callback immediately
-      widget.onFilterChanged(_selectedFilter, _activeRadiusKm);
     }
   }
 
@@ -74,26 +79,28 @@ class _SmartFilterBarState extends State<SmartFilterBar> {
           userLng: pos.longitude,
           countryIso: countryIso,
         );
-        
+
         if (mounted) {
           setState(() {
             _activeRadiusKm = optimalRadius;
-            _minAllowedRadius = optimalRadius > 1.0 ? optimalRadius : 1.0; 
+            _minAllowedRadius = optimalRadius > 1.0 ? optimalRadius : 1.0;
             _isFetchingRadius = false;
           });
-          widget.onFilterChanged(_selectedFilter, _activeRadiusKm);
+          // Only re-fire the callback for filters that genuinely need GPS.
+          // All / Top Rated already got their immediate no-radius callback —
+          // firing again here would cause a second fetch (double-fire race).
+          final needsGps = _selectedFilter == 'Nearest' ||
+              _selectedFilter == 'Available Today';
+          if (needsGps) {
+            widget.onFilterChanged(_selectedFilter, _activeRadiusKm);
+          }
         }
       } else {
-        if (mounted) {
-          setState(() => _isFetchingRadius = false);
-        }
-        widget.onFilterChanged(_selectedFilter, null);
+        if (mounted) setState(() => _isFetchingRadius = false);
+        // GPS unavailable — the immediate null-radius callback already ran, no second fire.
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isFetchingRadius = false);
-      }
-      widget.onFilterChanged(_selectedFilter, null);
+      if (mounted) setState(() => _isFetchingRadius = false);
     }
   }
 
@@ -297,23 +304,23 @@ class _SmartFilterBarState extends State<SmartFilterBar> {
   void _applyRadius(double val) {
     HapticFeedback.selectionClick();
     _isRadiusAutoCalculated = false;
-    
+
     if (val < _minAllowedRadius) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Minimum available cluster requires ${_minAllowedRadius.ceil()}km'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
       val = _minAllowedRadius;
-    } else if (val > 500.0) {
-      val = 500.0;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Minimum cluster radius is ${_minAllowedRadius.ceil()} km — setting that instead.',
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
-    
-    setState(() {
-      _activeRadiusKm = val;
-    });
+
+    setState(() => _activeRadiusKm = val);
     widget.onFilterChanged(_selectedFilter, _activeRadiusKm);
   }
 

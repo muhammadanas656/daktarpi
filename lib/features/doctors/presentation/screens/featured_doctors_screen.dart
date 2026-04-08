@@ -78,14 +78,17 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
   // --- FILTER CHIPS ---
   Widget _buildFilterChips() {
     return SmartFilterBar(
-      filters: const ['All', 'Nearest', 'Available Today', 'Top Rated'],
+      filters: FilterConfig.standard,
       initialFilter: _selectedFilter,
       onFilterChanged: (filter, radius) {
         setState(() {
           _selectedFilter = filter;
           _activeRadiusKm = radius;
         });
-        _fetchData(query: _searchController.text);
+        _fetchData(
+          query: _searchController.text,
+          forceRefresh: true,
+        );
       },
     );
   }
@@ -97,6 +100,8 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
   }
 
   Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
+    if (mounted) setState(() => _isLoading = true);
+
     // PRO FIX: Ensure favorites are loaded into RAM before showing the list
     if (!_favNotifier.isLoaded) {
       await _favNotifier.loadFavorites();
@@ -205,42 +210,59 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
                     if (doctors.isEmpty) {
                       return const Center(child: Text("No featured doctors found"));
                     }
-                    return RefreshIndicator(
-                      onRefresh: () => _fetchData(forceRefresh: true),
-                      color: AppColors.primaryGreen,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                        itemCount: doctors.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 16),
-                        itemBuilder: (context, index) {
-                          final doctor = doctors[index];
-                          final docId = doctor['id'] as int;
-                          final specialtyName = doctor['specialties'] != null
-                              ? doctor['specialties']['name']
-                              : 'Specialist';
+                    return Stack(
+                      children: [
+                        RefreshIndicator(
+                          onRefresh: () => _fetchData(forceRefresh: true),
+                          color: AppColors.primaryGreen,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                            itemCount: doctors.length,
+                            separatorBuilder: (context, index) => const SizedBox(height: 16),
+                            itemBuilder: (context, index) {
+                              final doctor = doctors[index];
+                              final docId = doctor['id'] as int;
+                              final specialtyName = doctor['specialties'] != null
+                                  ? doctor['specialties']['name']
+                                  : 'Specialist';
 
-                          final isFavorite = _favNotifier.isFavorite(docId);
+                              final isFavorite = _favNotifier.isFavorite(docId);
 
-                          return DoctorListCard(
-                            id: docId,
-                            name: doctor['full_name'] ?? 'Unknown',
-                            specialty: " $specialtyName",
-                            rating: doctor['rating']?.toString() ?? '0.0',
-                            views: doctor['views_count']?.toString() ?? '0',
-                            imageUrl: doctor['profile_picture_url'],
-                            isFavorite: isFavorite,
-                            heroTagPrefix: 'featured-',
-                            onFavoriteTap: () {
-                              HapticFeedback.selectionClick();
-                              _favNotifier.toggle(doctor);
+                              return DoctorListCard(
+                                id: docId,
+                                name: doctor['full_name'] ?? 'Unknown',
+                                specialty: " $specialtyName",
+                                rating: doctor['rating']?.toString() ?? '0.0',
+                                views: doctor['views_count']?.toString() ?? '0',
+                                imageUrl: doctor['profile_picture_url'],
+                                isFavorite: isFavorite,
+                                heroTagPrefix: 'featured-',
+                                onFavoriteTap: () {
+                                  HapticFeedback.selectionClick();
+                                  _favNotifier.toggle(doctor);
+                                },
+                                onCardTap: () {
+                                  HapticFeedback.lightImpact();
+                                  _navigateToDoctorDetails(docId, doctor);
+                                },
+                              );
                             },
-                            onCardTap: () {
-                              HapticFeedback.lightImpact();
-                              _navigateToDoctorDetails(docId, doctor);
-                            },
-                          );
-                        },
-                      ),
+                          ),
+                        ),
+                        
+                        // THE FIX: Stale-While-Revalidate Line Loader!
+                        if (_isLoading && doctors.isNotEmpty)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: LinearProgressIndicator(
+                              color: AppColors.primaryGreen,
+                              backgroundColor: AppColors.primaryGreen.withOpacity(0.1),
+                              minHeight: 2,
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),

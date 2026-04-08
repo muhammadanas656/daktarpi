@@ -3,16 +3,17 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../data/doctor_repository.dart';
-import '../../presentation/favorites_notifier.dart';
-import '../../../../presentation/widgets/doctor_list_card.dart';
-import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../core/widgets/app_loader.dart';
+import '../favorites_notifier.dart';
+import '../doctors_notifier.dart';
+import '../widgets/smart_filter_bar.dart';
+import '../../../../presentation/widgets/custom_search_bar.dart';
+import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../data/doctor_repository.dart';
+import '../../../../presentation/widgets/app_network_image.dart';
 
 class ClinicDoctorsScreen extends StatefulWidget {
   final int clinicId;
@@ -30,341 +31,404 @@ class ClinicDoctorsScreen extends StatefulWidget {
   State<ClinicDoctorsScreen> createState() => _ClinicDoctorsScreenState();
 }
 
-class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
+class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  final _searchController = TextEditingController();
   final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
-  final _searchController = TextEditingController();
-
-  late Future<List<Map<String, dynamic>>> _doctorsFuture;
   Timer? _debounce;
+
+  List<Map<String, dynamic>> _doctors = [];
+  bool _isLoading = true;
+  String? _clinicLogoUrl;
+  String _selectedFilter = 'All';
+  double? _activeRadiusKm;
 
   @override
   void initState() {
     super.initState();
-    _fetchDoctors();
+    _clinicLogoUrl = widget.logoUrl;
+    _favNotifier.addListener(_onStateChanged);
+    _fetchData();
+    if (_clinicLogoUrl == null) _fetchClinicMedia();
     _searchController.addListener(_onSearchChanged);
-    _favNotifier.addListener(_onFavoritesChanged);
   }
 
   @override
   void dispose() {
+    _favNotifier.removeListener(_onStateChanged);
     _searchController.dispose();
     _debounce?.cancel();
-    _favNotifier.removeListener(_onFavoritesChanged);
     super.dispose();
   }
 
-  void _onFavoritesChanged() {
+  void _onStateChanged() {
     if (mounted) setState(() {});
   }
 
+  List<Map<String, dynamic>> _applySortOverlay(
+      List<Map<String, dynamic>> list, String filter) {
+    final out = List<Map<String, dynamic>>.from(list);
+    if (filter == 'All') {
+      out.sort((a, b) =>
+          ((b['views_count'] as int?) ?? 0)
+              .compareTo((a['views_count'] as int?) ?? 0));
+    } else if (filter == 'Top Rated') {
+      out.sort((a, b) {
+        final ra = (a['rating'] as num?)?.toDouble() ?? 0.0;
+        final rb = (b['rating'] as num?)?.toDouble() ?? 0.0;
+        return rb.compareTo(ra);
+      });
+    }
+    return out;
+  }
+
   void _onSearchChanged() {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      _fetchDoctors();
+      _fetchData(query: _searchController.text);
     });
   }
 
-  void _fetchDoctors() {
-    setState(() {
-      _doctorsFuture = _doctorRepo.fetchDoctorsByClinic(
+  Future<void> _fetchClinicMedia() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('clinics')
+          .select('logo_url')
+          .eq('id', widget.clinicId)
+          .maybeSingle();
+      if (response != null && mounted) {
+        final logoUrl = response['logo_url']?.toString().trim();
+        setState(() {
+          _clinicLogoUrl = (logoUrl == null || logoUrl.isEmpty) ? null : logoUrl;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch clinic logo: $e');
+    }
+  }
+
+  Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
+    if (mounted) setState(() => _isLoading = true);
+    if (!_favNotifier.isLoaded) await _favNotifier.loadFavorites();
+    try {
+      double? userLat;
+      double? userLng;
+
+      // Only fetch GPS for filters that actually need it
+      if (_activeRadiusKm != null ||
+          _selectedFilter == 'Nearest' ||
+          _selectedFilter == 'Available Today') {
+        try {
+          final pos = await DoctorsNotifier.instance.getUserPosition();
+          if (pos != null) {
+            userLat = pos.latitude;
+            userLng = pos.longitude;
+          }
+        } catch (e) {
+          debugPrint('Location fetch failed: $e');
+        }
+      }
+
+      final doctors = await _doctorRepo.fetchDoctorsByClinic(
         widget.clinicId,
-        query: _searchController.text.trim(),
+        query: query,
+        filterType: _selectedFilter,
+        maxRadiusKm: _activeRadiusKm,
+        userLat: userLat,
+        userLng: userLng,
+        forceRefresh: forceRefresh,
       );
-    });
-  }
-
-  Widget _buildClinicInfoCard(int doctorCount, bool isLoading) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 32,
-            spreadRadius: 4,
-            offset: const Offset(0, 12),
-          )
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Hero(
-            tag: 'clinic_logo_${widget.clinicId}',
-            child: Container(
-              width: 64, height: 64, 
-              decoration: BoxDecoration(color: AppColors.primaryGreen.withValues(alpha: 0.1), shape: BoxShape.circle),
-              clipBehavior: Clip.antiAlias,
-              child: widget.logoUrl != null && widget.logoUrl!.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: widget.logoUrl!,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                      placeholder: (context, url) => const Icon(Icons.domain_rounded, color: AppColors.primaryGreen, size: 32),
-                      errorWidget: (context, url, error) => const Icon(Icons.domain_rounded, color: AppColors.primaryGreen, size: 32),
-                    )
-                  : const Center(child: Icon(Icons.domain_rounded, color: AppColors.primaryGreen, size: 32)),
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  widget.clinicName,
-                  style: AppTextStyles.h2(context).copyWith(fontSize: 22, letterSpacing: -0.4, height: 1.2),
-                  maxLines: 2, overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(isLoading ? Icons.hourglass_empty_rounded : Icons.people_alt_rounded, size: 16, color: AppColors.primaryGreen),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isLoading ? "Searching roster..." : "$doctorCount Professional${doctorCount == 1 ? '' : 's'}",
-                        style: const TextStyle(color: AppColors.primaryGreen, fontSize: 14, fontWeight: FontWeight.w700),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+      if (mounted) {
+        setState(() {
+          _doctors = _applySortOverlay(doctors, _selectedFilter);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Clinic fetch error: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasLogo = _clinicLogoUrl != null && _clinicLogoUrl!.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _doctorsFuture,
-        builder: (context, snapshot) {
-          final isLoading = snapshot.connectionState == ConnectionState.waiting;
-          final doctors = snapshot.data ?? [];
-
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      body: Stack(
+        children: [
+          // Background ambient glow
+          Positioned(
+            top: -150,
+            left: -100,
+            right: -100,
+            height: 400,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.primaryGreen.withOpacity(isDark ? 0.15 : 0.08),
+                    AppColors.primaryGreen.withOpacity(0.0),
+                  ],
+                  stops: const [0.2, 1.0],
+                ),
+              ),
+            ),
+          ),
+          CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
             slivers: [
               SliverAppBar(
                 pinned: true,
-                stretch: true,
-                expandedHeight: 200, // 📌 POLISH: Reduced to 200px to kill all vacancy
+                expandedHeight: 156.0,
                 elevation: 0,
                 backgroundColor: Colors.transparent,
-                leadingWidth: 64,
-                leading: Center(
-                  child: InkWell(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      context.pop();
-                    },
+                surfaceTintColor: Colors.transparent,
+                leadingWidth: 72,
+                leading: Container(
+                  padding: const EdgeInsets.only(left: 24),
+                  alignment: Alignment.centerLeft,
+                  child: Material(
+                    color: isDark
+                        ? Colors.white12
+                        : Colors.black.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        context.pop();
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: isDark ? Colors.white : const Color(0xFF1D1D1F),
+                          size: 18,
+                        ),
                       ),
-                      child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
                     ),
                   ),
                 ),
-                // 📌 POLISH: Symmetrical action button
-                actions: [
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 24),
-                      width: 40, height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.more_horiz_rounded, color: Colors.white, size: 20),
-                        onPressed: () => HapticFeedback.lightImpact(),
-                      ),
-                    ),
-                  ),
-                ],
                 flexibleSpace: LayoutBuilder(
                   builder: (context, constraints) {
                     final top = constraints.biggest.height;
                     final safeArea = MediaQuery.of(context).padding.top;
                     final collapsedHeight = safeArea + kToolbarHeight;
-                    const expandedHeight = 200.0;
+                    const expandedHeight = 156.0;
 
-                    final expandRatio = (expandedHeight - collapsedHeight) > 0 
-                        ? ((top - collapsedHeight) / (expandedHeight - collapsedHeight)).clamp(0.0, 1.0)
+                    final expandRatio = (expandedHeight - collapsedHeight) > 0
+                        ? ((top - collapsedHeight) /
+                                (expandedHeight - collapsedHeight))
+                            .clamp(0.0, 1.0)
                         : 1.0;
-                    
                     final collapseRatio = 1.0 - expandRatio;
 
-                    final cardOpacity = ((expandRatio - 0.3) / 0.7).clamp(0.0, 1.0);
-                    final miniHeaderOpacity = ((collapseRatio - 0.4) / 0.6).clamp(0.0, 1.0);
+                    final largeHeaderOpacity =
+                        ((expandRatio - 0.3) / 0.7).clamp(0.0, 1.0);
+                    final miniHeaderOpacity =
+                        ((collapseRatio - 0.5) / 0.5).clamp(0.0, 1.0);
 
                     return Stack(
-                      clipBehavior: Clip.none,
+                      fit: StackFit.expand,
                       children: [
-                        Positioned(
-                          top: -500, left: 0, right: 0, 
-                          bottom: 40 * expandRatio, // 📌 Deep overlap
-                          child: ClipPath(
-                            clipper: ShapeBorderClipper(
-                              shape: ContinuousRectangleBorder(
-                                borderRadius: BorderRadius.only(
-                                  bottomLeft: Radius.circular(80 * expandRatio),
-                                  bottomRight: Radius.circular(80 * expandRatio),
-                                ),
+                        // Collapsed blur backdrop
+                        Opacity(
+                          opacity: miniHeaderOpacity,
+                          child: ClipRRect(
+                            child: BackdropFilter(
+                              filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                              child: Container(
+                                color: Theme.of(context)
+                                    .scaffoldBackgroundColor
+                                    .withOpacity(0.85),
                               ),
-                            ),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: isDark
-                                          ? [AppColors.primaryGreen.withValues(alpha: 0.8), AppColors.primaryGreen.withValues(alpha: 0.3)]
-                                          : [AppColors.primaryGreen, const Color(0xFF00A884)], 
-                                    ),
-                                  ),
-                                ),
-                                // 📌 POLISH: Background Watermark
-                                Positioned(
-                                  right: -30,
-                                  top: safeArea - 20,
-                                  child: Transform.rotate(
-                                    angle: -0.2,
-                                    child: Icon(
-                                      Icons.local_hospital_rounded,
-                                      size: 220,
-                                      color: Colors.white.withValues(alpha: 0.06),
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ),
                           ),
                         ),
-
+                        // Expanded large header
                         Positioned(
-                          left: 0, right: 0, bottom: 0, // 📌 Absolute bottom for straddle
+                          left: 24,
+                          right: 24,
+                          bottom: 16,
                           child: IgnorePointer(
-                            ignoring: cardOpacity == 0.0,
+                            ignoring: largeHeaderOpacity == 0.0,
                             child: Opacity(
-                              opacity: cardOpacity,
-                              child: Transform.scale(
-                                scale: 0.95 + (0.05 * expandRatio),
-                                child: SafeArea(
-                                  bottom: false,
-                                  child: _buildClinicInfoCard(doctors.length, isLoading),
+                              opacity: largeHeaderOpacity,
+                              child: Transform.translate(
+                                offset: Offset(0, 10 * (1 - largeHeaderOpacity)),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 72,
+                                      height: 72,
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Theme.of(context).colorScheme.surface
+                                            : Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: isDark
+                                            ? []
+                                            : [
+                                                BoxShadow(
+                                                  color: Colors.black.withOpacity(0.06),
+                                                  blurRadius: 20,
+                                                  offset: const Offset(0, 10),
+                                                ),
+                                              ],
+                                      ),
+                                      child: Container(
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: isDark
+                                                ? Colors.white.withOpacity(0.08)
+                                                : Colors.black.withOpacity(0.03),
+                                          ),
+                                        ),
+                                        child: hasLogo
+                                            ? SizedBox(
+                                                width: 38,
+                                                height: 38,
+                                                child: AppNetworkImage(
+                                                  imageUrl: _clinicLogoUrl,
+                                                  circular: false,
+                                                  fit: BoxFit.contain,
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.domain_rounded,
+                                                color: AppColors.primaryGreen,
+                                                size: 32,
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            widget.clinicName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF1D1D1F),
+                                              fontSize: 32,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: -0.8,
+                                              height: 1.1,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primaryGreen
+                                                  .withOpacity(0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              _isLoading
+                                                  ? 'Searching...'
+                                                  : '${_doctors.length} Specialist${_doctors.length == 1 ? '' : 's'}',
+                                              style: const TextStyle(
+                                                color: AppColors.primaryGreen,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           ),
                         ),
-
+                        // Collapsed mini header
                         Positioned(
                           top: safeArea,
-                          left: 64, right: 64,
+                          left: 72,
+                          right: 72,
                           height: kToolbarHeight,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // 1. The Expanded "Eyebrow" Pill
-                              IgnorePointer(
-                                ignoring: cardOpacity == 0.0,
-                                child: Opacity(
-                                  opacity: cardOpacity,
-                                  child: Transform.translate(
-                                    offset: Offset(0, -10 * (1 - cardOpacity)),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: IgnorePointer(
+                            ignoring: miniHeaderOpacity == 0.0,
+                            child: Opacity(
+                              opacity: miniHeaderOpacity,
+                              child: Transform.translate(
+                                offset: Offset(0, -10 * (1 - miniHeaderOpacity)),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 34,
+                                      height: 34,
+                                      alignment: Alignment.center,
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(20),
+                                        color: AppColors.primaryGreen
+                                            .withOpacity(0.12),
+                                        shape: BoxShape.circle,
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.verified_rounded, color: Colors.white, size: 14),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            "OFFICIAL FACILITY",
-                                            style: AppTextStyles.bodySmall(context).copyWith(
-                                              color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.0,
+                                      child: hasLogo
+                                          ? SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: AppNetworkImage(
+                                                imageUrl: _clinicLogoUrl,
+                                                circular: false,
+                                                fit: BoxFit.contain,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.domain_rounded,
+                                              color: AppColors.primaryGreen,
+                                              size: 16,
                                             ),
-                                          ),
-                                        ],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        widget.clinicName,
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1D1D1F),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.3,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ),
-
-                              // 2. The Collapsed Mini-Header
-                              IgnorePointer(
-                                ignoring: miniHeaderOpacity == 0.0,
-                                child: Transform.translate(
-                                  offset: Offset(0, 15 * (1 - miniHeaderOpacity)),
-                                  child: Opacity(
-                                    opacity: miniHeaderOpacity,
-                                    child: Transform.scale(
-                                      scale: 0.9 + (0.1 * miniHeaderOpacity),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            width: 32, height: 32,
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.15),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
-                                            ),
-                                            clipBehavior: Clip.antiAlias,
-                                            padding: EdgeInsets.all(widget.logoUrl == null || widget.logoUrl!.isEmpty ? 6 : 0),
-                                            child: widget.logoUrl != null && widget.logoUrl!.isNotEmpty
-                                                ? CachedNetworkImage(
-                                                    imageUrl: widget.logoUrl!,
-                                                    fit: BoxFit.cover,
-                                                    filterQuality: FilterQuality.high,
-                                                    errorWidget: (context, url, error) => const Icon(Icons.domain_rounded, color: Colors.white, size: 16),
-                                                  )
-                                                : const Icon(Icons.domain_rounded, color: Colors.white, size: 16),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Flexible(
-                                            child: Text(
-                                              widget.clinicName,
-                                              style: AppTextStyles.h3(context).copyWith(color: Colors.white, fontSize: 18, letterSpacing: 0.3),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ],
@@ -373,84 +437,121 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen> {
                 ),
               ),
 
+              // Sticky search + filter capsule
               SliverPersistentHeader(
-                pinned: true, 
-                delegate: _DynamicGlassShelfDelegate(
+                pinned: true,
+                delegate: _ClinicGlassCapsuleDelegate(
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
-                    child: CustomSearchBar(
-                      controller: _searchController,
-                      hintText: "Search doctors...",
-                      showClearIcon: _searchController.text.isNotEmpty,
-                      onClear: () {
-                        HapticFeedback.lightImpact();
-                        _searchController.clear();
-                        _fetchDoctors();
-                        FocusScope.of(context).unfocus();
-                      },
+                    padding: const EdgeInsets.only(top: 12, bottom: 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: CustomSearchBar(
+                            controller: _searchController,
+                            hintText: 'Search ${widget.clinicName} roster...',
+                            showClearIcon: _searchController.text.isNotEmpty,
+                            onClear: () {
+                              HapticFeedback.lightImpact();
+                              _searchController.clear();
+                              _fetchData();
+                              FocusScope.of(context).unfocus();
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SmartFilterBar(
+                          filters: FilterConfig.standard,
+                          initialFilter: _selectedFilter,
+                          onFilterChanged: (filter, radius) {
+                            setState(() {
+                              _selectedFilter = filter;
+                              _activeRadiusKm = radius;
+                            });
+                            _fetchData(
+                              query: _searchController.text,
+                              forceRefresh: true,
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
 
-              if (isLoading)
-                const SliverFillRemaining(child: Center(child: AppLoader(color: AppColors.primaryGreen)))
-              else if (doctors.isEmpty)
-                 SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: Text("No doctors found.", style: AppTextStyles.h3(context))),
+              // SWR line loader
+              if (_isLoading && _doctors.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: LinearProgressIndicator(
+                    color: AppColors.primaryGreen,
+                    backgroundColor: AppColors.primaryGreen.withOpacity(0.1),
+                    minHeight: 2,
+                  ),
+                ),
+
+              // Initial loading spinner
+              if (_isLoading && _doctors.isEmpty)
+                const SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 300,
+                    child: Center(
+                      child: AppLoader(color: AppColors.primaryGreen),
+                    ),
+                  ),
+                )
+              else if (_doctors.isEmpty)
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 300,
+                    child: Center(
+                      child: Text(
+                        'No doctors found in this facility.',
+                        style: TextStyle(
+                          color: isDark
+                              ? Colors.white54
+                              : const Color(0xFF86868B),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 120),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final doctor = doctors[index]; 
-                        final docId = doctor['id'] as int;
-                        final specialtyName = doctor['specialties']?['name'] ?? 'Specialist';
-                        
-                        return TweenAnimationBuilder<double>(
-                          key: ValueKey(docId),
-                          tween: Tween(begin: 0.0, end: 1.0),
-                          duration: Duration(milliseconds: 300 + (index.clamp(0, 8) * 40)), 
-                          curve: Curves.easeOutQuart,
-                          builder: (context, value, child) {
-                            return Transform.translate(
-                              offset: Offset(0, 20 * (1 - value)),
-                              child: Opacity(opacity: value, child: child),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: _SquishableDoctorCard(
-                              doctor: doctor,
-                              docId: docId,
-                              specialtyName: specialtyName,
-                              favNotifier: _favNotifier,
-                              heroTagPrefix: 'clinic-',
-                            ),
-                          ),
-                        );
-                      },
-                      childCount: doctors.length,
-                    ),
-                  ),
-                ),
-              if (!isLoading && doctors.isNotEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: const SizedBox(
-                    height: 250,
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final doctor = _doctors[index];
+                      final docId =
+                          int.tryParse(doctor['id'].toString()) ?? index;
+                      final specialtyName =
+                          doctor['specialties']?['name'] ?? 'Specialist';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: _SquishableDoctorCard(
+                          doctor: doctor,
+                          docId: docId,
+                          specialtyName: specialtyName,
+                          favNotifier: _favNotifier,
+                          heroTagPrefix: 'clinic-$docId-$index-',
+                        ),
+                      );
+                    }, childCount: _doctors.length),
                   ),
                 ),
             ],
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 }
+
+// ─── Squishable Card (identical pattern to Specialty screen) ──────────────────
 
 class _SquishableDoctorCard extends StatefulWidget {
   final Map<String, dynamic> doctor;
@@ -487,8 +588,8 @@ class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
         child: DoctorListCard(
           id: widget.docId,
           name: widget.doctor['full_name'] ?? 'Unknown',
-          specialty: " ${widget.specialtyName}", 
-          rating: (widget.doctor['rating'] as num?)?.toString() ?? '0.0',
+          specialty: ' ${widget.specialtyName}',
+          rating: widget.doctor['rating']?.toString() ?? '0.0',
           views: (widget.doctor['views_count'] ?? 0).toString(),
           imageUrl: widget.doctor['profile_picture_url'],
           isFavorite: widget.favNotifier.isFavorite(widget.docId),
@@ -499,7 +600,10 @@ class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
           },
           onCardTap: () {
             HapticFeedback.lightImpact();
-            context.push(AppRoutes.doctorDetailsById('${widget.docId}'), extra: widget.doctor);
+            context.push(
+              AppRoutes.doctorDetailsById('${widget.docId}'),
+              extra: widget.doctor,
+            );
           },
         ),
       ),
@@ -507,48 +611,53 @@ class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
   }
 }
 
-class _DynamicGlassShelfDelegate extends SliverPersistentHeaderDelegate {
+// ─── Glass Capsule Delegate (identical to Specialty screen) ───────────────────
+
+class _ClinicGlassCapsuleDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
-  _DynamicGlassShelfDelegate({required this.child});
-  
+  _ClinicGlassCapsuleDelegate({required this.child});
+
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     final isPinned = shrinkOffset > 0 || overlapsContent;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: isPinned 
-            ? Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85)
-            : Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.0),
-        boxShadow: isPinned
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            : [],
-      ),
-      child: ClipRRect(
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(
-            sigmaX: isPinned ? 16.0 : 0.0, 
-            sigmaY: isPinned ? 16.0 : 0.0,
+    return SizedBox(
+      height: 150.0,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: isPinned
+              ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.85)
+              : Colors.transparent,
+          boxShadow: isPinned
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : [],
+        ),
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(
+              sigmaX: isPinned ? 20.0 : 0.0,
+              sigmaY: isPinned ? 20.0 : 0.0,
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
   }
-  
+
   @override
-  double get maxExtent => 88.0; 
+  double get maxExtent => 150.0;
   @override
-  double get minExtent => 88.0;
+  double get minExtent => 150.0;
   @override
-  bool shouldRebuild(covariant _DynamicGlassShelfDelegate oldDelegate) => oldDelegate.child != child;
+  bool shouldRebuild(covariant _ClinicGlassCapsuleDelegate oldDelegate) => true;
 }

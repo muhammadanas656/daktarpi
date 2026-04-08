@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:daktarpi/app.dart';
+import 'package:aeviapulse/app.dart';
 
 void main() {
   test('MyApp can be constructed', () {

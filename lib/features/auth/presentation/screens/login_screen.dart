@@ -15,6 +15,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_styles.dart'; // PRO FIX: Imported AppStyles
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../data/auth_entry_route_service.dart';
 import '../../data/auth_repository.dart';
 
@@ -291,7 +292,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: IntrinsicHeight(
                     child: Column(
                       children: [
-                        const SizedBox(height: 100),
+                        const SizedBox(height: 60),
+                        Center(
+                          child: SvgPicture.asset(
+                            Theme.of(context).brightness == Brightness.dark
+                                ? 'assets/images/darkmode.svg'
+                                : 'assets/images/lightmode.svg',
+                            height: 60,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         Text(
                           'Welcome back',
                           textAlign: TextAlign.center,

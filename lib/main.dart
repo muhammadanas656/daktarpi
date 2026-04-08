@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -109,7 +109,7 @@ Future<void> _startDeferredServices() async {
   );
 
   // The core app is now ready and loaded. Remove the native splash screen!
-  FlutterNativeSplash.remove();
+
 
   unawaited(
     _runStartupStepVoid(
@@ -151,7 +151,7 @@ Future<void> _startDeferredServices() async {
 
 Future<void> main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
 
   // 1. Initialize Firebase
   try {
@@ -221,7 +221,7 @@ Future<void> main() async {
       runApp(deviceCompromised ? const _CompromisedDeviceApp() : const MyApp());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (deviceCompromised) {
-          FlutterNativeSplash.remove();
+
           return;
         }
         unawaited(_startDeferredServices());

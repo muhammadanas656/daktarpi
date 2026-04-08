@@ -566,7 +566,7 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
                   urlTemplate:
                       'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
                   subdomains: const ['a', 'b', 'c', 'd'],
-                  userAgentPackageName: 'com.example.daktarpi',
+                  userAgentPackageName: 'com.example.AeviaPulse',
                 ),
                 if (_routePoints.isNotEmpty)
                   PolylineLayer(

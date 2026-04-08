@@ -62,7 +62,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '353454995000',
     projectId: 'daktarpai-18fbf',
     storageBucket: 'daktarpai-18fbf.firebasestorage.app',
-    iosBundleId: 'com.example.daktarpi',
+    iosBundleId: 'com.example.AeviaPulse',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

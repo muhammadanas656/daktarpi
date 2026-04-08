@@ -1,4 +1,4 @@
-import 'package:daktarpi/core/utils/security_formatters.dart';
+import 'package:aeviapulse/core/utils/security_formatters.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

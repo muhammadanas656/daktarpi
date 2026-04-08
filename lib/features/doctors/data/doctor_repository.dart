@@ -51,7 +51,9 @@ class DoctorRepository {
           technicalMessage: 'offline',
         );
       }
-      return await fetcher().timeout(const Duration(seconds: 8));
+      final fresh = await fetcher().timeout(const Duration(seconds: 8));
+      if (onFreshData != null) onFreshData(fresh);
+      return fresh;
     }
 
     final box = await _getCacheBox();
@@ -420,6 +422,7 @@ class DoctorRepository {
     double? userLat,
     double? userLng,
     double? maxRadiusKm,
+    bool forceRefresh = false,
   }) {
     final now = DateTime.now();
     return fetchProductionDoctors(
@@ -433,6 +436,7 @@ class DoctorRepository {
       maxRadiusKm: maxRadiusKm,
       localDay: DateFormat('EEEE').format(now),
       localTime: DateFormat('HH:mm:ss').format(now),
+      forceRefresh: forceRefresh,
       limit: 100,
     );
   }
@@ -444,6 +448,7 @@ class DoctorRepository {
     double? userLat,
     double? userLng,
     double? maxRadiusKm,
+    bool forceRefresh = false,
   }) {
     final now = DateTime.now();
     return fetchProductionDoctors(
@@ -455,6 +460,7 @@ class DoctorRepository {
       maxRadiusKm: maxRadiusKm,
       localDay: DateFormat('EEEE').format(now),
       localTime: DateFormat('HH:mm:ss').format(now),
+      forceRefresh: forceRefresh,
       limit: 100,
     );
   }

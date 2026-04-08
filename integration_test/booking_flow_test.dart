@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:daktarpi/main.dart' as app;
-import 'package:daktarpi/core/constants/app_routes.dart';
-import 'package:daktarpi/core/router/app_router.dart';
-import 'package:daktarpi/presentation/widgets/doctor_list_card.dart';
+import 'package:aeviapulse/main.dart' as app;
+import 'package:aeviapulse/core/constants/app_routes.dart';
+import 'package:aeviapulse/core/router/app_router.dart';
+import 'package:aeviapulse/presentation/widgets/doctor_list_card.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

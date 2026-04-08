@@ -244,7 +244,7 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     setState(() => _isLoading = true);
     try {
       await _settingsRepository.linkGoogleIdentity(
-        redirectTo: 'io.supabase.daktarpi://login-callback',
+        redirectTo: 'io.supabase.AeviaPulse://login-callback',
       );
       await _settingsRepository.refreshSession();
 
