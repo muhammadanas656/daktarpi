@@ -13,6 +13,7 @@ import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../models/doctors_route_args.dart';
 import '../../../../core/widgets/app_loader.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
   const GlobalSearchScreen({super.key});
@@ -335,39 +336,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
     return Scaffold(
       backgroundColor: context.colorScaffoldBackground,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: Center(
-          child: InkWell(
-            onTap: () => context.pop(),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color:
-                    Theme.of(
-                      context,
-                    ).colorScheme.surface, // Removed Colors.white
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.colorBorder),
-                boxShadow: AppStyles.cardShadow(context), // Added context
-              ),
-              child: Icon(
-                Icons.arrow_back_ios_new,
-                size: 18,
-                color: context.colorTextDark,
-              ),
-            ),
-          ),
-        ),
-        title: Text(
-          "Global Search",
-          style: AppTextStyles.h1(context).copyWith(fontSize: 22),
-        ),
-      ),
+      appBar: const CustomAppBar(title: "Global Search"),
       body: Container(
         decoration: BoxDecoration(
           gradient: AppStyles.pageGradient(context),

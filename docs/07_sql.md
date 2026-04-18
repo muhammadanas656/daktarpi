@@ -155,3 +155,196 @@ CREATE TABLE public.trusted_devices (
   CONSTRAINT trusted_devices_pkey PRIMARY KEY (id),
   CONSTRAINT trusted_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+
+
+
+
+
+
+
+
+Here are the final, production-ready SQL scripts for your database. You can save these in your version control or database migration files for future use.
+
+These scripts include all the architectural upgrades we finalized: the 10-doctor default cluster, the `app_settings` dynamic limits, the `LEAST()` ceiling fix, and the dynamic sorting router.
+
+### 1. Settings Table & Dynamic Radius Calculator
+Run this block to ensure your settings table exists, and then create the `get_smart_cluster_radius` function.
+
+```sql
+-- Create the settings table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.app_settings (
+  key TEXT PRIMARY KEY,
+  value NUMERIC NOT NULL,
+  description TEXT
+);
+
+
+
+INSERT INTO public.app_settings (key, value, description) VALUES 
+('max_search_radius_km', 500.0, 'Global maximum search radius (Slider ceiling)'),
+('min_search_radius_km', 25.0, 'Global minimum ground limit (Slider floor)'),
+('featured_search_radius_km', 30.0, 'Rigid monetization radius for the Featured section')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+-- 2. Upgrade the Smart Cluster Calculator
+CREATE OR REPLACE FUNCTION get_smart_cluster_radius(
+  p_user_lat DOUBLE PRECISION,
+  p_user_lng DOUBLE PRECISION,
+  p_user_country TEXT,
+  p_target_cluster_size INT DEFAULT 10
+) RETURNS DOUBLE PRECISION AS $$
+DECLARE
+  v_calculated_radius DOUBLE PRECISION;
+  v_dynamic_max DOUBLE PRECISION;
+  v_dynamic_min DOUBLE PRECISION;
+BEGIN
+  -- Hydrate limits directly from the settings table
+  SELECT value INTO v_dynamic_max FROM app_settings WHERE key = 'max_search_radius_km';
+  IF v_dynamic_max IS NULL THEN v_dynamic_max := 500.0; END IF;
+
+  SELECT value INTO v_dynamic_min FROM app_settings WHERE key = 'min_search_radius_km';
+  IF v_dynamic_min IS NULL THEN v_dynamic_min := 25.0; END IF;
+
+  -- Calculate the raw cluster distance
+  SELECT calc_distance INTO v_calculated_radius
+  FROM (
+    SELECT dc.doctor_id,
+           MIN(6371 * acos(LEAST(1.0, GREATEST(-1.0, 
+              cos(radians(p_user_lat)) * cos(radians(c.latitude)) * cos(radians(c.longitude) - radians(p_user_lng)) + 
+              sin(radians(p_user_lat)) * sin(radians(c.latitude))
+           )))) AS calc_distance
+    FROM doctor_clinics dc
+    JOIN clinics c ON c.id = dc.clinic_id
+    JOIN doctors d ON d.id = dc.doctor_id
+    WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
+      AND d.country_iso = p_user_country
+    GROUP BY dc.doctor_id
+    ORDER BY calc_distance ASC
+    LIMIT p_target_cluster_size
+  ) subquery
+  ORDER BY calc_distance DESC
+  LIMIT 1;
+
+  IF v_calculated_radius IS NULL THEN
+    RETURN -1.0; 
+  END IF;
+
+  -- The Ultimate Clamp: Forces the radius to respect your database rules
+  RETURN GREATEST(v_dynamic_min, LEAST(v_calculated_radius, v_dynamic_max));
+END;
+$$ LANGUAGE plpgsql;
+
+---
+
+### 2. The Master Production Fetcher
+This is your centralized query engine that powers the Search, Featured, Popular, and Specialty screens via its dynamic `ORDER BY` routing.
+
+```sql
+-- -----------------------------------------------------------------------------
+-- FUNCTION 2: The Master Production Fetcher
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION get_production_doctors(
+  p_search_query TEXT DEFAULT NULL,
+  p_filter_type TEXT DEFAULT 'All',       
+  p_category TEXT DEFAULT NULL,           
+  p_user_country TEXT DEFAULT NULL,
+  p_user_location TEXT DEFAULT NULL,
+  p_user_lat DOUBLE PRECISION DEFAULT NULL,
+  p_user_lng DOUBLE PRECISION DEFAULT NULL,
+  p_max_radius_km DOUBLE PRECISION DEFAULT NULL,
+  p_local_day TEXT DEFAULT NULL,          
+  p_local_time TIME DEFAULT NULL,         
+  p_specialty_id BIGINT DEFAULT NULL,     
+  p_clinic_id BIGINT DEFAULT NULL,        
+  p_limit INT DEFAULT 20,                 
+  p_offset INT DEFAULT 0                  
+) RETURNS SETOF doctors AS $$
+BEGIN
+  RETURN QUERY
+  
+  WITH ValidDoctors AS (
+    SELECT 
+      d.id AS doc_id,
+      
+      -- Calculate spatial distance if requested
+      CASE WHEN (p_filter_type IN ('Nearest', 'Available Today') OR p_max_radius_km IS NOT NULL) AND p_user_lat IS NOT NULL AND p_user_lng IS NOT NULL THEN
+        (SELECT MIN(6371 * acos(LEAST(1.0, GREATEST(-1.0, 
+            cos(radians(p_user_lat)) * cos(radians(c.latitude)) * cos(radians(c.longitude) - radians(p_user_lng)) + 
+            sin(radians(p_user_lat)) * sin(radians(c.latitude))
+         ))))
+         FROM doctor_clinics dc JOIN clinics c ON c.id = dc.clinic_id 
+         WHERE dc.doctor_id = d.id AND c.latitude IS NOT NULL AND c.longitude IS NOT NULL)
+      ELSE NULL END AS calc_distance,
+      
+      -- Check facility type (Hospital vs Clinic)
+      CASE WHEN p_filter_type IN ('Hospital', 'Clinic') THEN
+        EXISTS (SELECT 1 FROM doctor_clinics dc JOIN clinics c ON c.id = dc.clinic_id WHERE dc.doctor_id = d.id AND c.type = lower(p_filter_type))
+      ELSE TRUE END AS matches_facility,
+      
+      -- Check schedule availability
+      CASE WHEN p_filter_type = 'Available Today' AND p_local_day IS NOT NULL AND p_local_time IS NOT NULL THEN
+        EXISTS (SELECT 1 FROM doctor_schedules ds WHERE ds.doctor_id = d.id AND lower(trim(ds.day_of_week)) = lower(trim(p_local_day)) AND ds.end_time > p_local_time)
+      ELSE TRUE END AS matches_schedule
+
+    FROM doctors d
+    WHERE 
+      (CASE 
+        WHEN p_user_country IS NOT NULL THEN d.country_iso = p_user_country
+        WHEN p_user_location IS NOT NULL THEN d.location = p_user_location
+        ELSE TRUE 
+      END)
+      
+      -- Category Filtering (Popular is math-driven, Featured is boolean-driven)
+      AND (
+        p_category IS NULL 
+        OR p_category = 'Popular' 
+        OR (p_category = 'Featured' AND d.is_featured = TRUE)
+      )
+           
+      -- Global Search matching (Name, Specialty, or Clinic Name)
+      AND (
+        p_search_query IS NULL OR trim(p_search_query) = '' 
+        OR d.full_name ILIKE '%' || trim(p_search_query) || '%'
+        OR EXISTS (
+          SELECT 1 FROM specialties s 
+          WHERE s.id = d.specialty_id AND s.name ILIKE '%' || trim(p_search_query) || '%'
+        )
+        OR EXISTS (
+          SELECT 1 FROM doctor_clinics dc JOIN clinics c ON c.id = dc.clinic_id 
+          WHERE dc.doctor_id = d.id AND c.name ILIKE '%' || trim(p_search_query) || '%'
+        )
+      )
+      
+      AND (p_specialty_id IS NULL OR d.specialty_id = p_specialty_id)
+      AND (p_clinic_id IS NULL OR EXISTS (
+        SELECT 1 FROM doctor_clinics dc WHERE dc.doctor_id = d.id AND dc.clinic_id = p_clinic_id
+      ))
+  )
+  
+  -- Final Select & Join
+  SELECT d.* FROM doctors d
+  JOIN ValidDoctors vd ON d.id = vd.doc_id
+  WHERE vd.matches_facility = TRUE 
+    AND vd.matches_schedule = TRUE
+    AND (p_max_radius_km IS NULL OR vd.calc_distance <= p_max_radius_km)
+    
+  -- The Dynamic Sorting Router
+  ORDER BY 
+    -- ROUTE A: "Featured" -> Localized Fair-Share Randomizer
+    CASE WHEN p_category = 'Featured' THEN RANDOM() ELSE 1.0 END ASC,
+    
+    -- ROUTE B: "Popular" -> The Weighted Quality Matrix (Rating * Log(Reviews))
+    CASE WHEN p_category = 'Popular' THEN (COALESCE(d.rating, 0.0) * LOG(COALESCE(d.reviews_count, 0) + 2.0)) ELSE NULL END DESC NULLS LAST,
+    CASE WHEN p_category = 'Popular' THEN COALESCE(d.patients_served, 0) ELSE NULL END DESC NULLS LAST,
+    
+    -- ROUTE C: User tapped "Top Rated"
+    CASE WHEN p_filter_type IN ('Best Rated', 'Top Rated') THEN d.rating ELSE NULL END DESC NULLS LAST,
+    
+    -- ROUTE D: The Universal Fallback -> Closest distance, then most views
+    vd.calc_distance ASC NULLS LAST,
+    d.views_count DESC NULLS LAST
+  
+  LIMIT p_limit OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql;
+```

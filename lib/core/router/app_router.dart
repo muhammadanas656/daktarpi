@@ -294,8 +294,18 @@ final appRouter = GoRouter(
 
     // 3. SHELL ROUTE (Bottom Navigation)
     StatefulShellRoute.indexedStack(
-      builder: (context, state, navigationShell) {
-        return MainWrapper(navigationShell: navigationShell);
+      pageBuilder: (context, state, navigationShell) {
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: MainWrapper(navigationShell: navigationShell),
+          transitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(
+              opacity: CurveTween(curve: Curves.easeOut).animate(animation),
+              child: child,
+            );
+          },
+        );
       },
       branches: [
         StatefulShellBranch(

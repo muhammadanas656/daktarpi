@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 import '../../doctors/data/specialty.dart';
 import '../../doctors/data/doctor_repository.dart';
 import '../../../core/network/network_notifier.dart';
@@ -13,6 +14,8 @@ class HomeRepository {
   // PRO FIX: Static variables to hold banners in RAM across the entire app lifecycle
   static List<Map<String, dynamic>>? _ramBanners;
   static DateTime? _lastBannerFetch;
+
+  static List<Map<String, dynamic>> get currentBanners => _ramBanners ?? [];
 
   HomeRepository({DoctorRepository? doctorRepo, SupabaseClient? client})
     : _doctorRepo = doctorRepo ?? DoctorRepository(),
@@ -75,8 +78,12 @@ class HomeRepository {
 
     // 2. THE OFFLINE & INSTANT CACHE ENGINE
     if (cachedData != null) {
-      final decoded = jsonDecode(cachedData) as List<dynamic>;
+      final decoded = await compute(_isolateDecodeHomeList, cachedData as String);
       _ramBanners = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+
+      if (onFreshData != null) {
+        scheduleMicrotask(() => onFreshData(_ramBanners!));
+      }
 
       // Fire Silent Sync!
       if (!isOffline && !forceRefresh) {
@@ -122,6 +129,8 @@ class HomeRepository {
       _ramBanners = data;
       _lastBannerFetch = DateTime.now();
       
+      if (onFreshData != null) onFreshData(data);
+      
       return data;
     } catch (e) {
       if (cachedData != null) {
@@ -131,4 +140,8 @@ class HomeRepository {
       return [];
     }
   }
+}
+
+List<dynamic> _isolateDecodeHomeList(String jsonString) {
+  return jsonDecode(jsonString) as List<dynamic>;
 }

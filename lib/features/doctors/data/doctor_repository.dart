@@ -70,6 +70,13 @@ class DoctorRepository {
       final List<dynamic> decoded = jsonDecode(cachedData);
       final cache = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
 
+      // NEW: Instantly inject cache payload directly to RAM Notifiers to prevent UI ghost loading!
+      // This allows the screen to confidently paint cache data WHILE actively showing its foreground network spinner.
+      if (onFreshData != null) {
+        // Queueing on microtask averts potential Flutter Build phase race collisions.
+        scheduleMicrotask(() => onFreshData(cache));
+      }
+
       if (!isOffline && !forceRefresh) {
         unawaited(() async {
           try {
@@ -87,7 +94,7 @@ class DoctorRepository {
         }());
       }
 
-      // Rule 2: NEVER block the UI if we have cache!
+      // Rule 2: NEVER block the UI if we have cache, UNLESS the user explicitly demands a hard refresh loading state
       if (isOffline || !forceRefresh) {
         return cache;
       }
@@ -130,6 +137,18 @@ class DoctorRepository {
   }
 
   /// Processes all pending offline actions when the internet is restored
+  Future<List<Map<String, dynamic>>?> getDirectCache(String cacheKey) async {
+    try {
+      final box = await _getCacheBox();
+      final cachedData = box.get(cacheKey);
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> syncOfflineQueue() async {
     if (NetworkNotifier.instance.isOffline) return;
 
@@ -223,31 +242,118 @@ class DoctorRepository {
 
   /// Calculates the optimal search radius (in km) to capture roughly
   /// [targetClusterSize] unique doctors near the user's location.
-  /// Returns a value clamped between 2.0 and [maxAllowedRadius] km.
+  /// Returns the distance dynamically capped by the global platform settings.
   Future<double> fetchSmartClusterRadius({
     required double userLat,
     required double userLng,
     required String countryIso,
-    int targetClusterSize = 6,
-    double maxAllowedRadius = 50.0,
+    int targetClusterSize = 10,
+    double fallbackRadius = 50.0,
   }) async {
-    if (NetworkNotifier.instance.isOffline) return maxAllowedRadius;
+    if (NetworkNotifier.instance.isOffline) return fallbackRadius;
     try {
+      // THE FIX: Removed .maybeSingle() because the RPC returns a raw scalar number, not a Map!
       final result = await _client.rpc('get_smart_cluster_radius', params: {
         'p_user_lat': userLat,
         'p_user_lng': userLng,
         'p_user_country': countryIso,
         'p_target_cluster_size': targetClusterSize,
-        'p_max_allowed_radius': maxAllowedRadius,
       });
-      return (result as num?)?.toDouble() ?? maxAllowedRadius;
+
+      if (result != null) {
+        return (result as num).toDouble();
+      }
+      return fallbackRadius;
+      
     } catch (e) {
-      debugPrint('Smart cluster radius failed: $e');
-      return maxAllowedRadius;
+      debugPrint('🚨 [DoctorRepo] Smart cluster radius failed: $e');
+      return fallbackRadius;
     }
   }
 
-  // ─── Master RPC: Production Doctor Fetcher ────────────────────────────────
+  // --- DYNAMIC PLATFORM CONFIGURATION (Server-Driven) ---
+  
+  // --- HIGH-PERFORMANCE SETTINGS CACHE ---
+  Map<String, double>? _cachedSettings;
+
+  Future<void> _preloadSettings() async {
+    if (_cachedSettings != null || NetworkNotifier.instance.isOffline) return;
+    try {
+      // Fetches ALL settings in exactly 1 network request using the "in_" filter
+      final response = await _client
+          .from('app_settings')
+          .select('key, value')
+          .inFilter('key', [
+            'max_search_radius_km',
+            'min_search_radius_km',
+            'featured_search_radius_km',
+            'popular_highlight_range_km',
+            'target_cluster_size',
+            'popular_threshold',
+            'home_popular_limit',
+            'explore_popular_limit',
+            'home_featured_limit',
+            'explore_featured_limit',
+          ]);
+          
+      _cachedSettings = {};
+      for (var row in response) {
+        _cachedSettings![row['key']] = (row['value'] as num).toDouble();
+      }
+    } catch (e) {
+      debugPrint('Bulk settings fetch failed: $e');
+    }
+  }
+
+  Future<double> fetchMaxPlatformRadius() async {
+    await _preloadSettings();
+    return _cachedSettings?['max_search_radius_km'] ?? 500.0;
+  }
+  
+  Future<double> fetchMinPlatformRadius() async {
+    await _preloadSettings();
+    return _cachedSettings?['min_search_radius_km'] ?? 25.0;
+  }
+  
+  Future<double> fetchFeaturedPlatformRadius() async {
+    await _preloadSettings();
+    return _cachedSettings?['featured_search_radius_km'] ?? 30.0;
+  }
+
+  Future<double> fetchPopularHighlightRange() async {
+    await _preloadSettings();
+    return _cachedSettings?['popular_highlight_range_km'] ?? 25.0;
+  }
+
+  Future<int> fetchTargetClusterSize() async {
+    await _preloadSettings();
+    return (_cachedSettings?['target_cluster_size'] ?? 10).toInt();
+  }
+
+  Future<double> fetchPopularThreshold() async {
+    await _preloadSettings();
+    return _cachedSettings?['popular_threshold'] ?? 3.0;
+  }
+
+  Future<int> fetchHomePopularLimit() async {
+    await _preloadSettings();
+    return (_cachedSettings?['home_popular_limit'] ?? 6).toInt();
+  }
+
+  Future<int> fetchExplorePopularLimit() async {
+    await _preloadSettings();
+    return (_cachedSettings?['explore_popular_limit'] ?? 50).toInt();
+  }
+
+  Future<int> fetchHomeFeaturedLimit() async {
+    await _preloadSettings();
+    return (_cachedSettings?['home_featured_limit'] ?? 6).toInt();
+  }
+
+  Future<int> fetchExploreFeaturedLimit() async {
+    await _preloadSettings();
+    return (_cachedSettings?['explore_featured_limit'] ?? 50).toInt();
+  }
 
   /// The unified RPC gateway. All doctor fetching flows through here.
   /// PostgREST's foreign-key embedding on SETOF return type allows
@@ -274,15 +380,18 @@ class DoctorRepository {
 
     // Build a stable cache key for non-search, non-filtered requests
     String? cacheKey;
-    if (!isSearch && filterType == 'All' && offset == 0 && maxRadiusKm == null) {
+    if (!isSearch && offset == 0) {
+      final radStr = maxRadiusKm != null ? '_r${maxRadiusKm.ceil()}' : '';
+      final filterStr = filterType != 'All' ? '_f${filterType.replaceAll(' ', '')}' : '';
+      
       if (category != null) {
-        cacheKey = '${category.toLowerCase()}_doctors_$countryIso';
+        cacheKey = '${category.toLowerCase()}_docs_${countryIso}$filterStr$radStr';
       } else if (specialtyId != null) {
-        cacheKey = 'specialty_${specialtyId}_$countryIso';
+        cacheKey = 'specialty_${specialtyId}_${countryIso}$filterStr$radStr';
       } else if (clinicId != null) {
-        cacheKey = 'clinic_$clinicId';
+        cacheKey = 'clinic_${clinicId}$filterStr$radStr';
       } else {
-        cacheKey = 'all_doctors_$countryIso';
+        cacheKey = 'all_docs_${countryIso}$filterStr$radStr';
       }
     }
 
@@ -471,6 +580,7 @@ class DoctorRepository {
     double? userLng,
     String? userLocation,
     String? countryIso,
+    double? maxRadiusKm,
   }) {
     if (NetworkNotifier.instance.isOffline) {
       throw const AppFailure(
@@ -485,6 +595,7 @@ class DoctorRepository {
       userLocation: userLocation,
       userLat: userLat,
       userLng: userLng,
+      maxRadiusKm: maxRadiusKm,
       limit: 50,
     );
   }
@@ -770,8 +881,6 @@ class DoctorRepository {
     );
   }
 }
-
-
 
 List<Map<String, dynamic>> _isolateFacilityDistanceSort(Map<String, dynamic> params) {
   // Isolate maps deeply unbox over execution boundaries, we must safely decode

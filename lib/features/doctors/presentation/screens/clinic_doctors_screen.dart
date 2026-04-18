@@ -6,10 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/app_loader.dart';
 import '../favorites_notifier.dart';
 import '../doctors_notifier.dart';
-import '../widgets/smart_filter_bar.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../data/doctor_repository.dart';
@@ -45,16 +43,22 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
   bool _isLoading = true;
   String? _clinicLogoUrl;
   String _selectedFilter = 'All';
-  double? _activeRadiusKm;
 
   @override
   void initState() {
     super.initState();
     _clinicLogoUrl = widget.logoUrl;
     _favNotifier.addListener(_onStateChanged);
-    _fetchData();
     if (_clinicLogoUrl == null) _fetchClinicMedia();
     _searchController.addListener(_onSearchChanged);
+
+    // THE FIX: Because the SmartFilterBar is silent on this specific screen,
+    // we MUST manually trigger the initial data fetch here.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _fetchData(forceRefresh: true);
+      }
+    });
   }
 
   @override
@@ -97,13 +101,18 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
     try {
       final response = await Supabase.instance.client
           .from('clinics')
-          .select('logo_url')
+          .select('logo_url, image_url')
           .eq('id', widget.clinicId)
           .maybeSingle();
       if (response != null && mounted) {
         final logoUrl = response['logo_url']?.toString().trim();
+        final imageUrl = response['image_url']?.toString().trim();
+        
+        // ─── INTERCHANGEABLE IMAGE MATRIX ───
+        final String? resolvedPrimary = (logoUrl != null && logoUrl.isNotEmpty) ? logoUrl : ((imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : null);
+        
         setState(() {
-          _clinicLogoUrl = (logoUrl == null || logoUrl.isEmpty) ? null : logoUrl;
+          _clinicLogoUrl = resolvedPrimary;
         });
       }
     } catch (e) {
@@ -119,8 +128,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
       double? userLng;
 
       // Only fetch GPS for filters that actually need it
-      if (_activeRadiusKm != null ||
-          _selectedFilter == 'Nearest' ||
+      if (_selectedFilter == 'Nearest' ||
           _selectedFilter == 'Available Today') {
         try {
           final pos = await DoctorsNotifier.instance.getUserPosition();
@@ -137,7 +145,6 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
         widget.clinicId,
         query: query,
         filterType: _selectedFilter,
-        maxRadiusKm: _activeRadiusKm,
         userLat: userLat,
         userLng: userLng,
         forceRefresh: forceRefresh,
@@ -184,14 +191,16 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
             ),
           ),
           CustomScrollView(
+            clipBehavior: Clip.none,
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
             slivers: [
               SliverAppBar(
                 pinned: true,
-                expandedHeight: 156.0,
+                expandedHeight: 228.0,
                 elevation: 0,
+                scrolledUnderElevation: 0,
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 leadingWidth: 72,
@@ -222,286 +231,263 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                     ),
                   ),
                 ),
-                flexibleSpace: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final top = constraints.biggest.height;
-                    final safeArea = MediaQuery.of(context).padding.top;
-                    final collapsedHeight = safeArea + kToolbarHeight;
-                    const expandedHeight = 156.0;
-
-                    final expandRatio = (expandedHeight - collapsedHeight) > 0
-                        ? ((top - collapsedHeight) /
-                                (expandedHeight - collapsedHeight))
-                            .clamp(0.0, 1.0)
-                        : 1.0;
-                    final collapseRatio = 1.0 - expandRatio;
-
-                    final largeHeaderOpacity =
-                        ((expandRatio - 0.3) / 0.7).clamp(0.0, 1.0);
-                    final miniHeaderOpacity =
-                        ((collapseRatio - 0.5) / 0.5).clamp(0.0, 1.0);
-
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // Collapsed blur backdrop
-                        Opacity(
-                          opacity: miniHeaderOpacity,
-                          child: ClipRRect(
-                            child: BackdropFilter(
-                              filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                              child: Container(
-                                color: Theme.of(context)
-                                    .scaffoldBackgroundColor
-                                    .withOpacity(0.85),
-                              ),
-                            ),
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(72.0),
+                  child: Container(
+                    padding: const EdgeInsets.only(top: 12, bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: CustomSearchBar(
+                        controller: _searchController,
+                        hintText: 'Search ${widget.clinicName} roster...',
+                        showClearIcon: _searchController.text.isNotEmpty,
+                        onClear: () {
+                          HapticFeedback.lightImpact();
+                          _searchController.clear();
+                          _fetchData();
+                          FocusScope.of(context).unfocus();
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                flexibleSpace: ClipRRect(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        // Permanent glass so the ambient gradient can keep showing through.
+                        color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.70),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: isDark
+                                ? Colors.white.withOpacity(0.05)
+                                : Colors.black.withOpacity(0.05),
+                            width: 1,
                           ),
                         ),
-                        // Expanded large header
-                        Positioned(
-                          left: 24,
-                          right: 24,
-                          bottom: 16,
-                          child: IgnorePointer(
-                            ignoring: largeHeaderOpacity == 0.0,
-                            child: Opacity(
-                              opacity: largeHeaderOpacity,
-                              child: Transform.translate(
-                                offset: Offset(0, 10 * (1 - largeHeaderOpacity)),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 72,
-                                      height: 72,
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? Theme.of(context).colorScheme.surface
-                                            : Colors.white,
-                                        shape: BoxShape.circle,
-                                        boxShadow: isDark
-                                            ? []
-                                            : [
-                                                BoxShadow(
-                                                  color: Colors.black.withOpacity(0.06),
-                                                  blurRadius: 20,
-                                                  offset: const Offset(0, 10),
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final top = constraints.biggest.height;
+                          final safeArea = MediaQuery.of(context).padding.top;
+                          final collapsedHeight = safeArea + kToolbarHeight + 72.0;
+                          final expandRatio =
+                              ((top - collapsedHeight) / 100.0).clamp(0.0, 1.0);
+                          final collapseRatio = 1.0 - expandRatio;
+
+                          final largeHeaderOpacity =
+                              ((expandRatio - 0.3) / 0.7).clamp(0.0, 1.0);
+                          final miniHeaderOpacity =
+                              ((collapseRatio - 0.5) / 0.5).clamp(0.0, 1.0);
+
+                          return Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Positioned(
+                                left: 24,
+                                right: 24,
+                                bottom: 114.0,
+                                child: IgnorePointer(
+                                  ignoring: largeHeaderOpacity == 0.0,
+                                  child: Opacity(
+                                    opacity: largeHeaderOpacity,
+                                    child: Transform.translate(
+                                      offset: Offset(
+                                        0,
+                                        10 * (3.4 - largeHeaderOpacity),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 72,
+                                            height: 72,
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? Theme.of(context).colorScheme.surface
+                                                  : Colors.white,
+                                              shape: BoxShape.circle,
+                                              boxShadow: isDark
+                                                  ? []
+                                                  : [
+                                                      BoxShadow(
+                                                        color: Colors.black.withOpacity(0.06),
+                                                        blurRadius: 20,
+                                                        offset: const Offset(0, 10),
+                                                      ),
+                                                    ],
+                                            ),
+                                            child: Container(
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: isDark
+                                                      ? Colors.white.withOpacity(0.08)
+                                                      : Colors.black.withOpacity(0.03),
+                                                ),
+                                              ),
+                                              child: hasLogo
+                                                  ? SizedBox(
+                                                      width: 72,
+                                                      height: 72,
+                                                      child: ClipOval(
+                                                        child: AppNetworkImage(
+                                                          imageUrl: _clinicLogoUrl,
+                                                          circular: false,
+                                                          fit: BoxFit.cover,
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.domain_rounded,
+                                                      color: AppColors.primaryGreen,
+                                                      size: 32,
+                                                    ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 20),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  widget.clinicName,
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    color: isDark
+                                                        ? Colors.white
+                                                        : const Color(0xFF1D1D1F),
+                                                    fontSize: 28,
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: -0.6,
+                                                    height: 1.05,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.primaryGreen.withOpacity(
+                                                      0.12,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    _isLoading
+                                                        ? 'Searching...'
+                                                        : '${_doctors.length} Specialist${_doctors.length == 1 ? '' : 's'}',
+                                                    style: const TextStyle(
+                                                      color: AppColors.primaryGreen,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w800,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
                                                 ),
                                               ],
-                                      ),
-                                      child: Container(
-                                        alignment: Alignment.center,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: isDark
-                                                ? Colors.white.withOpacity(0.08)
-                                                : Colors.black.withOpacity(0.03),
+                                            ),
                                           ),
-                                        ),
-                                        child: hasLogo
-                                            ? SizedBox(
-                                                width: 38,
-                                                height: 38,
-                                                child: AppNetworkImage(
-                                                  imageUrl: _clinicLogoUrl,
-                                                  circular: false,
-                                                  fit: BoxFit.contain,
-                                                ),
-                                              )
-                                            : const Icon(
-                                                Icons.domain_rounded,
-                                                color: AppColors.primaryGreen,
-                                                size: 32,
-                                              ),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(width: 20),
-                                    Expanded(
-                                      child: Column(
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                top: safeArea,
+                                left: 72,
+                                right: 72,
+                                height: kToolbarHeight - 1,
+                                child: IgnorePointer(
+                                  ignoring: miniHeaderOpacity == 0.0,
+                                  child: Opacity(
+                                    opacity: miniHeaderOpacity,
+                                    child: Transform.translate(
+                                      offset: Offset(
+                                        0,
+                                        -2 - (10 * (1 - miniHeaderOpacity)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                            CrossAxisAlignment.center,
                                         children: [
-                                          Text(
-                                            widget.clinicName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: isDark
-                                                  ? Colors.white
-                                                  : const Color(0xFF1D1D1F),
-                                              fontSize: 32,
-                                              fontWeight: FontWeight.w800,
-                                              letterSpacing: -0.8,
-                                              height: 1.1,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
+                                            width: 34,
+                                            height: 34,
+                                            alignment: Alignment.center,
+                                            clipBehavior: Clip.antiAlias,
                                             decoration: BoxDecoration(
-                                              color: AppColors.primaryGreen
-                                                  .withOpacity(0.12),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
+                                              color: AppColors.primaryGreen.withOpacity(
+                                                0.12,
+                                              ),
+                                              shape: BoxShape.circle,
                                             ),
-                                            child: Text(
-                                              _isLoading
-                                                  ? 'Searching...'
-                                                  : '${_doctors.length} Specialist${_doctors.length == 1 ? '' : 's'}',
-                                              style: const TextStyle(
-                                                color: AppColors.primaryGreen,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 0.5,
+                                            child: hasLogo
+                                                ? AppNetworkImage(
+                                                    imageUrl: _clinicLogoUrl,
+                                                    width: double.infinity,
+                                                    height: double.infinity,
+                                                    circular: false,
+                                                    fit: BoxFit.cover,
+                                                  )
+                                                : const Icon(
+                                                    Icons.domain_rounded,
+                                                    color: AppColors.primaryGreen,
+                                                    size: 16,
+                                                  ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              alignment: Alignment.centerLeft,
+                                              child: Text(
+                                                widget.clinicName,
+                                                style: TextStyle(
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : const Color(0xFF1D1D1F),
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: -0.3,
+                                                  height: 1.1,
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                        ),
-                        // Collapsed mini header
-                        Positioned(
-                          top: safeArea,
-                          left: 72,
-                          right: 72,
-                          height: kToolbarHeight,
-                          child: IgnorePointer(
-                            ignoring: miniHeaderOpacity == 0.0,
-                            child: Opacity(
-                              opacity: miniHeaderOpacity,
-                              child: Transform.translate(
-                                offset: Offset(0, -10 * (1 - miniHeaderOpacity)),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 34,
-                                      height: 34,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primaryGreen
-                                            .withOpacity(0.12),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: hasLogo
-                                          ? SizedBox(
-                                              width: 18,
-                                              height: 18,
-                                              child: AppNetworkImage(
-                                                imageUrl: _clinicLogoUrl,
-                                                circular: false,
-                                                fit: BoxFit.contain,
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.domain_rounded,
-                                              color: AppColors.primaryGreen,
-                                              size: 16,
-                                            ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        widget.clinicName,
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? Colors.white
-                                              : const Color(0xFF1D1D1F),
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.3,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-
-              // Sticky search + filter capsule
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _ClinicGlassCapsuleDelegate(
-                  child: Container(
-                    padding: const EdgeInsets.only(top: 12, bottom: 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: CustomSearchBar(
-                            controller: _searchController,
-                            hintText: 'Search ${widget.clinicName} roster...',
-                            showClearIcon: _searchController.text.isNotEmpty,
-                            onClear: () {
-                              HapticFeedback.lightImpact();
-                              _searchController.clear();
-                              _fetchData();
-                              FocusScope.of(context).unfocus();
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SmartFilterBar(
-                          filters: FilterConfig.standard,
-                          initialFilter: _selectedFilter,
-                          onFilterChanged: (filter, radius) {
-                            setState(() {
-                              _selectedFilter = filter;
-                              _activeRadiusKm = radius;
-                            });
-                            _fetchData(
-                              query: _searchController.text,
-                              forceRefresh: true,
-                            );
-                          },
-                        ),
-                      ],
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
               ),
 
-              // SWR line loader
-              if (_isLoading && _doctors.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: LinearProgressIndicator(
-                    color: AppColors.primaryGreen,
-                    backgroundColor: AppColors.primaryGreen.withOpacity(0.1),
-                    minHeight: 2,
-                  ),
-                ),
-
-              // Initial loading spinner
               if (_isLoading && _doctors.isEmpty)
-                const SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 300,
-                    child: Center(
-                      child: AppLoader(color: AppColors.primaryGreen),
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryGreen,
                     ),
                   ),
                 )
-              else if (_doctors.isEmpty)
+              else if (_doctors.isEmpty && !_isLoading)
                 SliverToBoxAdapter(
                   child: SizedBox(
                     height: 300,
@@ -521,7 +507,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 120),
+                  padding: const EdgeInsets.only(top: 20, bottom: 120),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final doctor = _doctors[index];
@@ -531,7 +517,11 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                           doctor['specialties']?['name'] ?? 'Specialist';
 
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.only(
+                          left: 24,
+                          right: 24,
+                          bottom: 16,
+                        ),
                         child: _SquishableDoctorCard(
                           doctor: doctor,
                           docId: docId,
@@ -612,52 +602,3 @@ class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
 }
 
 // ─── Glass Capsule Delegate (identical to Specialty screen) ───────────────────
-
-class _ClinicGlassCapsuleDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  _ClinicGlassCapsuleDelegate({required this.child});
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final isPinned = shrinkOffset > 0 || overlapsContent;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SizedBox(
-      height: 150.0,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color: isPinned
-              ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.85)
-              : Colors.transparent,
-          boxShadow: isPinned
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : [],
-        ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(
-              sigmaX: isPinned ? 20.0 : 0.0,
-              sigmaY: isPinned ? 20.0 : 0.0,
-            ),
-            child: child,
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  double get maxExtent => 150.0;
-  @override
-  double get minExtent => 150.0;
-  @override
-  bool shouldRebuild(covariant _ClinicGlassCapsuleDelegate oldDelegate) => true;
-}

@@ -67,6 +67,9 @@ abstract class Doctor with _$Doctor {
     @JsonKey(name: 'patients_served', fromJson: _intFromJson)
     @Default(0)
     int patientsServed,
+    @JsonKey(name: 'unique_patients_count', fromJson: _intFromJson)
+    @Default(0)
+    int uniquePatientsCount,
     @JsonKey(name: 'views_count', fromJson: _intFromJson)
     @Default(0)
     int viewsCount,

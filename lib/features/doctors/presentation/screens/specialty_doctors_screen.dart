@@ -12,7 +12,6 @@ import '../../../profile/presentation/profile_notifier.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../data/doctor_repository.dart';
-import '../../../../core/widgets/app_loader.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 
 class SpecialtyDoctorsScreen extends StatefulWidget {
@@ -52,9 +51,9 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
     _specialtyIconUrl = widget.specialtyIconUrl;
     _favNotifier.addListener(_onStateChanged);
     _profileNotifier.addListener(_onStateChanged);
-    _fetchData();
     if (_specialtyIconUrl == null) _fetchSpecialtyIcon();
     _searchController.addListener(_onSearchChanged);
+    _fetchData();
   }
 
   @override
@@ -110,7 +109,6 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
       double? userLat;
       double? userLng;
 
-      // Only fetch GPS for filters that actually need it
       if (_activeRadiusKm != null ||
           _selectedFilter == 'Nearest' ||
           _selectedFilter == 'Available Today') {
@@ -186,44 +184,83 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
             ),
           ),
           CustomScrollView(
+            clipBehavior: Clip.none,
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
             slivers: [
               SliverAppBar(
                 pinned: true,
-                // THE FIX 1: Brought the expanded height up to 156.0 so the title doesn't sink too low
-                expandedHeight: 156.0,
+                expandedHeight: 288.0,
+                collapsedHeight: kToolbarHeight + 12.0,
+                toolbarHeight: kToolbarHeight + 12.0,
                 elevation: 0,
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 leadingWidth: 72,
-                leading: Container(
+                leading: Padding(
                   padding: const EdgeInsets.only(left: 24),
-                  alignment: Alignment.centerLeft,
-                  child: Material(
-                    color:
-                        isDark
-                            ? Colors.white12
-                            : Colors.black.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        context.pop();
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color:
-                              isDark ? Colors.white : const Color(0xFF1D1D1F),
-                          size: 18,
+                  child: Center(
+                    child: Material(
+                      color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          context.pop();
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: isDark ? Colors.white : const Color(0xFF1D1D1F),
+                            size: 18,
+                          ),
                         ),
                       ),
+                    ),
+                  ),
+                ),
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(112.0),
+                  child: Container(
+                    padding: const EdgeInsets.only(top: 12, bottom: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: CustomSearchBar(
+                            controller: _searchController,
+                            hintText: "Search ${widget.specialtyName}s...",
+                            showClearIcon: _searchController.text.isNotEmpty,
+                            onClear: () {
+                              HapticFeedback.lightImpact();
+                              _searchController.clear();
+                              _fetchData(forceRefresh: true);
+                              FocusScope.of(context).unfocus();
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SmartFilterBar(
+                          filters: FilterConfig.standard,
+                          initialFilter: _selectedFilter,
+                          onFilterChanged: (filter, radius) {
+                            setState(() {
+                              _selectedFilter = filter;
+                              _activeRadiusKm = radius;
+                            });
+                            _fetchData(
+                              query: _searchController.text,
+                              forceRefresh: true,
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -231,67 +268,69 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                   builder: (context, constraints) {
                     final top = constraints.biggest.height;
                     final safeArea = MediaQuery.of(context).padding.top;
-                    final collapsedHeight = safeArea + kToolbarHeight;
-                    // Must match the expandedHeight above perfectly
-                    const expandedHeight = 156.0;
+
+                    final collapsedHeight =
+                        safeArea + kToolbarHeight + 12.0 + 112.0;
+                    final expandedHeightTotal = 288.0 + safeArea;
 
                     final expandRatio =
-                        (expandedHeight - collapsedHeight) > 0
+                        (expandedHeightTotal - collapsedHeight) > 0
                             ? ((top - collapsedHeight) /
-                                    (expandedHeight - collapsedHeight))
+                                    (expandedHeightTotal - collapsedHeight))
                                 .clamp(0.0, 1.0)
                             : 1.0;
                     final collapseRatio = 1.0 - expandRatio;
 
-                    final largeHeaderOpacity = ((expandRatio - 0.3) / 0.7)
-                        .clamp(0.0, 1.0);
-                    final miniHeaderOpacity = ((collapseRatio - 0.5) / 0.5)
-                        .clamp(0.0, 1.0);
+                    final largeHeaderOpacity =
+                        ((expandRatio - 0.2) / 0.8).clamp(0.0, 1.0);
+                    final miniHeaderOpacity =
+                        ((collapseRatio - 0.4) / 0.6).clamp(0.0, 1.0);
 
                     return Stack(
                       fit: StackFit.expand,
+                      clipBehavior: Clip.none,
                       children: [
-                        Opacity(
-                          opacity: miniHeaderOpacity,
-                          child: ClipRRect(
-                            child: BackdropFilter(
-                              filter: ui.ImageFilter.blur(
-                                sigmaX: 20,
-                                sigmaY: 20,
-                              ),
-                              child: Container(
+                        ClipRRect(
+                          child: BackdropFilter(
+                            filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+                            child: Container(
+                              decoration: BoxDecoration(
                                 color: Theme.of(
                                   context,
-                                ).scaffoldBackgroundColor.withOpacity(0.85),
+                                ).scaffoldBackgroundColor.withOpacity(0.70),
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color:
+                                        isDark
+                                            ? Colors.white.withOpacity(0.05)
+                                            : Colors.black.withOpacity(0.05),
+                                    width: 1,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
+
                         Positioned(
                           left: 24,
                           right: 24,
-                          bottom: 16, // Snug bottom alignment
+                          bottom: 145.0,
                           child: IgnorePointer(
                             ignoring: largeHeaderOpacity == 0.0,
                             child: Opacity(
                               opacity: largeHeaderOpacity,
                               child: Transform.translate(
-                                offset: Offset(
-                                  0,
-                                  10 * (1 - largeHeaderOpacity),
-                                ), // Smoother translation
+                                offset: Offset(0, 10 * (1 - largeHeaderOpacity)),
                                 child: Row(
                                   children: [
                                     Container(
                                       width: 72,
                                       height: 72,
                                       decoration: BoxDecoration(
-                                        color:
-                                            isDark
-                                                ? Theme.of(
-                                                  context,
-                                                ).colorScheme.surface
-                                                : Colors.white,
+                                        color: isDark
+                                            ? Theme.of(context).colorScheme.surface
+                                            : Colors.white,
                                         shape: BoxShape.circle,
                                         boxShadow:
                                             isDark
@@ -312,64 +351,50 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                                           border: Border.all(
                                             color:
                                                 isDark
-                                                    ? Colors.white.withOpacity(
-                                                      0.08,
-                                                    )
-                                                    : Colors.black.withOpacity(
-                                                      0.03,
-                                                    ),
+                                                    ? Colors.white.withOpacity(0.08)
+                                                    : Colors.black.withOpacity(0.03),
                                           ),
                                         ),
-                                        child:
-                                            hasValidIcon
-                                                ? SizedBox(
-                                                  width: 38,
-                                                  height: 38,
-                                                  child: AppNetworkImage(
-                                                    imageUrl: currentIconUrl,
-                                                    circular: false,
-                                                    fit: BoxFit.contain,
-                                                  ),
-                                                )
-                                                : Icon(
-                                                  _getFallbackIcon(),
-                                                  color: AppColors.primaryGreen,
-                                                  size: 32,
+                                        child: hasValidIcon
+                                            ? SizedBox(
+                                                width: 38,
+                                                height: 38,
+                                                child: AppNetworkImage(
+                                                  imageUrl: currentIconUrl,
+                                                  circular: false,
+                                                  fit: BoxFit.contain,
                                                 ),
+                                              )
+                                            : Icon(
+                                                _getFallbackIcon(),
+                                                color: AppColors.primaryGreen,
+                                                size: 32,
+                                              ),
                                       ),
                                     ),
                                     const SizedBox(width: 20),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             widget.specialtyName,
-                                            maxLines: 1,
+                                            maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
-                                              color:
-                                                  isDark
-                                                      ? Colors.white
-                                                      : const Color(0xFF1D1D1F),
-                                              fontSize: 32,
+                                              color: isDark ? Colors.white : const Color(0xFF1D1D1F),
+                                              fontSize: 28,
                                               fontWeight: FontWeight.w800,
-                                              letterSpacing: -0.8,
-                                              height: 1.1,
+                                              letterSpacing: -0.6,
+                                              height: 1.05,
                                             ),
                                           ),
                                           const SizedBox(height: 8),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: AppColors.primaryGreen
-                                                  .withOpacity(0.12),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
+                                              color: AppColors.primaryGreen.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(6),
                                             ),
                                             child: Text(
                                               _isLoading
@@ -392,64 +417,66 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                             ),
                           ),
                         ),
+
                         Positioned(
                           top: safeArea,
                           left: 72,
                           right: 72,
-                          height: kToolbarHeight,
+                          height: kToolbarHeight - 12,
                           child: IgnorePointer(
                             ignoring: miniHeaderOpacity == 0.0,
                             child: Opacity(
                               opacity: miniHeaderOpacity,
                               child: Transform.translate(
                                 offset: Offset(
-                                  0,
-                                  -10 * (1 - miniHeaderOpacity),
-                                ),
+                                        0,
+                                        -2 - (10 * (1 - miniHeaderOpacity)),
+                                      ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Container(
                                       width: 34,
                                       height: 34,
                                       alignment: Alignment.center,
                                       decoration: BoxDecoration(
-                                        color: AppColors.primaryGreen
-                                            .withOpacity(0.12),
+                                        color: AppColors.primaryGreen.withOpacity(
+                                          0.12,
+                                        ),
                                         shape: BoxShape.circle,
                                       ),
-                                      child:
-                                          hasValidIcon
-                                              ? SizedBox(
-                                                width: 18,
-                                                height: 18,
-                                                child: AppNetworkImage(
-                                                  imageUrl: currentIconUrl,
-                                                  circular: false,
-                                                  fit: BoxFit.contain,
-                                                ),
-                                              )
-                                              : Icon(
-                                                _getFallbackIcon(),
-                                                color: AppColors.primaryGreen,
-                                                size: 16,
+                                      child: hasValidIcon
+                                          ? SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: AppNetworkImage(
+                                                imageUrl: currentIconUrl,
+                                                circular: false,
+                                                fit: BoxFit.contain,
                                               ),
+                                            )
+                                          : Icon(
+                                              _getFallbackIcon(),
+                                              color: AppColors.primaryGreen,
+                                              size: 16,
+                                            ),
                                     ),
                                     const SizedBox(width: 8),
                                     Flexible(
-                                      child: Text(
-                                        widget.specialtyName,
-                                        style: TextStyle(
-                                          color:
-                                              isDark
-                                                  ? Colors.white
-                                                  : const Color(0xFF1D1D1F),
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.3,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          widget.specialtyName,
+                                          style: TextStyle(
+                                            color: isDark ? Colors.white : const Color(0xFF1D1D1F),
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.3,
+                                            height: 1.1,
+                                          ),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ],
@@ -464,58 +491,12 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                 ),
               ),
 
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _DynamicGlassCapsuleDelegate(
-                  child: Container(
-                    // THE FIX 2: Tightened the internal padding of the Glass Capsule so the pills sit nicely
-                    padding: const EdgeInsets.only(top: 12, bottom: 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: CustomSearchBar(
-                            controller: _searchController,
-                            hintText: "Search ${widget.specialtyName}s...",
-                            showClearIcon: _searchController.text.isNotEmpty,
-                            onClear: () {
-                              HapticFeedback.lightImpact();
-                              _searchController.clear();
-                              _fetchData();
-                              FocusScope.of(context).unfocus();
-                            },
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 12,
-                        ), // Reduced gap between search bar and pills
-                        SmartFilterBar(
-                          filters: FilterConfig.standard,
-                          initialFilter: _selectedFilter,
-                          onFilterChanged: (filter, radius) {
-                            setState(() {
-                              _selectedFilter = filter;
-                              _activeRadiusKm = radius;
-                            });
-                            _fetchData(
-                              query: _searchController.text,
-                              forceRefresh: true,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              if (_isLoading)
-                const SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 300,
-                    child: Center(
-                      child: AppLoader(color: AppColors.primaryGreen),
+              if (_isLoading && _doctors.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryGreen,
                     ),
                   ),
                 )
@@ -527,8 +508,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                       child: Text(
                         "No ${widget.specialtyName.toLowerCase()}s found.",
                         style: TextStyle(
-                          color:
-                              isDark ? Colors.white54 : const Color(0xFF86868B),
+                          color: isDark ? Colors.white54 : const Color(0xFF86868B),
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -538,19 +518,21 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                 )
               else
                 SliverPadding(
-                  // THE FIX 3: Top padding reduced to 8 so the first card hugs the pills beautifully
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 120),
+                  padding: const EdgeInsets.only(top: 20, bottom: 120),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final doctor = _doctors[index];
-                      final docId =
-                          int.tryParse(doctor['id'].toString()) ?? index;
+                      final docId = int.tryParse(doctor['id'].toString()) ?? index;
                       final specialtyName =
                           doctor['specialties']?['name'] ??
                           widget.specialtyName;
 
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.only(
+                          left: 24,
+                          right: 24,
+                          bottom: 16,
+                        ),
                         child: _SquishableDoctorCard(
                           doctor: doctor,
                           docId: docId,
@@ -626,61 +608,4 @@ class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
       ),
     );
   }
-}
-
-class _DynamicGlassCapsuleDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  _DynamicGlassCapsuleDelegate({required this.child});
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    final isPinned = shrinkOffset > 0 || overlapsContent;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SizedBox(
-      // THE FIX 4: With the internal padding tightened, maxExtent drops safely to 150.0, eliminating dead space
-      height: 150.0,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color:
-              isPinned
-                  ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.85)
-                  : Colors.transparent,
-          boxShadow:
-              isPinned
-                  ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                      blurRadius: 16,
-                      offset: const Offset(0, 8),
-                    ),
-                  ]
-                  : [],
-        ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(
-              sigmaX: isPinned ? 20.0 : 0.0,
-              sigmaY: isPinned ? 20.0 : 0.0,
-            ),
-            child: child,
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  double get maxExtent => 150.0;
-  @override
-  double get minExtent => 150.0;
-  @override
-  bool shouldRebuild(covariant _DynamicGlassCapsuleDelegate oldDelegate) =>
-      true;
 }

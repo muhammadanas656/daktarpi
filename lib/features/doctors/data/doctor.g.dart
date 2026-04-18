@@ -25,6 +25,10 @@ _Doctor _$DoctorFromJson(Map<String, dynamic> json) => _Doctor(
       json['patients_served'] == null
           ? 0
           : _intFromJson(json['patients_served']),
+  uniquePatientsCount:
+      json['unique_patients_count'] == null
+          ? 0
+          : _intFromJson(json['unique_patients_count']),
   viewsCount:
       json['views_count'] == null ? 0 : _intFromJson(json['views_count']),
   visitPrice:
@@ -43,6 +47,7 @@ Map<String, dynamic> _$DoctorToJson(_Doctor instance) => <String, dynamic>{
   'reviews_count': instance.reviewsCount,
   'experience_years': instance.experienceYears,
   'patients_served': instance.patientsServed,
+  'unique_patients_count': instance.uniquePatientsCount,
   'views_count': instance.viewsCount,
   'hourly_rate': instance.visitPrice,
   'about': instance.about,

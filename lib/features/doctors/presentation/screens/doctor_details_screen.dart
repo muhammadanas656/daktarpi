@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -10,6 +11,9 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/network/network_notifier.dart'; 
 import '../../../../core/widgets/app_loader.dart';
+import '../../../../core/widgets/premium_app_loader.dart';
+import '../../../../core/widgets/background_sync_indicator.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../favorites_notifier.dart';
 import '../../../../presentation/widgets/primary_button.dart';
@@ -376,7 +380,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     if (_doctor == null && _isHeavyDataLoading) {
       return Scaffold(
         backgroundColor: bgColor,
-        body: const AppLoader(),
+        appBar: _buildAppBar(),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.primaryGreen),
+        ),
       );
     }
 
@@ -396,260 +403,262 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     }
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: bgColor,
       appBar: _buildAppBar(),
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: Column(
-          children: [
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _fetchInitialData,
-                color: AppColors.primaryGreen,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 10,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      DoctorDetailsHeader(
-                        doctor: _doctor!,
-                        onFavoriteTap: _toggleFavorite,
-                        isFavorite: _favNotifier.isFavorite(
-                          int.tryParse(widget.doctorId) ?? 0,
-                        ),
-                        visitPrice:
-                            (_clinics.isNotEmpty && _selectedClinic != null)
-                                ? "${_selectedClinic!['visit_price']}"
-                                : "${_doctor!['hourly_rate'] ?? '0'}",
-                        onBookNowTap: _handleBooking,
+      body: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
+            child: Column(
+              children: [
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _fetchInitialData,
+                    color: AppColors.primaryGreen,
+                    edgeOffset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        24,
+                        MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+                        24,
+                        10,
                       ),
-                      const SizedBox(height: 14),
-
-                      DoctorStatsRow(
-                        patients:
-                            (_doctor!['unique_patients_count'] ??
-                                    _doctor!['patients_served'])
-                                ?.toString() ??
-                            '0',
-                        experience: _doctor!['experience_years']?.toString() ?? '0',
-                        rating: _doctor!['rating']?.toString() ?? '0.0',
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      if (_isHeavyDataLoading) ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 40),
-                          child: AppLoader(),
-                        ),
-                      ] else if (_isOfflineState) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: AppColors.primaryGreen.withValues(
-                                alpha: 0.2,
-                              ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          
+                          DoctorDetailsHeader(
+                            doctor: _doctor!,
+                            onFavoriteTap: _toggleFavorite,
+                            isFavorite: _favNotifier.isFavorite(
+                              int.tryParse(widget.doctorId) ?? 0,
                             ),
-                            boxShadow: AppStyles.cardShadow(context),
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.wifi_off_rounded,
-                                size: 42,
-                                color: context.colorTextLight,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                "You are offline",
-                                style: AppTextStyles.h3(context),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "Connect to the internet to view ${_doctor!['full_name']}'s schedules, clinics, and reviews.",
-                                textAlign: TextAlign.center,
-                                style: AppTextStyles.bodySmall(
-                                  context,
-                                ).copyWith(
-                                  color: context.colorTextLight,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ] else ...[
-                        if (_errorMessage != null) ...[
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                color: Colors.deepOrange,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            visitPrice:
+                                (_clinics.isNotEmpty && _selectedClinic != null)
+                                    ? "${_selectedClinic!['visit_price']}"
+                                    : "${_doctor!['hourly_rate'] ?? '0'}",
+                            onBookNowTap: _handleBooking,
                           ),
                           const SizedBox(height: 14),
+
+                          DoctorStatsRow(
+                            patients:
+                                _doctor!['unique_patients_count']?.toString() ?? '0',
+                            experience:
+                                _doctor!['experience_years']?.toString() ?? '0',
+                            rating: _doctor!['rating']?.toString() ?? '0.0',
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            switchInCurve: Curves.easeOutQuart,
+                            switchOutCurve: Curves.easeInQuart,
+                            child: _isOfflineState ? 
+                              Container(
+                                key: const ValueKey('offline'),
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: AppColors.primaryGreen.withValues(
+                                      alpha: 0.2,
+                                    ),
+                                  ),
+                                  boxShadow: AppStyles.cardShadow(context),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      Icons.wifi_off_rounded,
+                                      size: 42,
+                                      color: context.colorTextLight,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      "You are offline",
+                                      style: AppTextStyles.h3(context),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      "Connect to the internet to view ${_doctor!['full_name']}'s schedules, clinics, and reviews.",
+                                      textAlign: TextAlign.center,
+                                      style: AppTextStyles.bodySmall(
+                                        context,
+                                      ).copyWith(
+                                        color: context.colorTextLight,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ) 
+                              : _isHeavyDataLoading ? 
+                              const SizedBox(
+                                key: ValueKey('loading'),
+                                height: 480,
+                                child: Center(
+                                  child: CircularProgressIndicator(color: AppColors.primaryGreen),
+                                ),
+                              )
+                              : Column(
+                                key: const ValueKey('content'),
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (_errorMessage != null) ...[
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: const TextStyle(
+                                          color: Colors.deepOrange,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                  ],
+
+                                  Builder(
+                                    builder: (context) {
+                                      final now = DateTime.now();
+                                      final today = now;
+                                      final tomorrow = now.add(
+                                        const Duration(days: 1),
+                                      );
+                                      DateTime thirdDate = now.add(
+                                        const Duration(days: 2),
+                                      );
+                                      final isCustomDate =
+                                          !_isSameDay(_selectedDate, today) &&
+                                          !_isSameDay(_selectedDate, tomorrow);
+                                      if (isCustomDate) {
+                                        thirdDate = _selectedDate;
+                                      }
+                                      final datesToShow = [today, tomorrow, thirdDate];
+
+                                      return DoctorAppointmentCard(
+                                        clinics: _clinics,
+                                        selectedClinic: _selectedClinic,
+                                        selectedDate: _selectedDate,
+                                        datesToShow: datesToShow,
+                                        timeSlots: _getSlotsForSelectedDate(),
+                                        selectedTimeSlot: _selectedTimeSlot,
+                                        onClinicChanged: (clinic) {
+                                          if (clinic != null) {
+                                            setState(() {
+                                              _selectedClinic = clinic;
+                                              _selectedTimeSlot = null;
+                                            });
+                                            _fetchBookedSlots();
+                                          }
+                                        },
+                                        onDateSelected: (date) {
+                                          setState(() {
+                                            _selectedDate = date;
+                                            _selectedTimeSlot = null;
+                                          });
+                                          _fetchBookedSlots();
+                                        },
+                                        onCustomDateTap: _openDatePicker,
+                                        onTimeSlotSelected: (slot) {
+                                          setState(() {
+                                            _selectedTimeSlot = slot;
+                                          });
+                                        },
+                                        onMoreClinicTap: _scrollToLocationSection,
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 18),
+                                  Text("Timing", style: AppTextStyles.h3(context)),
+                                  const SizedBox(height: 10),
+                                  DoctorTimingList(schedules: _schedules),
+                                  const SizedBox(height: 18),
+                                  Text(
+                                    "Location",
+                                    key: _locationSectionKey,
+                                    style: AppTextStyles.h3(context),
+                                  ),
+                                  ClinicLocationMapSection(
+                                    clinics: _clinics,
+                                    selectedClinic: _selectedClinic,
+                                    onClinicSelected: (clinic) {
+                                      setState(() {
+                                        _selectedClinic = clinic;
+                                        _selectedTimeSlot = null;
+                                      });
+                                      _fetchBookedSlots();
+                                    },
+                                    scrollToTop: _scrollToLocationSection,
+                                  ),
+                                  const SizedBox(height: 24),
+                                ],
+                              ),
+                          ),
                         ],
-
-                        Builder(
-                          builder: (context) {
-                            final now = DateTime.now();
-                            final today = now;
-                            final tomorrow = now.add(const Duration(days: 1));
-                            DateTime thirdDate = now.add(
-                              const Duration(days: 2),
-                            );
-                            bool isCustomDate =
-                                !_isSameDay(_selectedDate, today) &&
-                                !_isSameDay(_selectedDate, tomorrow);
-                            if (isCustomDate) {
-                              thirdDate = _selectedDate;
-                            }
-                            final datesToShow = [today, tomorrow, thirdDate];
-
-                            return DoctorAppointmentCard(
-                              clinics: _clinics,
-                              selectedClinic: _selectedClinic,
-                              selectedDate: _selectedDate,
-                              datesToShow: datesToShow,
-                              timeSlots: _getSlotsForSelectedDate(), // PRO FIX: Passing Map
-                              selectedTimeSlot: _selectedTimeSlot,
-                              onClinicChanged: (clinic) {
-                                if (clinic != null) {
-                                  setState(() {
-                                    _selectedClinic = clinic;
-                                    _selectedTimeSlot = null;
-                                  });
-                                  _fetchBookedSlots();
-                                }
-                              },
-                              onDateSelected: (date) {
-                                setState(() {
-                                  _selectedDate = date;
-                                  _selectedTimeSlot = null;
-                                });
-                                _fetchBookedSlots();
-                              },
-                              onCustomDateTap: _openDatePicker,
-                              onTimeSlotSelected: (slot) {
-                                setState(() {
-                                  _selectedTimeSlot = slot;
-                                });
-                              },
-                              onMoreClinicTap: _scrollToLocationSection,
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 18),
-                        Text("Timing", style: AppTextStyles.h3(context)),
-                        const SizedBox(height: 10),
-                        DoctorTimingList(schedules: _schedules),
-                        const SizedBox(height: 18),
-                        Text(
-                          "Location",
-                          key: _locationSectionKey,
-                          style: AppTextStyles.h3(context),
-                        ),
-                        ClinicLocationMapSection(
-                          clinics: _clinics,
-                          selectedClinic: _selectedClinic,
-                          onClinicSelected: (clinic) {
-                            setState(() {
-                              _selectedClinic = clinic;
-                              _selectedTimeSlot = null;
-                            });
-                            _fetchBookedSlots();
-                          },
-                          scrollToTop: _scrollToLocationSection,
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            if (!_isHeavyDataLoading && !_isOfflineState)
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  boxShadow: AppStyles.cardShadow(context),
-                ),
-                child: SafeArea(
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: PrimaryButton(
-                      label: "Book Now",
-                      onTap: _handleBooking,
-                      height: 48,
-                      borderRadius: 8,
+                      ),
                     ),
                   ),
                 ),
+                if (!_isHeavyDataLoading && !_isOfflineState)
+              Container(
+                // THE FIX: Precise manual padding instead of the unpredictable SafeArea widget.
+                // It dynamically checks for an iOS bottom notch and adapts perfectly.
+                padding: EdgeInsets.fromLTRB(
+                  24, 
+                  16, 
+                  24, 
+                  MediaQuery.paddingOf(context).bottom > 0 
+                      ? MediaQuery.paddingOf(context).bottom + 8 
+                      : 24, // Perfect fallback for Android devices without a notch
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  boxShadow: [
+                    // A soft, premium upward glow so it lifts off the background
+                    BoxShadow(
+                      color: Colors.black.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: PrimaryButton(
+                    label: "Book Now",
+                    onTap: _handleBooking,
+                    height: 48,
+                    borderRadius: 12, // Slightly rounder to match the modern glass UI
+                  ),
+                ),
               ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      centerTitle: true,
-      leadingWidth: 64,
-      titleSpacing: 0,
-      leading: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 0, 6),
-        child: InkWell(
-          onTap: () => context.pop(),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: AppStyles.surfaceCard(
-              context,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.arrow_back_ios_new_rounded,
-              size: 18,
-              color: context.colorTextDark,
-            ),
-          ),
-        ),
-      ),
-      title: Text(
-        "Doctor Details",
-        style: AppTextStyles.h3(context).copyWith(fontSize: 20),
-      ),
-      actions: const [SizedBox(width: 64)],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(8),
-        child: Container(),
-      ),
+  PreferredSizeWidget _buildAppBar() {
+    return const CustomAppBar(
+      title: "Doctor Details",
+      actions: [SizedBox(width: 72)],
     );
   }
 }

@@ -31,6 +31,10 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? Theme.of(context).colorScheme.surface : Colors.white;
 
+    // THE FIX: Evaluate rating for the cutout badge fallback
+    final double numericRating = double.tryParse(rating) ?? 0.0;
+    final bool hasRating = numericRating > 0.0;
+
     return RepaintBoundary(
       child: Container(
       width: 155, 
@@ -72,12 +76,10 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
             child: Column(
               children: [
-                // --- TOP SECTION: Avatar & Static Status ---
                 Stack(
                   alignment: Alignment.topCenter,
                   clipBehavior: Clip.none,
                   children: [
-                    // 1. Static Favorite Status Indicator (Top Right)
                     Align(
                       alignment: Alignment.topRight,
                       child: Container(
@@ -96,14 +98,12 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                       ),
                     ),
                     
-                    // 2. The Premium Avatar & Cutout Badge
                     Padding(
                       padding: const EdgeInsets.only(top: 6.0),
                       child: Stack(
                         clipBehavior: Clip.none,
                         alignment: Alignment.bottomCenter,
                         children: [
-                          // The "Glass Edge" Double Ring Avatar
                           Container(
                             padding: const EdgeInsets.all(3),
                             decoration: BoxDecoration(
@@ -119,11 +119,7 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.06),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  )
+                                  BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))
                                 ],
                               ),
                               child: Hero(
@@ -141,39 +137,44 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                             ),
                           ),
                           
-                          // THE FIX: Larger Cutout Rating Badge
                           Positioned(
-                            bottom: -12, // Pushed down slightly to account for the larger badge height
+                            bottom: -12, 
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), // Increased padding
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), 
                               decoration: BoxDecoration(
                                 color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: surfaceColor, width: 2.5),
                                 boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.08),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  )
+                                  BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))
                                 ],
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 14), // Larger icon
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    rating,
-                                    style: TextStyle( // Restored original typography
-                                      color: isDark ? Colors.white : Colors.black87,
-                                      fontSize: 11, // Increased text size
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.2,
+                              child: hasRating 
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          rating,
+                                          style: TextStyle(
+                                            color: isDark ? Colors.white : Colors.black87,
+                                            fontSize: 11, 
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Text(
+                                      "NEW",
+                                      style: TextStyle(
+                                        color: isDark ? Colors.amber : Colors.orange.shade800,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.8,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
                             ),
                           ),
                         ],
@@ -183,16 +184,15 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                 ),
                 
                 const Spacer(),
-                const SizedBox(height: 18), // Slightly more breathing room below the larger badge
+                const SizedBox(height: 18), 
                 
-                // --- BOTTOM SECTION: Restored Typography ---
                 Text(
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle( // Restored original typography
+                  style: TextStyle( 
                     color: isDark ? Colors.white : const Color(0xFF1D1D1F),
-                    fontWeight: FontWeight.w800, // Apple-style heavy weight
+                    fontWeight: FontWeight.w800, 
                     letterSpacing: -0.3, 
                     fontSize: 14,
                   ),
@@ -204,7 +204,7 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                   specialty,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle( // Restored original typography
+                  style: const TextStyle( 
                     color: AppColors.primaryGreen,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -214,7 +214,6 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                 
                 const SizedBox(height: 12),
                 
-                // The Anchoring Price Pill
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 6),
@@ -230,7 +229,7 @@ class HomeFeaturedDoctorCard extends StatelessWidget {
                       "${ProfileNotifier.instance.currencySymbol} $price/hour",
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle( // Restored original typography
+                      style: TextStyle( 
                         color: isDark ? Colors.white70 : const Color(0xFF86868B),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,

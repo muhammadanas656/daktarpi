@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui'; // REQUIRED FOR BLUR
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -14,7 +15,6 @@ import '../favorites_notifier.dart';
 import '../doctors_notifier.dart';
 import '../widgets/smart_filter_bar.dart';
 import '../models/doctors_route_args.dart';
-import '../../../../core/widgets/app_loader.dart';
 
 class DoctorsScreen extends StatefulWidget {
   final bool isBackgroundLayer;
@@ -88,58 +88,86 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Scaffold(
-      // THE FIX: Pure, solid background. No more cyan gradients!
-backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildSearchBar(),
-            _buildFilterChips(),
-            Expanded(
-              child: ListenableBuilder(
-                listenable: _docsNotifier,
-                builder: (context, _) {
-                  if (_docsNotifier.isLoading &&
-                      _docsNotifier.doctors.isEmpty) {
-                    return const Center(
-                      child: AppLoader(color: AppColors.primaryGreen),
-                    );
-                  }
+    final topPadding = MediaQuery.paddingOf(context).top;
 
-                  return Stack(
-                    children: [
-                      RefreshIndicator(
-                        onRefresh: _fetchDoctors,
-                        color: AppColors.primaryGreen,
-                        child:
-                            _selectedFilter == 'Hospital'
-                                ? _buildHospitalGrid()
-                                : _selectedFilter == 'Clinic'
+    return Scaffold(
+      // THE FIX: Extend body so it slides elegantly under the glass header
+      extendBodyBehindAppBar: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: ListenableBuilder(
+        listenable: _docsNotifier,
+        builder: (context, _) {
+          bool isEmpty = false;
+          if (_selectedFilter == 'Hospital') {
+            isEmpty = _docsNotifier.hospitals.isEmpty;
+          } else if (_selectedFilter == 'Clinic') {
+            isEmpty = _docsNotifier.clinics.isEmpty;
+          } else {
+            isEmpty = _docsNotifier.doctors.isEmpty;
+          }
+
+          return Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: _fetchDoctors,
+                color: AppColors.primaryGreen,
+                edgeOffset:
+                    topPadding + (142.0 * MediaQuery.textScaleFactorOf(context)),
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    // 1. THE STICKY HEADER (Search + Filters wrapped in Frosted Glass)
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _DoctorsGlassCapsuleDelegate(
+                        paddingTop: topPadding,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildSearchBar(),
+                            _buildFilterChips(),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // 2. THE CONTENT (Guaranteed to slide UNDER the header)
+                    if (_docsNotifier.isLoading && isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primaryGreen,
+                          ),
+                        ),
+                      )
+                    else if (isEmpty)
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 300,
+                          child: Center(
+                            child: Text(
+                              "No facilities found",
+                              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.paddingOf(context).bottom + 20),
+                        sliver: _selectedFilter == 'Hospital'
+                            ? _buildHospitalGrid()
+                            : _selectedFilter == 'Clinic'
                                 ? _buildClinicGrid()
                                 : _buildDoctorList(),
                       ),
-                      if (_docsNotifier.isLoading &&
-                          _docsNotifier.doctors.isNotEmpty)
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: LinearProgressIndicator(
-                            color: AppColors.primaryGreen,
-                            backgroundColor: AppColors.primaryGreen
-                                .withOpacity(0.1),
-                            minHeight: 2,
-                          ),
-                        ),
-                    ],
-                  );
-                },
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -157,7 +185,6 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
     );
   }
 
-  // THE FIX: Intelligent Boundary Filter integration
   Widget _buildFilterChips() {
     return SmartFilterBar(
       filters: FilterConfig.withFacilities,
@@ -178,74 +205,63 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
     );
   }
 
+  // UPGRADED TO SLIVER
   Widget _buildDoctorList() {
     final doctors = _docsNotifier.doctors;
-    if (doctors.isEmpty) {
-      return Center(
-        child: Text(
-          "No doctors found",
-          style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
-        ),
-      );
-    }
-
-    final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + 20;
-
-    return ListView.separated(
-      padding: EdgeInsets.fromLTRB(24, 4, 24, dynamicBottomPadding),
-      itemCount: doctors.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 16),
-      itemBuilder: (context, index) {
-        final doctor = doctors[index];
-        return DoctorListCard(
-          id: doctor['id'],
-          name: doctor['full_name'] ?? 'Unknown',
-          specialty: doctor['specialties']?['name'] ?? 'Specialist',
-          rating: doctor['rating']?.toString() ?? '0.0',
-          views: (doctor['views_count'] ?? 0).toString(),
-          imageUrl: doctor['profile_picture_url'],
-          isFavorite: _favNotifier.isFavorite(doctor['id']),
-          onFavoriteTap: () => _favNotifier.toggle(doctor),
-          onCardTap:
-              () => context.push(
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final doctor = doctors[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16), // Maintains the exact spacing you had before
+            child: DoctorListCard(
+              id: doctor['id'],
+              name: doctor['full_name'] ?? 'Unknown',
+              specialty: doctor['specialties']?['name'] ?? 'Specialist',
+              rating: doctor['rating']?.toString() ?? '0.0',
+              views: (doctor['views_count'] ?? 0).toString(),
+              imageUrl: doctor['profile_picture_url'],
+              isFavorite: _favNotifier.isFavorite(doctor['id']),
+              onFavoriteTap: () => _favNotifier.toggle(doctor),
+              onCardTap: () => context.push(
                 AppRoutes.doctorDetailsById('${doctor['id']}'),
                 extra: doctor,
               ),
-        );
-      },
+            ),
+          );
+        },
+        childCount: doctors.length,
+      ),
     );
   }
 
-  Widget _buildHospitalGrid() =>
-      _buildFacilityGrid(_docsNotifier.hospitals, isHospital: true);
-  Widget _buildClinicGrid() =>
-      _buildFacilityGrid(_docsNotifier.clinics, isHospital: false);
+  Widget _buildHospitalGrid() => _buildFacilityGrid(_docsNotifier.hospitals, isHospital: true);
+  Widget _buildClinicGrid() => _buildFacilityGrid(_docsNotifier.clinics, isHospital: false);
 
-  Widget _buildFacilityGrid(
-    List<Map<String, dynamic>> items, {
-    required bool isHospital,
-  }) {
-    final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + 20;
-
-    return GridView.builder(
-      clipBehavior: Clip.none, // Allows the grid card shadows to render properly
-      padding: EdgeInsets.fromLTRB(24, 4, 24, dynamicBottomPadding),
+  // UPGRADED TO SLIVER
+  Widget _buildFacilityGrid(List<Map<String, dynamic>> items, {required bool isHospital}) {
+    return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.80, // Optimized ratio for the new split card
+        childAspectRatio: 0.80, 
       ),
-      itemCount: items.length,
-      itemBuilder:
-          (context, index) => _buildFacilityCard(items[index], isHospital),
+      delegate: SliverChildBuilderDelegate(
+        (context, index) => _buildFacilityCard(items[index], isHospital),
+        childCount: items.length,
+      ),
     );
   }
 
-  // --- REVERTED: The Premium Full-Bleed Cinematic Card ---
   Widget _buildFacilityCard(Map<String, dynamic> facility, bool isHospital) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hasImage = facility['image_url'] != null && facility['image_url'].toString().isNotEmpty;
+    
+    final String? resolvedImage = (facility['image_url'] != null && facility['image_url'].toString().isNotEmpty)
+        ? facility['image_url'].toString()
+        : facility['logo_url']?.toString();
+    
+    final hasImage = resolvedImage != null && resolvedImage.isNotEmpty;
 
     final fallbackIcon = Icon(
       isHospital ? Icons.local_hospital_rounded : Icons.medical_services_rounded,
@@ -255,7 +271,7 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
 
     return InkWell(
       onTap: () {
-        HapticFeedback.lightImpact(); // Kept the premium tactile feel
+        HapticFeedback.lightImpact(); 
         context.push(
           AppRoutes.clinicDoctorsById('${facility['id']}'),
           extra: ClinicRouteArgs(
@@ -274,21 +290,20 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           ),
           boxShadow: isDark ? [] : [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04), // Soft shadow for floating effect
+              color: Colors.black.withOpacity(0.04),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(19), // Perfectly nested inside the 20px border
+          borderRadius: BorderRadius.circular(19), 
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // 1. Full-Bleed Image Background
               if (hasImage)
                 AppNetworkImage(
-                  imageUrl: facility['image_url'],
+                  imageUrl: resolvedImage,
                   fit: BoxFit.cover,
                   cacheKey: 'facility_${facility['id']}',
                 )
@@ -297,8 +312,6 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                   color: AppColors.primaryGreen.withOpacity(0.85),
                   child: Center(child: fallbackIcon),
                 ),
-
-              // 2. The Dark Cinematic Gradient (Restored)
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -314,8 +327,6 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                   ),
                 ),
               ),
-
-              // 3. Bold White Typography over Gradient (Restored)
               Positioned(
                 left: 16,
                 right: 16,
@@ -375,4 +386,70 @@ backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       ),
     );
   }
+}
+
+// --- THE NEW DYNAMIC GLASS DELEGATE ---
+class _DoctorsGlassCapsuleDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final double paddingTop;
+
+  _DoctorsGlassCapsuleDelegate({required this.child, required this.paddingTop});
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final isPinned = shrinkOffset > 0 || overlapsContent;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SizedBox(
+      height: maxExtent,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (isPinned)
+            ClipRRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+          Container(
+            padding: EdgeInsets.only(top: paddingTop),
+            decoration: BoxDecoration(
+              color:
+                  isPinned
+                      ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.85)
+                      : Colors.transparent,
+              boxShadow:
+                  isPinned
+                      ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ]
+                      : [],
+            ),
+            child: child,
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _calculateDynamicHeight(BuildContext context) {
+    final textScale = MediaQuery.textScaleFactorOf(context);
+    return paddingTop + (142.0 * textScale);
+  }
+
+  @override
+  double get maxExtent =>
+      paddingTop + (142.0 * WidgetsBinding.instance.window.textScaleFactor);
+
+  @override
+  double get minExtent =>
+      paddingTop + (142.0 * WidgetsBinding.instance.window.textScaleFactor);
+
+  @override
+  bool shouldRebuild(covariant _DoctorsGlassCapsuleDelegate oldDelegate) => true;
 }

@@ -292,16 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: IntrinsicHeight(
                     child: Column(
                       children: [
-                        const SizedBox(height: 60),
-                        Center(
-                          child: SvgPicture.asset(
-                            Theme.of(context).brightness == Brightness.dark
-                                ? 'assets/images/darkmode.svg'
-                                : 'assets/images/lightmode.svg',
-                            height: 60,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 100),
                         Text(
                           'Welcome back',
                           textAlign: TextAlign.center,

@@ -286,13 +286,11 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
         ),
         body: Container(
           decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-          child: SafeArea(
-            child: TabBarView(
-              children: [
-                _buildFavoritesList(), 
-                _buildRecentList(), 
-              ],
-            ),
+          child: TabBarView(
+            children: [
+              _buildFavoritesList(),
+              _buildRecentList(),
+            ],
           ),
         ),
       ),
@@ -300,9 +298,23 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
   }
 
   Widget _buildFavoritesList() {
+    final dynamicTopPadding = MediaQuery.paddingOf(context).top + 130.0;
+    final loaderTopPadding = MediaQuery.paddingOf(context).top + 104.0;
+
     if (!_favNotifier.isLoaded) {
-      return const Center(
-        child: AppLoader(color: AppColors.primaryGreen),
+      return Stack(
+        children: [
+          Positioned(
+            top: loaderTopPadding,
+            left: 0,
+            right: 0,
+            child: const LinearProgressIndicator(
+              color: AppColors.primaryGreen,
+              backgroundColor: Colors.transparent,
+              minHeight: 1.5,
+            ),
+          ),
+        ],
       );
     }
 
@@ -320,7 +332,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.fromLTRB(24, dynamicTopPadding, 24, 24),
       itemCount: doctors.length,
       itemBuilder: (context, index) {
         final doctor = doctors[index];
@@ -364,12 +376,26 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
   }
 
   Widget _buildRecentList() {
+    final dynamicTopPadding = MediaQuery.paddingOf(context).top + 130.0;
+    final loaderTopPadding = MediaQuery.paddingOf(context).top + 104.0;
+
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _recentFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: AppLoader(color: AppColors.primaryGreen),
+          return Stack(
+            children: [
+              Positioned(
+                top: loaderTopPadding,
+                left: 0,
+                right: 0,
+                child: const LinearProgressIndicator(
+                  color: AppColors.primaryGreen,
+                  backgroundColor: Colors.transparent,
+                  minHeight: 1.5,
+                ),
+              ),
+            ],
           );
         }
 
@@ -386,7 +412,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.fromLTRB(24, dynamicTopPadding, 24, 24),
           itemCount: doctors.length,
           itemBuilder: (context, index) {
             final doctor = doctors[index];

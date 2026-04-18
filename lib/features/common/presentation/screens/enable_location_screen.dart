@@ -51,11 +51,13 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Ensure status bar icons are dark (visible on white background)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Ensure status bar icons contrast with active background
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
+      value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -69,14 +71,15 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
             child: Container(
               margin: EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(
+                    color: isDark ? Colors.white12 : Colors.grey.shade200),
               ),
               child: Icon(
                 Icons.arrow_back_ios_new,
                 size: 18,
-                color: Colors.black,
+                color: context.colorTextDark,
               ),
             ),
           ),
@@ -102,7 +105,7 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                   width: 200,
                   height: 200,
                   decoration: BoxDecoration(
-                    color: Color(0xFFE0F7FA), // Light Cyan circle
+                    color: AppColors.primaryGreen.withAlpha(isDark ? 30 : 25), // Smooth tinted circle
                     shape: BoxShape.circle,
                   ),
                   child: Stack(
@@ -121,7 +124,7 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                                 width: 8,
                                 height: 4,
                                 decoration: BoxDecoration(
-                                  color: Colors.black26,
+                                  color: isDark ? Colors.white24 : Colors.black26,
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
@@ -165,11 +168,11 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                 ),
                 SizedBox(height: 12),
                 Text(
-                  "Your location services are switched off. Please\nenable location, to help us serve better.",
+                  "Your location services are switched off. Please enable location to find relevant doctors and hospitals near you.",
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey[600],
+                    color: isDark ? Colors.white70 : Colors.grey[600],
                     height: 1.5,
                   ),
                 ),
@@ -198,7 +201,27 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
                     ),
                   ),
                 ),
-                SizedBox(height: 20), // Bottom padding
+                SizedBox(height: 16),
+                // Fallback Button
+                TextButton(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop(false);
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(
+                    "Skip for now",
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : Colors.grey[600],
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 12), // Bottom padding
               ],
             ),
           ),

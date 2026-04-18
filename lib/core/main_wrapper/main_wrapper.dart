@@ -24,6 +24,7 @@ class _MainWrapperState extends State<MainWrapper>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _drawerController;
   late AnimationController _springController;
+  late AnimationController _introController;
 
   final ValueNotifier<double> _tabDragNotifier = ValueNotifier<double>(0.0);
   final ValueNotifier<double> _depthTensionNotifier = ValueNotifier<double>(
@@ -45,6 +46,22 @@ class _MainWrapperState extends State<MainWrapper>
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
+    _introController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) _introController.forward(from: 0.0);
+    });
+    _introController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400), // Same 1600ms stagger speed sync
+    );
+
+    // Sync with router logic!
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _introController.forward(from: 0.0);
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -69,6 +86,7 @@ class _MainWrapperState extends State<MainWrapper>
     WidgetsBinding.instance.removeObserver(this);
     _drawerController.dispose();
     _springController.dispose();
+    _introController.dispose();
     _tabDragNotifier.dispose();
     _depthTensionNotifier.dispose();
     super.dispose();
@@ -380,11 +398,14 @@ class _MainWrapperState extends State<MainWrapper>
               left: 20,
               right: 20,
               child: AnimatedBuilder(
-                animation: _drawerController,
+                animation: Listenable.merge([_drawerController, _introController]),
                 builder: (context, child) {
                   final double val = _drawerController.value;
+                  final double introVal = CurvedAnimation(parent: _introController, curve: Curves.easeOutQuart).value;
+                  final double introOffset = (1.0 - introVal) * 150.0;
+
                   final double clampedVal = val.clamp(0.0, 1.0).toDouble();
-                  final double dockY = val * -100.0;
+                  final double dockY = (val * -100.0) + introOffset;
                   final double dockScale = 1.0 - (clampedVal * 0.3);
 
                   return IgnorePointer(
@@ -396,7 +417,7 @@ class _MainWrapperState extends State<MainWrapper>
                             ..translate(0.0, dockY, 0.0)
                             ..scale(dockScale),
                       child: Opacity(
-                        opacity: math.max(0.0, 1.0 - (clampedVal * 2.5)),
+                        opacity: (introVal) * math.max(0.0, 1.0 - (clampedVal * 2.5)),
                         child: child,
                       ),
                     ),

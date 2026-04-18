@@ -545,6 +545,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         final isLocked = SettingsNotifier.instance.medicalRecordsLocked;
 
         return Scaffold(
+          extendBodyBehindAppBar: true,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: CustomAppBar(
             title: "Medical Records",
@@ -569,20 +570,26 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: EdgeInsets.all(24),
+      padding: const EdgeInsets.only(top: 16, left: 24, right: 24),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         boxShadow: AppStyles.cardShadow(context),
       ),
       child: SafeArea(
-        child: PrimaryButton(
-          label: "Add a record",
-          onTap: () async {
-            final result = await context.push(AppRoutes.addMedicalRecord);
-            if (result == true && mounted) {
-              _fetchRecords();
-            }
-          },
+        top: false,
+        minimum: const EdgeInsets.only(bottom: 16),
+        child: SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: PrimaryButton(
+            label: "Add a record",
+            onTap: () async {
+              final result = await context.push(AppRoutes.addMedicalRecord);
+              if (result == true && mounted) {
+                _fetchRecords();
+              }
+            },
+          ),
         ),
       ),
     );
@@ -606,7 +613,12 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     }
 
     return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: EdgeInsets.only(
+        top: MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+        left: 24,
+        right: 24,
+        bottom: 24,
+      ),
       itemCount: _records.length,
       itemBuilder: (context, index) {
         final record = _records[index];

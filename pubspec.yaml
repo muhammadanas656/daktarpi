@@ -91,6 +91,8 @@ dev_dependencies:
   build_runner: ^2.5.4
   freezed: ^3.1.0
   json_serializable: ^6.9.5
+  flutter_native_splash: ^2.4.6
+  image: ^4.8.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -144,10 +146,10 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 flutter_native_splash:
-  color: "#F3F4F6"
-  color_dark: "#1A1A1A"
-  # image: assets/images/logo.png
+  color: "#FBFBFB"
+  color_dark: "#0F172A"
+  image: assets/images/logo.png
   android_12:
-    # image: assets/images/logo.png
-    color: "#F3F4F6"
-    color_dark: "#1A1A1A"
+    image: assets/images/logo.png
+    color: "#FBFBFB"
+    color_dark: "#0F172A"

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -24,10 +25,42 @@ class DoctorsNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> _specialties = [];
 
   bool _isLoading = false;
+  int _activeRequests = 0; // Concurrency lock
+
+  Future<void> prehydrateHomeFeed() async {
+    final countryIso = _profileNotifier.profile?.countryIso ?? 'US';
+    
+    final specials = await _doctorRepo.getDirectCache('specialties_list');
+    if (specials != null && _specialties.isEmpty) _specialties = specials;
+
+    final pops = await _doctorRepo.getDirectCache('popular_docs_' + countryIso + '_fAll');
+    if (pops != null && _homePopularDoctors.isEmpty) _homePopularDoctors = pops;
+
+    final feats = await _doctorRepo.getDirectCache('featured_docs_' + countryIso + '_fAll');
+    if (feats != null && _homeFeaturedDoctors.isEmpty) _homeFeaturedDoctors = feats;
+    
+    notifyListeners();
+  }
+
+  void _startNetworkRequest() {
+    _activeRequests++;
+    _isLoading = true;
+    notifyListeners();
+  }
+
+  void _endNetworkRequest() {
+    _activeRequests--;
+    if (_activeRequests <= 0) {
+      _activeRequests = 0;
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   // Track parameters to prevent re-fetching the same data
   String _lastQuery = '';
   String _lastFilter = 'All';
+  double? _lastMaxRadiusKm;
 
   List<Map<String, dynamic>> get doctors => _doctors;
   List<Map<String, dynamic>> get hospitals => _hospitals;
@@ -59,6 +92,31 @@ class DoctorsNotifier extends ChangeNotifier {
     return out;
   }
 
+  /// Returns a strictly filtered list if local density meets the threshold.
+  List<Map<String, dynamic>> getStrictPopularList({
+    required List<Map<String, dynamic>> rawDoctors,
+    required double? activeRadius,
+    required double highlightRange,
+    required double threshold,
+  }) {
+    // 1. If we are within the local range limit...
+    final bool isLocalZone = (activeRadius ?? 500.0) <= highlightRange;
+
+    // 2. Count how many high-quality (Popular or Rated) doctors are in the list
+    final localPopular = rawDoctors.where((doc) {
+      final rating = double.tryParse(doc['rating']?.toString() ?? '0') ?? 0.0;
+      return rating > 0.0 || doc['is_popular'] == true;
+    }).toList();
+
+    // 3. THE TRIGGER: If we are local AND have enough doctors, show ONLY the popular ones.
+    if (isLocalZone && localPopular.length >= threshold) {
+      return localPopular;
+    }
+
+    // 4. Otherwise, return the full list as "Recommended"
+    return rawDoctors;
+  }
+
   /// Delegates to DoctorRepository. Lets SmartFilterBar call this without needing to import
   /// DoctorRepository directly, avoiding circular imports.
   Future<double> fetchSmartClusterRadius({
@@ -73,9 +131,94 @@ class DoctorsNotifier extends ChangeNotifier {
     );
   }
 
-  /// Fetch all required data once. Safe to be called by multiple screens.
+  // --- PLATFORM LIMIT PASSTHROUGHS ---
+  Future<double> fetchMaxPlatformRadius() => _doctorRepo.fetchMaxPlatformRadius();
+  Future<double> fetchMinPlatformRadius() => _doctorRepo.fetchMinPlatformRadius();
+  Future<double> fetchFeaturedPlatformRadius() => _doctorRepo.fetchFeaturedPlatformRadius();
+  Future<double> fetchPopularHighlightRange() => _doctorRepo.fetchPopularHighlightRange();
+  Future<int> fetchTargetClusterSize() => _doctorRepo.fetchTargetClusterSize();
+  Future<double> fetchPopularThreshold() => _doctorRepo.fetchPopularThreshold();
+  Future<int> fetchHomePopularLimit() => _doctorRepo.fetchHomePopularLimit();
+  Future<int> fetchExplorePopularLimit() => _doctorRepo.fetchExplorePopularLimit();
+  Future<int> fetchHomeFeaturedLimit() => _doctorRepo.fetchHomeFeaturedLimit();
+  Future<int> fetchExploreFeaturedLimit() => _doctorRepo.fetchExploreFeaturedLimit();
+
+  // THE FIX: Sort utility pushing highlighted local doctors to top of feed
+  List<Map<String, dynamic>> sortDoctorsByHighlight(
+    List<Map<String, dynamic>> doctors,
+    double? userLat,
+    double? userLng,
+    double highlightRange,
+  ) {
+    final list = List<Map<String, dynamic>>.from(doctors);
+    list.sort((a, b) {
+      final aRating = double.tryParse(a['rating']?.toString() ?? '0') ?? 0.0;
+      final aPopular = a['is_popular'] == true;
+      final aDist = calculateDoctorDistance(a, userLat, userLng);
+      final aHigh = (aDist <= highlightRange) && (aRating > 0 || aPopular);
+
+      final bRating = double.tryParse(b['rating']?.toString() ?? '0') ?? 0.0;
+      final bPopular = b['is_popular'] == true;
+      final bDist = calculateDoctorDistance(b, userLat, userLng);
+      final bHigh = (bDist <= highlightRange) && (bRating > 0 || bPopular);
+
+      if (aHigh && !bHigh) return -1;
+      if (!aHigh && bHigh) return 1;
+      return 0;
+    });
+    return list;
+  }
+
+  // THE FIX: Per-Card Distance Calculator (Matches SQL exactly)
+  double calculateDoctorDistance(
+    Map<String, dynamic> doctor,
+    double? userLat,
+    double? userLng,
+  ) {
+    if (userLat == null || userLng == null) return double.infinity;
+
+    final clinicsList = doctor['doctor_clinics'] as List<dynamic>?;
+    if (clinicsList == null || clinicsList.isEmpty) return double.infinity;
+
+    double minDistance = double.infinity;
+    const R = 6371; // km
+
+    for (final dc in clinicsList) {
+      final clinic = dc['clinics'];
+      if (clinic != null &&
+          clinic['latitude'] != null &&
+          clinic['longitude'] != null) {
+        final lat = (clinic['latitude'] as num).toDouble();
+        final lng = (clinic['longitude'] as num).toDouble();
+
+        final dLat = (lat - userLat) * math.pi / 180.0;
+        final dLon = (lng - userLng) * math.pi / 180.0;
+        final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+            math.cos(userLat * math.pi / 180.0) *
+                math.cos(lat * math.pi / 180.0) *
+                math.sin(dLon / 2) *
+                math.sin(dLon / 2);
+        final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+
+        final distance = 1.3 * (R * c); // 1.3x synced driving math
+        if (distance < minDistance) minDistance = distance;
+      }
+    }
+    return minDistance;
+  }
+
+  // GPS Hardware Cache
+  Position? _cachedPosition;
+  DateTime? _lastPosTime;
 
   Future<Position?> getUserPosition() async {
+    // 60-second Micro-Cache to prevent redundant hardware spin-ups
+    if (_cachedPosition != null && _lastPosTime != null) {
+      if (DateTime.now().difference(_lastPosTime!).inSeconds < 60) {
+        return _cachedPosition;
+      }
+    }
+
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return null;
@@ -85,9 +228,13 @@ class DoctorsNotifier extends ChangeNotifier {
         if (permission == LocationPermission.denied) return null;
       }
       if (permission == LocationPermission.deniedForever) return null;
-      return await Geolocator.getCurrentPosition(
+      
+      _cachedPosition = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+      _lastPosTime = DateTime.now();
+      
+      return _cachedPosition;
     } catch (e) {
       debugPrint("Location sorting failed -> $e");
       return null;
@@ -105,12 +252,14 @@ class DoctorsNotifier extends ChangeNotifier {
     if (!forceRefresh &&
         _lastQuery == query &&
         _lastFilter == filter &&
+        _lastMaxRadiusKm == maxRadiusKm &&
         _doctors.isNotEmpty) {
       return;
     }
 
     _lastQuery = query;
     _lastFilter = filter;
+    _lastMaxRadiusKm = maxRadiusKm;
     _isLoading = true;
     notifyListeners();
 
@@ -139,6 +288,7 @@ class DoctorsNotifier extends ChangeNotifier {
           userLng: userLng,
           userLocation: userLocation,
           countryIso: countryIso,
+          forceRefresh: forceRefresh,
         ),
         _doctorRepo.fetchHospitals(
           query: query,
@@ -187,8 +337,9 @@ class DoctorsNotifier extends ChangeNotifier {
     }
 
     if (currentList.isEmpty) {
-      _isLoading = true;
-      notifyListeners();
+      _startNetworkRequest();
+    } else {
+      _startNetworkRequest();
     }
 
     try {
@@ -205,7 +356,7 @@ class DoctorsNotifier extends ChangeNotifier {
         }
       }
 
-      final fetchedData = await _doctorRepo.fetchPopularDoctors(
+      var fetchedData = await _doctorRepo.fetchPopularDoctors(
         query: query,
         filterType: filter,
         maxRadiusKm: maxRadiusKm, // Pass to DB wrapper
@@ -226,6 +377,9 @@ class DoctorsNotifier extends ChangeNotifier {
         },
       );
 
+      // THE FIX: Completely removed the national fallback block here!
+      // The app will strictly obey the radius.
+
       final sorted = _sorted(fetchedData, filter);
       if (isHomeFeed) {
         _homePopularDoctors = sorted;
@@ -235,8 +389,7 @@ class DoctorsNotifier extends ChangeNotifier {
     } catch (e) {
       debugPrint("DoctorsNotifier Popular Fetch Error: $e");
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _endNetworkRequest();
     }
   }
 
@@ -256,8 +409,9 @@ class DoctorsNotifier extends ChangeNotifier {
     }
 
     if (currentList.isEmpty) {
-      _isLoading = true;
-      notifyListeners();
+      _startNetworkRequest();
+    } else {
+      _startNetworkRequest();
     }
 
     try {
@@ -274,7 +428,7 @@ class DoctorsNotifier extends ChangeNotifier {
         }
       }
 
-      final fetchedData = await _doctorRepo.fetchFeaturedDoctors(
+      var fetchedData = await _doctorRepo.fetchFeaturedDoctors(
         query: query,
         filterType: filter,
         maxRadiusKm: maxRadiusKm,
@@ -295,6 +449,8 @@ class DoctorsNotifier extends ChangeNotifier {
         },
       );
 
+      // THE FIX: Completely removed the national fallback block here!
+
       final sorted = _sorted(fetchedData, filter);
       if (isHomeFeed) {
         _homeFeaturedDoctors = sorted;
@@ -304,8 +460,7 @@ class DoctorsNotifier extends ChangeNotifier {
     } catch (e) {
       debugPrint("DoctorsNotifier Featured Fetch Error: $e");
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _endNetworkRequest();
     }
   }
 
@@ -316,9 +471,12 @@ class DoctorsNotifier extends ChangeNotifier {
     if (!forceRefresh && _specialties.isNotEmpty) return;
 
     if (_specialties.isEmpty) {
-      _isLoading = true;
-      notifyListeners();
+      _startNetworkRequest();
+    } else {
+      // If we are just silently refreshing in the background
+      _startNetworkRequest(); 
     }
+    
     try {
       _specialties = await _doctorRepo.fetchSpecialties(
         forceRefresh: forceRefresh,
@@ -330,9 +488,12 @@ class DoctorsNotifier extends ChangeNotifier {
     } catch (e) {
       debugPrint("DoctorsNotifier Specialties Fetch Error: $e");
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _endNetworkRequest();
     }
+  }
+
+  void prepareForRadiusFetch({required bool isHomeFeed}) {
+    // Array wiping is disabled to allow smooth visual transitions without loading spinners overlaying.
   }
 
   void clear() {
