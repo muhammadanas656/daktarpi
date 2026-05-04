@@ -24,7 +24,8 @@ class SignUpScreen extends StatefulWidget {
   State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _SignUpScreenState extends State<SignUpScreen> {
+class _SignUpScreenState extends State<SignUpScreen>
+    with WidgetsBindingObserver {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -44,15 +45,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_initializeGoogleSignIn());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() {});
+    }
   }
 
   // --- GOOGLE SIGN-IN LOGIC ---
@@ -71,6 +81,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    final hadFocus = FocusManager.instance.primaryFocus != null;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    if (hadFocus) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+
     setState(() => _isLoading = true);
     try {
       await _initializeGoogleSignIn();
@@ -194,193 +211,195 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: Container(
-        height: double.infinity,
-        width: double.infinity,
-        // PRO FIX: Contextual dynamic gradient
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight:
-                        constraints.maxHeight -
-                        MediaQuery.of(context).padding.top,
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: AppStyles.pageGradient(context),
+              ),
+            ),
+          ),
+          SafeArea(
+            bottom: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
                   ),
-                  child: IntrinsicHeight(
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 60),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: IntrinsicHeight(
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 60),
 
-                        Text(
-                          'Join us to start searching',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.h1(context),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Connect with top doctors and manage your health journey',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.body(
-                            context,
-                          ).copyWith(height: 1.5),
-                        ),
+                          Text(
+                            'Join us to start searching',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.h1(context),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Connect with top doctors and manage your health journey',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.body(
+                              context,
+                            ).copyWith(height: 1.5),
+                          ),
 
-                        const SizedBox(height: 35),
+                          const SizedBox(height: 35),
 
-                        // --- SOCIAL BUTTONS ---
-                        SocialButton(
-                          label: "Continue with Google",
-                          icon: Icons.g_mobiledata,
-                          iconColor: Colors.red,
-                          // PRO FIX: Google Auth Logic successfully wired
-                          onTap: _signInWithGoogle,
-                        ),
+                          SocialButton(
+                            label: "Continue with Google",
+                            icon: Icons.g_mobiledata,
+                            iconColor: Colors.red,
+                            onTap: _signInWithGoogle,
+                          ),
 
-                        const SizedBox(height: 35),
+                          const SizedBox(height: 35),
 
-                        // --- NAME ---
-                        AppTextField(
-                          controller: _nameController,
-                          hintText: "Name",
-                        ),
-                        const SizedBox(height: 16),
+                          AppTextField(
+                            controller: _nameController,
+                            hintText: "Name",
+                          ),
+                          const SizedBox(height: 16),
 
-                        // --- EMAIL ---
-                        AppTextField(
-                          controller: _emailController,
-                          hintText: "Email",
-                          isEmail: true,
-                        ),
-                        const SizedBox(height: 16),
+                          AppTextField(
+                            controller: _emailController,
+                            hintText: "Email",
+                            isEmail: true,
+                          ),
+                          const SizedBox(height: 16),
 
-                        // --- PASSWORD ---
-                        AppTextField(
-                          controller: _passwordController,
-                          hintText: "Password",
-                          isPassword: true,
-                          isPasswordVisible: _isPasswordVisible,
-                          onVisibilityToggle: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                        ),
+                          AppTextField(
+                            controller: _passwordController,
+                            hintText: "Password",
+                            isPassword: true,
+                            isPasswordVisible: _isPasswordVisible,
+                            onVisibilityToggle: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
 
-                        const SizedBox(height: 20),
+                          const SizedBox(height: 20),
 
-                        // --- TERMS CHECKBOX ---
-                        Row(
-                          children: [
-                            SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: Checkbox(
-                                value: _agreedToTerms,
-                                activeColor: AppColors.primaryGreen,
-                                shape: const CircleBorder(),
-                                side: BorderSide(
-                                  color: context.colorBorder,
-                                  width: 1.5,
-                                ),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _agreedToTerms = value ?? false;
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: RichText(
-                                text: TextSpan(
-                                  style: AppTextStyles.bodySmall(context),
-                                  children: [
-                                    const TextSpan(text: 'I agree with the '),
-                                    TextSpan(
-                                      text: 'Terms of Service',
-                                      style: const TextStyle(
-                                        color: AppColors.primaryGreen,
-                                        fontWeight: FontWeight.bold,
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                      recognizer:
-                                          TapGestureRecognizer()
-                                            ..onTap =
-                                                () => context.push(
-                                                  AppRoutes.termsOfService,
-                                                ),
-                                    ),
-                                    const TextSpan(text: ' & '),
-                                    TextSpan(
-                                      text: 'Privacy Policy',
-                                      style: const TextStyle(
-                                        color: AppColors.primaryGreen,
-                                        fontWeight: FontWeight.bold,
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                      recognizer:
-                                          TapGestureRecognizer()
-                                            ..onTap =
-                                                () => context.push(
-                                                  AppRoutes.privacyPolicy,
-                                                ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 30),
-
-                        // --- SIGN UP BUTTON ---
-                        PrimaryButton(
-                          label: "Sign Up",
-                          onTap: _signUp,
-                          isLoading: _isLoading,
-                        ),
-
-                        const Spacer(),
-
-                        // --- FOOTER ---
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 30),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          Row(
                             children: [
-                              Text(
-                                "Have an account? ",
-                                style: AppTextStyles.body(context).copyWith(
-                                  color: AppColors.primaryGreen,
-                                  fontWeight: FontWeight.w500,
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: Checkbox(
+                                  value: _agreedToTerms,
+                                  activeColor: AppColors.primaryGreen,
+                                  shape: const CircleBorder(),
+                                  side: BorderSide(
+                                    color: context.colorBorder,
+                                    width: 1.5,
+                                  ),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _agreedToTerms = value ?? false;
+                                    });
+                                  },
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: () => context.go(AppRoutes.login),
-                                child: Text(
-                                  'Log in',
-                                  style: AppTextStyles.body(context).copyWith(
-                                    color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.w700,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: AppTextStyles.bodySmall(context),
+                                    children: [
+                                      const TextSpan(text: 'I agree with the '),
+                                      TextSpan(
+                                        text: 'Terms of Service',
+                                        style: const TextStyle(
+                                          color: AppColors.primaryGreen,
+                                          fontWeight: FontWeight.bold,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                        recognizer:
+                                            TapGestureRecognizer()
+                                              ..onTap =
+                                                  () => context.push(
+                                                    AppRoutes.termsOfService,
+                                                  ),
+                                      ),
+                                      const TextSpan(text: ' & '),
+                                      TextSpan(
+                                        text: 'Privacy Policy',
+                                        style: const TextStyle(
+                                          color: AppColors.primaryGreen,
+                                          fontWeight: FontWeight.bold,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                        recognizer:
+                                            TapGestureRecognizer()
+                                              ..onTap =
+                                                  () => context.push(
+                                                    AppRoutes.privacyPolicy,
+                                                  ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
+
+                          const SizedBox(height: 30),
+
+                          PrimaryButton(
+                            label: "Sign Up",
+                            onTap: _signUp,
+                            isLoading: _isLoading,
+                          ),
+
+                          const Spacer(),
+
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 30),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  "Have an account? ",
+                                  style: AppTextStyles.body(context).copyWith(
+                                    color: AppColors.primaryGreen,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => context.go(AppRoutes.login),
+                                  child: Text(
+                                    'Log in',
+                                    style: AppTextStyles.body(context).copyWith(
+                                      color: AppColors.primaryGreen,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

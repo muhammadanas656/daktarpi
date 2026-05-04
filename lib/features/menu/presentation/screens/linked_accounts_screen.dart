@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/app_text_field.dart';
 import '../../../../core/utils/security_formatters.dart';
@@ -788,27 +789,21 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: context.colorScaffoldBackground,
-      appBar: AppBar(
-        title: Text("Linked Accounts", style: AppTextStyles.h2(context)),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: context.colorTextDark,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: const CustomAppBar(title: "Linked Accounts"),
       body:
           _isLoading
               ? const Center(
                 child: AppLoader(),
               )
               : ListView(
-                padding: EdgeInsets.all(24.0),
+                padding: EdgeInsets.fromLTRB(
+                  24.0,
+                  MediaQuery.paddingOf(context).top + kToolbarHeight + 24.0,
+                  24.0,
+                  24.0,
+                ),
                 children: [
                   Text(
                     "Manage your signed-in accounts. Linking accounts allows you to sign in with any of them.",

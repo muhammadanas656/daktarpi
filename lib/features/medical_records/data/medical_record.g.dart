@@ -22,6 +22,10 @@ _MedicalRecord _$MedicalRecordFromJson(Map<String, dynamic> json) =>
           json['deleted_at'] == null
               ? null
               : DateTime.parse(json['deleted_at'] as String),
+      lockedUntil:
+          json['locked_until'] == null
+              ? null
+              : DateTime.parse(json['locked_until'] as String),
     );
 
 Map<String, dynamic> _$MedicalRecordToJson(_MedicalRecord instance) =>
@@ -34,4 +38,5 @@ Map<String, dynamic> _$MedicalRecordToJson(_MedicalRecord instance) =>
       'file_urls': instance.fileUrls,
       'created_at': instance.createdAt.toIso8601String(),
       'deleted_at': instance.deletedAt?.toIso8601String(),
+      'locked_until': instance.lockedUntil?.toIso8601String(),
     };

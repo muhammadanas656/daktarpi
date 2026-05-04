@@ -53,37 +53,7 @@ class _HomeBannerState extends State<HomeBanner> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (widget.banners.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 185,
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: isDark ? Colors.white10 : Colors.grey.shade200,
-                ),
-                clipBehavior: Clip.hardEdge,
-              ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  height: 6,
-                  width: 20,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white24 : Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return Padding(

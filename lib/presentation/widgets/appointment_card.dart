@@ -18,13 +18,12 @@ class AppointmentCard extends StatefulWidget {
   final String startTime;
   final int maxWaitTime;
   final bool canCancel;
-  final bool canComplete; 
 
   final VoidCallback onReceiptTap;
   final VoidCallback onCalendarTap;
   final VoidCallback onRescheduleTap;
   final VoidCallback onCancelTap;
-  final VoidCallback onCompleteTap;
+  final VoidCallback? onLocationTap;
 
   const AppointmentCard({
     super.key,
@@ -39,12 +38,11 @@ class AppointmentCard extends StatefulWidget {
     required this.startTime,
     this.maxWaitTime = 30,
     required this.canCancel,
-    required this.canComplete, 
     required this.onReceiptTap,
     required this.onCalendarTap,
     required this.onRescheduleTap,
     required this.onCancelTap,
-    required this.onCompleteTap,
+    this.onLocationTap,
   });
 
   @override
@@ -53,6 +51,7 @@ class AppointmentCard extends StatefulWidget {
 
 class _AppointmentCardState extends State<AppointmentCard> {
   bool _isDrawerOpen = false;
+  bool _isDrawerPressed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -263,55 +262,62 @@ class _AppointmentCardState extends State<AppointmentCard> {
           // --- ZONE D: THE INTELLIGENT CUT-OUT TRAY ---
           const SizedBox(height: 16),
           AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
             decoration: BoxDecoration(
-              color: _isDrawerOpen 
-                  ? (isDark ? Colors.white.withValues(alpha: 0.04) : AppColors.primaryGreen.withValues(alpha: 0.04))
-                  : Colors.transparent,
+              color:
+                  _isDrawerPressed
+                      ? (isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : AppColors.primaryGreen.withValues(alpha: 0.08))
+                      : (_isDrawerOpen
+                          ? (isDark
+                              ? Colors.white.withValues(alpha: 0.04)
+                              : AppColors.primaryGreen.withValues(alpha: 0.04))
+                          : Colors.transparent),
               border: Border(top: BorderSide(color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.04))),
               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
             ),
             child: Column(
               children: [
-                Material(
-                  color: Colors.transparent,
-                  // THE FIX: This forces the ripple to strictly obey the bottom curved corners!
-                  clipBehavior: Clip.antiAlias, 
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-                  child: InkWell(
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      setState(() => _isDrawerOpen = !_isDrawerOpen);
-                    },
-                    highlightColor: Colors.transparent,
-                    splashColor: AppColors.primaryGreen.withValues(alpha: 0.1),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Manage Appointment",
-                            style: GoogleFonts.poppins(
-                              color: _isDrawerOpen ? AppColors.primaryGreen : (isDark ? Colors.white54 : const Color(0xFF86868B)),
-                              fontSize: 13,
-                              fontWeight: _isDrawerOpen ? FontWeight.w600 : FontWeight.w500,
-                              letterSpacing: 0.2,
-                            ),
+                GestureDetector(
+                  onTapDown: (_) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _isDrawerPressed = true);
+                  },
+                  onTapUp: (_) {
+                    setState(() {
+                      _isDrawerPressed = false;
+                      _isDrawerOpen = !_isDrawerOpen;
+                    });
+                  },
+                  onTapCancel: () => setState(() => _isDrawerPressed = false),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          "Manage Appointment",
+                          style: GoogleFonts.poppins(
+                            color: _isDrawerOpen ? AppColors.primaryGreen : (isDark ? Colors.white54 : const Color(0xFF86868B)),
+                            fontSize: 13,
+                            fontWeight: _isDrawerOpen ? FontWeight.w600 : FontWeight.w500,
+                            letterSpacing: 0.2,
                           ),
-                          const SizedBox(width: 6),
-                          AnimatedRotation(
-                            turns: _isDrawerOpen ? 0.5 : 0.0,
-                            duration: const Duration(milliseconds: 300),
-                            child: Icon(
-                              Icons.keyboard_arrow_down_rounded, 
-                              color: _isDrawerOpen ? AppColors.primaryGreen : (isDark ? Colors.white54 : const Color(0xFF86868B)), 
-                              size: 18
-                            ),
+                        ),
+                        const SizedBox(width: 6),
+                        AnimatedRotation(
+                          turns: _isDrawerOpen ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: _isDrawerOpen ? AppColors.primaryGreen : (isDark ? Colors.white54 : const Color(0xFF86868B)),
+                            size: 18,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -326,22 +332,45 @@ class _AppointmentCardState extends State<AppointmentCard> {
                       height: _isDrawerOpen ? null : 0,
                       width: double.infinity,
                       child: Padding(
-                        padding: const EdgeInsets.only(bottom: 20), // Padding inside the tray
+                        padding: const EdgeInsets.only(bottom: 20),
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           physics: const BouncingScrollPhysics(),
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Row(
                             children: [
-                              _buildSoftActionPill("Calendar", Icons.calendar_month_rounded, isDark ? Colors.white70 : Colors.black87, widget.onCalendarTap),
-                              const SizedBox(width: 12),
-                              _buildSoftActionPill("Reschedule", Icons.edit_calendar_rounded, isDark ? Colors.white70 : Colors.black87, widget.onRescheduleTap),
-                              if (widget.canComplete) ...[
+                              if (widget.onLocationTap != null) ...[
+                                _PremiumActionPill(
+                                  label: "Location",
+                                  icon: Icons.map_rounded,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                  onTap: widget.onLocationTap!,
+                                ),
                                 const SizedBox(width: 12),
-                                _buildSoftActionPill("Complete", Icons.check_circle_rounded, AppColors.primaryGreen, widget.onCompleteTap),
                               ],
+                              _PremiumActionPill(
+                                label: "Calendar",
+                                icon: Icons.calendar_month_rounded,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                                onTap: widget.onCalendarTap,
+                              ),
                               const SizedBox(width: 12),
-                              _buildSoftActionPill("Cancel", Icons.close_rounded, widget.canCancel ? AppColors.dangerRed : Colors.grey, widget.canCancel ? widget.onCancelTap : () {}, isMuted: !widget.canCancel),
+                              _PremiumActionPill(
+                                label: "Reschedule",
+                                icon: Icons.edit_calendar_rounded,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                                onTap: widget.onRescheduleTap,
+                              ),
+                              const SizedBox(width: 12),
+                              _PremiumActionPill(
+                                label: "Cancel",
+                                icon: Icons.close_rounded,
+                                color: widget.canCancel ? AppColors.dangerRed : Colors.grey,
+                                // THE FIX: Always pass the tap through! 
+                                // The screen logic will decide whether to show the Dialog or the Snackbar.
+                                onTap: widget.onCancelTap, 
+                                isMuted: !widget.canCancel,
+                              ),
                             ],
                           ),
                         ),
@@ -356,35 +385,104 @@ class _AppointmentCardState extends State<AppointmentCard> {
       ),
     );
   }
+}
 
-  Widget _buildSoftActionPill(String label, IconData icon, Color color, VoidCallback onTap, {bool isMuted = false}) {
+class _PremiumActionPill extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final bool isMuted;
+
+  const _PremiumActionPill({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.isMuted = false,
+  });
+
+  @override
+  State<_PremiumActionPill> createState() => _PremiumActionPillState();
+}
+
+class _PremiumActionPillState extends State<_PremiumActionPill> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: isMuted ? Colors.transparent : (isDark ? Colors.white12 : Colors.white),
-      borderRadius: BorderRadius.circular(14),
-      // THE FIX: Forces the ripple to perfectly match the 14px border radius
-      clipBehavior: Clip.antiAlias, 
-      elevation: isMuted || isDark ? 0 : 2, 
-      shadowColor: Colors.black.withValues(alpha: 0.06),
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: Container(
+
+    final baseColor =
+        widget.isMuted
+            ? Colors.transparent
+            : (isDark ? Colors.white12 : Colors.white);
+    final pressedColor =
+        widget.isMuted
+            ? Colors.transparent
+            : (isDark
+                ? Colors.white24
+                : Colors.black.withValues(alpha: 0.06));
+
+    return GestureDetector(
+      onTapDown: (_) {
+        // ▼ DELETE THIS LINE ▼
+        // if (widget.isMuted) return; 
+        
+        HapticFeedback.selectionClick();
+        setState(() => _isPressed = true);
+      },
+      onTapUp: (_) {
+        // ▼ DELETE THIS LINE ▼
+        // if (widget.isMuted) return; 
+        
+        setState(() => _isPressed = false);
+        widget.onTap(); // Fires the tap!
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            border: Border.all(color: isMuted ? Colors.black12 : (isDark ? Colors.white24 : Colors.transparent)), 
+            color: _isPressed ? pressedColor : baseColor,
+            border: Border.all(
+              color:
+                  widget.isMuted
+                      ? Colors.black12
+                      : (isDark ? Colors.white24 : Colors.transparent),
+            ),
             borderRadius: BorderRadius.circular(14),
+            boxShadow:
+                (widget.isMuted || isDark || _isPressed)
+                    ? []
+                    : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: isMuted ? Colors.grey : color),
+              Icon(
+                widget.icon,
+                size: 16,
+                color: widget.isMuted ? Colors.grey : widget.color,
+              ),
               const SizedBox(width: 8),
               Text(
-                label,
-                style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: isMuted ? Colors.grey : color),
+                widget.label,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: widget.isMuted ? Colors.grey : widget.color,
+                ),
               ),
             ],
           ),

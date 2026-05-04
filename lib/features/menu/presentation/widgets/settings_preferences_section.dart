@@ -146,7 +146,7 @@ class _SettingsPreferencesSectionState extends State<SettingsPreferencesSection>
                           color: isDark ? Colors.white70 : Colors.black54,
                         ),
                         child: const Text(
-                          "Customize how DaktarPai looks on this device.",
+                          "Customize how AeviaPulse looks on this device.",
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -350,6 +350,7 @@ class _SettingsPreferencesSectionState extends State<SettingsPreferencesSection>
     bool localBookingEnabled = SettingsNotifier.instance.bookingAlertsEnabled;
     bool localReminderEnabled = SettingsNotifier.instance.reminderAlertsEnabled;
     bool localFiveHourWarningEnabled = SettingsNotifier.instance.fiveHourWarningEnabled;
+    bool localMorningOfReminderEnabled = SettingsNotifier.instance.morningOfReminderEnabled;
     bool localMissedAppointmentAlertEnabled = SettingsNotifier.instance.missedAppointmentAlertEnabled;
     bool localAppUpdatesEnabled = SettingsNotifier.instance.appUpdatesEnabled;
 
@@ -408,7 +409,7 @@ class _SettingsPreferencesSectionState extends State<SettingsPreferencesSection>
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          localGlobalEnabled ? "DaktarPai alerts are active." : "All alerts are currently muted.",
+                          localGlobalEnabled ? "AeviaPulse alerts are active." : "All alerts are currently muted.",
                           textAlign: TextAlign.center,
                           style: const TextStyle(fontSize: 14, color: Colors.grey),
                         ),
@@ -488,6 +489,8 @@ class _SettingsPreferencesSectionState extends State<SettingsPreferencesSection>
                                                         children: [
                                                           Divider(height: 1, indent: 16, endIndent: 16, color: context.colorBorder.withValues(alpha: 0.3)),
                                                           _buildDialogToggle(context: ctx, title: "5-Hour Warning", value: localFiveHourWarningEnabled, onChanged: (val) async { final old = localFiveHourWarningEnabled; setDialogState(() => localFiveHourWarningEnabled = val); try { await SettingsNotifier.instance.updateFiveHourWarningEnabled(val); } catch (e) { if(ctx.mounted) setDialogState(() => localFiveHourWarningEnabled = old); } }),
+                                                          Divider(height: 1, indent: 16, endIndent: 16, color: context.colorBorder.withValues(alpha: 0.3)),
+                                                          _buildDialogToggle(context: ctx, title: "Morning-Of Reminder", value: localMorningOfReminderEnabled, onChanged: (val) async { final old = localMorningOfReminderEnabled; setDialogState(() => localMorningOfReminderEnabled = val); try { await SettingsNotifier.instance.updateMorningOfReminderEnabled(val); } catch (e) { if(ctx.mounted) setDialogState(() => localMorningOfReminderEnabled = old); } }),
                                                           Divider(height: 1, indent: 16, endIndent: 16, color: context.colorBorder.withValues(alpha: 0.3)),
                                                           _buildDialogToggle(context: ctx, title: "Missed Appointment Alert", value: localMissedAppointmentAlertEnabled, onChanged: (val) async { final old = localMissedAppointmentAlertEnabled; setDialogState(() => localMissedAppointmentAlertEnabled = val); try { await SettingsNotifier.instance.updateMissedAppointmentAlertEnabled(val); } catch (e) { if(ctx.mounted) setDialogState(() => localMissedAppointmentAlertEnabled = old); } }),
                                                         ],
@@ -707,31 +710,7 @@ class _SettingsPreferencesSectionState extends State<SettingsPreferencesSection>
           onTap: _showAppearanceBottomSheet,
         ),
 
-        AnimatedBuilder(
-          animation: SettingsNotifier.instance,
-          builder: (context, child) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(16)),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppColors.primaryGreen.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.animation, color: AppColors.primaryGreen, size: 20),
-                ),
-                title: Text("Menu Drawer Hint", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colorTextDark)),
-                subtitle: Text("Show animation on startup", style: TextStyle(fontSize: 12, color: context.colorTextLight)),
-                trailing: Switch(
-                  value: SettingsNotifier.instance.showDrawerHint,
-                  activeColor: AppColors.primaryGreen,
-                  onChanged: (val) { SettingsNotifier.instance.updateShowDrawerHint(val); },
-                ),
-              ),
-            );
-          },
-        ),
+
       ],
     );
   }

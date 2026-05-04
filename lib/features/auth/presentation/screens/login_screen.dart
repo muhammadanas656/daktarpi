@@ -27,7 +27,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen>
+    with WidgetsBindingObserver {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -48,16 +49,25 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _emailController.addListener(_onEmailChanged);
     unawaited(_initializeGoogleSignIn());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() {});
+    }
   }
 
   void _onEmailChanged() {
@@ -170,6 +180,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    final hadFocus = FocusManager.instance.primaryFocus != null;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    if (hadFocus) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -271,154 +288,162 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: Container(
-        height: double.infinity,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          // PRO FIX: Uses the dynamic global page gradient
-          gradient: AppStyles.pageGradient(context),
-        ),
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight:
-                        constraints.maxHeight -
-                        MediaQuery.of(context).padding.top,
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: AppStyles.pageGradient(context),
+              ),
+            ),
+          ),
+          SafeArea(
+            bottom: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
                   ),
-                  child: IntrinsicHeight(
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 100),
-                        Text(
-                          'Welcome back',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.h1(context),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Manage your appointments and medical records securely',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.body(
-                            context,
-                          ).copyWith(height: 1.5),
-                        ),
-                        const SizedBox(height: 35),
-                        SocialButton(
-                          label: "Continue with Google",
-                          icon: Icons.g_mobiledata,
-                          iconColor: Colors.red,
-                          onTap: _signInWithGoogle,
-                        ),
-                        const SizedBox(height: 35),
-                        AppTextField(
-                          controller: _emailController,
-                          hintText: "Email",
-                          isEmail: true,
-                          suffixIcon:
-                              _isInputValid
-                                  ? const Icon(
-                                    Icons.check,
-                                    color: AppColors.primaryGreen,
-                                    size: 20,
-                                  )
-                                  : const Icon(
-                                    Icons.close,
-                                    color: Colors.redAccent,
-                                    size: 20,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: IntrinsicHeight(
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 100),
+                          Text(
+                            'Welcome back',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.h1(context),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Manage your appointments and medical records securely',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.body(
+                              context,
+                            ).copyWith(height: 1.5),
+                          ),
+                          const SizedBox(height: 35),
+                          SocialButton(
+                            label: "Continue with Google",
+                            icon: Icons.g_mobiledata,
+                            iconColor: Colors.red,
+                            onTap: _signInWithGoogle,
+                          ),
+                          const SizedBox(height: 35),
+                          AppTextField(
+                            controller: _emailController,
+                            hintText: "Email",
+                            isEmail: true,
+                            suffixIcon:
+                                _isInputValid
+                                    ? const Icon(
+                                      Icons.check,
+                                      color: AppColors.primaryGreen,
+                                      size: 20,
+                                    )
+                                    : const Icon(
+                                      Icons.close,
+                                      color: Colors.redAccent,
+                                      size: 20,
+                                    ),
+                          ),
+                          const SizedBox(height: 16),
+                          AppTextField(
+                            controller: _passwordController,
+                            hintText: "Password",
+                            isPassword: true,
+                            isPasswordVisible: _isPasswordVisible,
+                            onVisibilityToggle: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 30),
+                          PrimaryButton(
+                            label: "Login",
+                            onTap: _signIn,
+                            isLoading: _isLoading,
+                          ),
+                          const SizedBox(height: 24),
+                          GestureDetector(
+                            onTap: _showForgotPasswordSheet,
+                            child: AnimatedContainer(
+                              duration: AppMotion.defaultDuration,
+                              curve: Curves.easeOut,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Forgot password',
+                                    style: AppTextStyles.body(context).copyWith(
+                                      color:
+                                          _resendCountdown > 0
+                                              ? Colors.grey
+                                              : AppColors.primaryGreen,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
-                        ),
-                        const SizedBox(height: 16),
-                        AppTextField(
-                          controller: _passwordController,
-                          hintText: "Password",
-                          isPassword: true,
-                          isPasswordVisible: _isPasswordVisible,
-                          onVisibilityToggle: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 30),
-                        PrimaryButton(
-                          label: "Login",
-                          onTap: _signIn,
-                          isLoading: _isLoading,
-                        ),
-                        const SizedBox(height: 24),
-                        GestureDetector(
-                          onTap: _showForgotPasswordSheet,
-                          child: AnimatedContainer(
-                            duration: AppMotion.defaultDuration,
-                            curve: Curves.easeOut,
+                                  if (_resendCountdown > 0) ...[
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Wait 00:${_resendCountdown.toString().padLeft(2, '0')}",
+                                      style: AppTextStyles.bodySmall(
+                                        context,
+                                      ).copyWith(
+                                        color: AppColors.dangerRed,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 30),
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Forgot password',
+                                  "Don't have an account? ",
                                   style: AppTextStyles.body(context).copyWith(
-                                    color:
-                                        _resendCountdown > 0
-                                            ? Colors.grey
-                                            : AppColors.primaryGreen,
+                                    color: AppColors.primaryGreen,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                                if (_resendCountdown > 0) ...[
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    "Wait 00:${_resendCountdown.toString().padLeft(2, '0')}",
-                                    style: AppTextStyles.bodySmall(
-                                      context,
-                                    ).copyWith(
-                                      color: AppColors.dangerRed,
-                                      fontWeight: FontWeight.w600,
+                                GestureDetector(
+                                  onTap: () => context.go(AppRoutes.signup),
+                                  child: Text(
+                                    'Join us',
+                                    style: AppTextStyles.body(context).copyWith(
+                                      color: AppColors.primaryGreen,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                ],
+                                ),
                               ],
                             ),
                           ),
-                        ),
-                        const Spacer(),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 30),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "Don't have an account? ",
-                                style: AppTextStyles.body(context).copyWith(
-                                  color: AppColors.primaryGreen,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () => context.go(AppRoutes.signup),
-                                child: Text(
-                                  'Join us',
-                                  style: AppTextStyles.body(context).copyWith(
-                                    color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

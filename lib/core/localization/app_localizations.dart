@@ -32,7 +32,7 @@ class AppLocalizations {
   static final Map<String, Map<String, String>> _staticLocalizedValues = {
     // English
     'en': {
-      'app_title': 'DaktarPai',
+      'app_title': 'AeviaPulse',
       'login_title': 'Welcome Back',
       'login_subtitle': 'Sign in to access your dashboard',
       'login_button': 'Sign In',

@@ -50,13 +50,18 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: CustomAppBar(
         title: "Help Center",
         onBackPressed: () => context.pop(),
       ),
-      body: Column(
-        children: [
+      body: Padding(
+        padding: EdgeInsets.only(
+          top: MediaQuery.paddingOf(context).top + kToolbarHeight,
+        ),
+        child: Column(
+          children: [
           // --- SEARCH BAR ---
           Padding(
             padding: EdgeInsets.all(16.0),
@@ -211,7 +216,8 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

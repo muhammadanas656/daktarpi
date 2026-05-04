@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Appointment {
 
- int get id;@JsonKey(name: 'schedule_date') String get scheduleDate;@JsonKey(name: 'start_time') String get startTime;@JsonKey(name: 'end_time') String get endTime; String get status;@JsonKey(name: 'patient_name') String get patientName;@JsonKey(name: 'patient_phone') String get patientPhone;@JsonKey(name: 'patient_email') String get patientEmail;@JsonKey(name: 'patient_gender') String get patientGender;@JsonKey(name: 'patient_dob') String get patientDob;@JsonKey(name: 'doctors') Doctor? get doctor;@JsonKey(name: 'clinics') Clinic? get clinic;@JsonKey(name: 'deleted_at') DateTime? get deletedAt;
+ int get id;@JsonKey(name: 'schedule_date') String get scheduleDate;@JsonKey(name: 'start_time') String get startTime;@JsonKey(name: 'end_time') String get endTime; String get status;@JsonKey(name: 'patient_name') String get patientName;@JsonKey(name: 'patient_phone') String get patientPhone;@JsonKey(name: 'patient_email') String get patientEmail;@JsonKey(name: 'patient_gender') String get patientGender;@JsonKey(name: 'patient_dob') String get patientDob;@JsonKey(name: 'doctors') Doctor? get doctor;@JsonKey(name: 'clinics') Clinic? get clinic;@JsonKey(name: 'deleted_at') DateTime? get deletedAt;@JsonKey(name: 'attached_record_ids') List<int> get attachedRecordIds;
 /// Create a copy of Appointment
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $AppointmentCopyWith<Appointment> get copyWith => _$AppointmentCopyWithImpl<Appo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Appointment&&(identical(other.id, id) || other.id == id)&&(identical(other.scheduleDate, scheduleDate) || other.scheduleDate == scheduleDate)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.status, status) || other.status == status)&&(identical(other.patientName, patientName) || other.patientName == patientName)&&(identical(other.patientPhone, patientPhone) || other.patientPhone == patientPhone)&&(identical(other.patientEmail, patientEmail) || other.patientEmail == patientEmail)&&(identical(other.patientGender, patientGender) || other.patientGender == patientGender)&&(identical(other.patientDob, patientDob) || other.patientDob == patientDob)&&(identical(other.doctor, doctor) || other.doctor == doctor)&&(identical(other.clinic, clinic) || other.clinic == clinic)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Appointment&&(identical(other.id, id) || other.id == id)&&(identical(other.scheduleDate, scheduleDate) || other.scheduleDate == scheduleDate)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.status, status) || other.status == status)&&(identical(other.patientName, patientName) || other.patientName == patientName)&&(identical(other.patientPhone, patientPhone) || other.patientPhone == patientPhone)&&(identical(other.patientEmail, patientEmail) || other.patientEmail == patientEmail)&&(identical(other.patientGender, patientGender) || other.patientGender == patientGender)&&(identical(other.patientDob, patientDob) || other.patientDob == patientDob)&&(identical(other.doctor, doctor) || other.doctor == doctor)&&(identical(other.clinic, clinic) || other.clinic == clinic)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt)&&const DeepCollectionEquality().equals(other.attachedRecordIds, attachedRecordIds));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,scheduleDate,startTime,endTime,status,patientName,patientPhone,patientEmail,patientGender,patientDob,doctor,clinic,deletedAt);
+int get hashCode => Object.hash(runtimeType,id,scheduleDate,startTime,endTime,status,patientName,patientPhone,patientEmail,patientGender,patientDob,doctor,clinic,deletedAt,const DeepCollectionEquality().hash(attachedRecordIds));
 
 @override
 String toString() {
-  return 'Appointment(id: $id, scheduleDate: $scheduleDate, startTime: $startTime, endTime: $endTime, status: $status, patientName: $patientName, patientPhone: $patientPhone, patientEmail: $patientEmail, patientGender: $patientGender, patientDob: $patientDob, doctor: $doctor, clinic: $clinic, deletedAt: $deletedAt)';
+  return 'Appointment(id: $id, scheduleDate: $scheduleDate, startTime: $startTime, endTime: $endTime, status: $status, patientName: $patientName, patientPhone: $patientPhone, patientEmail: $patientEmail, patientGender: $patientGender, patientDob: $patientDob, doctor: $doctor, clinic: $clinic, deletedAt: $deletedAt, attachedRecordIds: $attachedRecordIds)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $AppointmentCopyWith<$Res>  {
   factory $AppointmentCopyWith(Appointment value, $Res Function(Appointment) _then) = _$AppointmentCopyWithImpl;
 @useResult
 $Res call({
- int id,@JsonKey(name: 'schedule_date') String scheduleDate,@JsonKey(name: 'start_time') String startTime,@JsonKey(name: 'end_time') String endTime, String status,@JsonKey(name: 'patient_name') String patientName,@JsonKey(name: 'patient_phone') String patientPhone,@JsonKey(name: 'patient_email') String patientEmail,@JsonKey(name: 'patient_gender') String patientGender,@JsonKey(name: 'patient_dob') String patientDob,@JsonKey(name: 'doctors') Doctor? doctor,@JsonKey(name: 'clinics') Clinic? clinic,@JsonKey(name: 'deleted_at') DateTime? deletedAt
+ int id,@JsonKey(name: 'schedule_date') String scheduleDate,@JsonKey(name: 'start_time') String startTime,@JsonKey(name: 'end_time') String endTime, String status,@JsonKey(name: 'patient_name') String patientName,@JsonKey(name: 'patient_phone') String patientPhone,@JsonKey(name: 'patient_email') String patientEmail,@JsonKey(name: 'patient_gender') String patientGender,@JsonKey(name: 'patient_dob') String patientDob,@JsonKey(name: 'doctors') Doctor? doctor,@JsonKey(name: 'clinics') Clinic? clinic,@JsonKey(name: 'deleted_at') DateTime? deletedAt,@JsonKey(name: 'attached_record_ids') List<int> attachedRecordIds
 });
 
 
@@ -65,7 +65,7 @@ class _$AppointmentCopyWithImpl<$Res>
 
 /// Create a copy of Appointment
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? scheduleDate = null,Object? startTime = null,Object? endTime = null,Object? status = null,Object? patientName = null,Object? patientPhone = null,Object? patientEmail = null,Object? patientGender = null,Object? patientDob = null,Object? doctor = freezed,Object? clinic = freezed,Object? deletedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? scheduleDate = null,Object? startTime = null,Object? endTime = null,Object? status = null,Object? patientName = null,Object? patientPhone = null,Object? patientEmail = null,Object? patientGender = null,Object? patientDob = null,Object? doctor = freezed,Object? clinic = freezed,Object? deletedAt = freezed,Object? attachedRecordIds = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,scheduleDate: null == scheduleDate ? _self.scheduleDate : scheduleDate // ignore: cast_nullable_to_non_nullable
@@ -80,7 +80,8 @@ as String,patientDob: null == patientDob ? _self.patientDob : patientDob // igno
 as String,doctor: freezed == doctor ? _self.doctor : doctor // ignore: cast_nullable_to_non_nullable
 as Doctor?,clinic: freezed == clinic ? _self.clinic : clinic // ignore: cast_nullable_to_non_nullable
 as Clinic?,deletedAt: freezed == deletedAt ? _self.deletedAt : deletedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,attachedRecordIds: null == attachedRecordIds ? _self.attachedRecordIds : attachedRecordIds // ignore: cast_nullable_to_non_nullable
+as List<int>,
   ));
 }
 /// Create a copy of Appointment
@@ -189,10 +190,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'schedule_date')  String scheduleDate, @JsonKey(name: 'start_time')  String startTime, @JsonKey(name: 'end_time')  String endTime,  String status, @JsonKey(name: 'patient_name')  String patientName, @JsonKey(name: 'patient_phone')  String patientPhone, @JsonKey(name: 'patient_email')  String patientEmail, @JsonKey(name: 'patient_gender')  String patientGender, @JsonKey(name: 'patient_dob')  String patientDob, @JsonKey(name: 'doctors')  Doctor? doctor, @JsonKey(name: 'clinics')  Clinic? clinic, @JsonKey(name: 'deleted_at')  DateTime? deletedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'schedule_date')  String scheduleDate, @JsonKey(name: 'start_time')  String startTime, @JsonKey(name: 'end_time')  String endTime,  String status, @JsonKey(name: 'patient_name')  String patientName, @JsonKey(name: 'patient_phone')  String patientPhone, @JsonKey(name: 'patient_email')  String patientEmail, @JsonKey(name: 'patient_gender')  String patientGender, @JsonKey(name: 'patient_dob')  String patientDob, @JsonKey(name: 'doctors')  Doctor? doctor, @JsonKey(name: 'clinics')  Clinic? clinic, @JsonKey(name: 'deleted_at')  DateTime? deletedAt, @JsonKey(name: 'attached_record_ids')  List<int> attachedRecordIds)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Appointment() when $default != null:
-return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.status,_that.patientName,_that.patientPhone,_that.patientEmail,_that.patientGender,_that.patientDob,_that.doctor,_that.clinic,_that.deletedAt);case _:
+return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.status,_that.patientName,_that.patientPhone,_that.patientEmail,_that.patientGender,_that.patientDob,_that.doctor,_that.clinic,_that.deletedAt,_that.attachedRecordIds);case _:
   return orElse();
 
 }
@@ -210,10 +211,10 @@ return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'schedule_date')  String scheduleDate, @JsonKey(name: 'start_time')  String startTime, @JsonKey(name: 'end_time')  String endTime,  String status, @JsonKey(name: 'patient_name')  String patientName, @JsonKey(name: 'patient_phone')  String patientPhone, @JsonKey(name: 'patient_email')  String patientEmail, @JsonKey(name: 'patient_gender')  String patientGender, @JsonKey(name: 'patient_dob')  String patientDob, @JsonKey(name: 'doctors')  Doctor? doctor, @JsonKey(name: 'clinics')  Clinic? clinic, @JsonKey(name: 'deleted_at')  DateTime? deletedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'schedule_date')  String scheduleDate, @JsonKey(name: 'start_time')  String startTime, @JsonKey(name: 'end_time')  String endTime,  String status, @JsonKey(name: 'patient_name')  String patientName, @JsonKey(name: 'patient_phone')  String patientPhone, @JsonKey(name: 'patient_email')  String patientEmail, @JsonKey(name: 'patient_gender')  String patientGender, @JsonKey(name: 'patient_dob')  String patientDob, @JsonKey(name: 'doctors')  Doctor? doctor, @JsonKey(name: 'clinics')  Clinic? clinic, @JsonKey(name: 'deleted_at')  DateTime? deletedAt, @JsonKey(name: 'attached_record_ids')  List<int> attachedRecordIds)  $default,) {final _that = this;
 switch (_that) {
 case _Appointment():
-return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.status,_that.patientName,_that.patientPhone,_that.patientEmail,_that.patientGender,_that.patientDob,_that.doctor,_that.clinic,_that.deletedAt);case _:
+return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.status,_that.patientName,_that.patientPhone,_that.patientEmail,_that.patientGender,_that.patientDob,_that.doctor,_that.clinic,_that.deletedAt,_that.attachedRecordIds);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -230,10 +231,10 @@ return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id, @JsonKey(name: 'schedule_date')  String scheduleDate, @JsonKey(name: 'start_time')  String startTime, @JsonKey(name: 'end_time')  String endTime,  String status, @JsonKey(name: 'patient_name')  String patientName, @JsonKey(name: 'patient_phone')  String patientPhone, @JsonKey(name: 'patient_email')  String patientEmail, @JsonKey(name: 'patient_gender')  String patientGender, @JsonKey(name: 'patient_dob')  String patientDob, @JsonKey(name: 'doctors')  Doctor? doctor, @JsonKey(name: 'clinics')  Clinic? clinic, @JsonKey(name: 'deleted_at')  DateTime? deletedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id, @JsonKey(name: 'schedule_date')  String scheduleDate, @JsonKey(name: 'start_time')  String startTime, @JsonKey(name: 'end_time')  String endTime,  String status, @JsonKey(name: 'patient_name')  String patientName, @JsonKey(name: 'patient_phone')  String patientPhone, @JsonKey(name: 'patient_email')  String patientEmail, @JsonKey(name: 'patient_gender')  String patientGender, @JsonKey(name: 'patient_dob')  String patientDob, @JsonKey(name: 'doctors')  Doctor? doctor, @JsonKey(name: 'clinics')  Clinic? clinic, @JsonKey(name: 'deleted_at')  DateTime? deletedAt, @JsonKey(name: 'attached_record_ids')  List<int> attachedRecordIds)?  $default,) {final _that = this;
 switch (_that) {
 case _Appointment() when $default != null:
-return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.status,_that.patientName,_that.patientPhone,_that.patientEmail,_that.patientGender,_that.patientDob,_that.doctor,_that.clinic,_that.deletedAt);case _:
+return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.status,_that.patientName,_that.patientPhone,_that.patientEmail,_that.patientGender,_that.patientDob,_that.doctor,_that.clinic,_that.deletedAt,_that.attachedRecordIds);case _:
   return null;
 
 }
@@ -245,7 +246,7 @@ return $default(_that.id,_that.scheduleDate,_that.startTime,_that.endTime,_that.
 
 @JsonSerializable(explicitToJson: true)
 class _Appointment implements Appointment {
-  const _Appointment({required this.id, @JsonKey(name: 'schedule_date') required this.scheduleDate, @JsonKey(name: 'start_time') required this.startTime, @JsonKey(name: 'end_time') required this.endTime, this.status = 'pending', @JsonKey(name: 'patient_name') this.patientName = '', @JsonKey(name: 'patient_phone') this.patientPhone = '', @JsonKey(name: 'patient_email') this.patientEmail = '', @JsonKey(name: 'patient_gender') this.patientGender = 'Male', @JsonKey(name: 'patient_dob') this.patientDob = '', @JsonKey(name: 'doctors') this.doctor, @JsonKey(name: 'clinics') this.clinic, @JsonKey(name: 'deleted_at') this.deletedAt});
+  const _Appointment({required this.id, @JsonKey(name: 'schedule_date') required this.scheduleDate, @JsonKey(name: 'start_time') required this.startTime, @JsonKey(name: 'end_time') required this.endTime, this.status = 'pending', @JsonKey(name: 'patient_name') this.patientName = '', @JsonKey(name: 'patient_phone') this.patientPhone = '', @JsonKey(name: 'patient_email') this.patientEmail = '', @JsonKey(name: 'patient_gender') this.patientGender = 'Male', @JsonKey(name: 'patient_dob') this.patientDob = '', @JsonKey(name: 'doctors') this.doctor, @JsonKey(name: 'clinics') this.clinic, @JsonKey(name: 'deleted_at') this.deletedAt, @JsonKey(name: 'attached_record_ids') final  List<int> attachedRecordIds = const []}): _attachedRecordIds = attachedRecordIds;
   factory _Appointment.fromJson(Map<String, dynamic> json) => _$AppointmentFromJson(json);
 
 @override final  int id;
@@ -261,6 +262,13 @@ class _Appointment implements Appointment {
 @override@JsonKey(name: 'doctors') final  Doctor? doctor;
 @override@JsonKey(name: 'clinics') final  Clinic? clinic;
 @override@JsonKey(name: 'deleted_at') final  DateTime? deletedAt;
+ final  List<int> _attachedRecordIds;
+@override@JsonKey(name: 'attached_record_ids') List<int> get attachedRecordIds {
+  if (_attachedRecordIds is EqualUnmodifiableListView) return _attachedRecordIds;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_attachedRecordIds);
+}
+
 
 /// Create a copy of Appointment
 /// with the given fields replaced by the non-null parameter values.
@@ -275,16 +283,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Appointment&&(identical(other.id, id) || other.id == id)&&(identical(other.scheduleDate, scheduleDate) || other.scheduleDate == scheduleDate)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.status, status) || other.status == status)&&(identical(other.patientName, patientName) || other.patientName == patientName)&&(identical(other.patientPhone, patientPhone) || other.patientPhone == patientPhone)&&(identical(other.patientEmail, patientEmail) || other.patientEmail == patientEmail)&&(identical(other.patientGender, patientGender) || other.patientGender == patientGender)&&(identical(other.patientDob, patientDob) || other.patientDob == patientDob)&&(identical(other.doctor, doctor) || other.doctor == doctor)&&(identical(other.clinic, clinic) || other.clinic == clinic)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Appointment&&(identical(other.id, id) || other.id == id)&&(identical(other.scheduleDate, scheduleDate) || other.scheduleDate == scheduleDate)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.status, status) || other.status == status)&&(identical(other.patientName, patientName) || other.patientName == patientName)&&(identical(other.patientPhone, patientPhone) || other.patientPhone == patientPhone)&&(identical(other.patientEmail, patientEmail) || other.patientEmail == patientEmail)&&(identical(other.patientGender, patientGender) || other.patientGender == patientGender)&&(identical(other.patientDob, patientDob) || other.patientDob == patientDob)&&(identical(other.doctor, doctor) || other.doctor == doctor)&&(identical(other.clinic, clinic) || other.clinic == clinic)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt)&&const DeepCollectionEquality().equals(other._attachedRecordIds, _attachedRecordIds));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,scheduleDate,startTime,endTime,status,patientName,patientPhone,patientEmail,patientGender,patientDob,doctor,clinic,deletedAt);
+int get hashCode => Object.hash(runtimeType,id,scheduleDate,startTime,endTime,status,patientName,patientPhone,patientEmail,patientGender,patientDob,doctor,clinic,deletedAt,const DeepCollectionEquality().hash(_attachedRecordIds));
 
 @override
 String toString() {
-  return 'Appointment(id: $id, scheduleDate: $scheduleDate, startTime: $startTime, endTime: $endTime, status: $status, patientName: $patientName, patientPhone: $patientPhone, patientEmail: $patientEmail, patientGender: $patientGender, patientDob: $patientDob, doctor: $doctor, clinic: $clinic, deletedAt: $deletedAt)';
+  return 'Appointment(id: $id, scheduleDate: $scheduleDate, startTime: $startTime, endTime: $endTime, status: $status, patientName: $patientName, patientPhone: $patientPhone, patientEmail: $patientEmail, patientGender: $patientGender, patientDob: $patientDob, doctor: $doctor, clinic: $clinic, deletedAt: $deletedAt, attachedRecordIds: $attachedRecordIds)';
 }
 
 
@@ -295,7 +303,7 @@ abstract mixin class _$AppointmentCopyWith<$Res> implements $AppointmentCopyWith
   factory _$AppointmentCopyWith(_Appointment value, $Res Function(_Appointment) _then) = __$AppointmentCopyWithImpl;
 @override @useResult
 $Res call({
- int id,@JsonKey(name: 'schedule_date') String scheduleDate,@JsonKey(name: 'start_time') String startTime,@JsonKey(name: 'end_time') String endTime, String status,@JsonKey(name: 'patient_name') String patientName,@JsonKey(name: 'patient_phone') String patientPhone,@JsonKey(name: 'patient_email') String patientEmail,@JsonKey(name: 'patient_gender') String patientGender,@JsonKey(name: 'patient_dob') String patientDob,@JsonKey(name: 'doctors') Doctor? doctor,@JsonKey(name: 'clinics') Clinic? clinic,@JsonKey(name: 'deleted_at') DateTime? deletedAt
+ int id,@JsonKey(name: 'schedule_date') String scheduleDate,@JsonKey(name: 'start_time') String startTime,@JsonKey(name: 'end_time') String endTime, String status,@JsonKey(name: 'patient_name') String patientName,@JsonKey(name: 'patient_phone') String patientPhone,@JsonKey(name: 'patient_email') String patientEmail,@JsonKey(name: 'patient_gender') String patientGender,@JsonKey(name: 'patient_dob') String patientDob,@JsonKey(name: 'doctors') Doctor? doctor,@JsonKey(name: 'clinics') Clinic? clinic,@JsonKey(name: 'deleted_at') DateTime? deletedAt,@JsonKey(name: 'attached_record_ids') List<int> attachedRecordIds
 });
 
 
@@ -312,7 +320,7 @@ class __$AppointmentCopyWithImpl<$Res>
 
 /// Create a copy of Appointment
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? scheduleDate = null,Object? startTime = null,Object? endTime = null,Object? status = null,Object? patientName = null,Object? patientPhone = null,Object? patientEmail = null,Object? patientGender = null,Object? patientDob = null,Object? doctor = freezed,Object? clinic = freezed,Object? deletedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? scheduleDate = null,Object? startTime = null,Object? endTime = null,Object? status = null,Object? patientName = null,Object? patientPhone = null,Object? patientEmail = null,Object? patientGender = null,Object? patientDob = null,Object? doctor = freezed,Object? clinic = freezed,Object? deletedAt = freezed,Object? attachedRecordIds = null,}) {
   return _then(_Appointment(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,scheduleDate: null == scheduleDate ? _self.scheduleDate : scheduleDate // ignore: cast_nullable_to_non_nullable
@@ -327,7 +335,8 @@ as String,patientDob: null == patientDob ? _self.patientDob : patientDob // igno
 as String,doctor: freezed == doctor ? _self.doctor : doctor // ignore: cast_nullable_to_non_nullable
 as Doctor?,clinic: freezed == clinic ? _self.clinic : clinic // ignore: cast_nullable_to_non_nullable
 as Clinic?,deletedAt: freezed == deletedAt ? _self.deletedAt : deletedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,attachedRecordIds: null == attachedRecordIds ? _self._attachedRecordIds : attachedRecordIds // ignore: cast_nullable_to_non_nullable
+as List<int>,
   ));
 }
 

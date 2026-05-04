@@ -9,8 +9,10 @@ import '../doctors_notifier.dart';
 import '../widgets/smart_filter_bar.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../profile/presentation/profile_notifier.dart';
+import '../../../../presentation/widgets/animations/premium_list_animator.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../../../presentation/widgets/doctor_list_card_skeleton.dart';
 import '../../data/doctor_repository.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 
@@ -41,6 +43,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
 
   List<Map<String, dynamic>> _doctors = [];
   bool _isLoading = true;
+  bool _hasEverLoaded = false;
   String? _specialtyIconUrl;
   String _selectedFilter = "All";
   double? _activeRadiusKm;
@@ -53,7 +56,10 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
     _profileNotifier.addListener(_onStateChanged);
     if (_specialtyIconUrl == null) _fetchSpecialtyIcon();
     _searchController.addListener(_onSearchChanged);
-    _fetchData();
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _fetchData(forceRefresh: true);
+    });
   }
 
   @override
@@ -102,8 +108,13 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
 
   Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
     if (mounted) setState(() => _isLoading = true);
-    if (!_favNotifier.isLoaded) await _favNotifier.loadFavorites();
+    List<Map<String, dynamic>>? nextDoctors;
+
     try {
+      if (!_favNotifier.isLoaded) {
+        await _favNotifier.loadFavorites();
+      }
+
       final countryIso = _profileNotifier.profile?.countryIso;
 
       double? userLat;
@@ -133,15 +144,19 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
         userLng: userLng,
         forceRefresh: forceRefresh,
       );
-      if (mounted) {
-        setState(() {
-          _doctors = _applySortOverlay(rawDoctors, _selectedFilter);
-          _isLoading = false;
-        });
-      }
+      nextDoctors = _applySortOverlay(rawDoctors, _selectedFilter);
     } catch (e) {
       debugPrint('Specialty fetch error: $e');
-      if (mounted) setState(() => _isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (nextDoctors != null) {
+            _doctors = nextDoctors!;
+          }
+          _isLoading = false;
+          _hasEverLoaded = true;
+        });
+      }
     }
   }
 
@@ -235,7 +250,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: CustomSearchBar(
                             controller: _searchController,
-                            hintText: "Search ${widget.specialtyName}s...",
+                            hintText: "Search ${widget.specialtyName}${widget.specialtyName.endsWith('s') ? '' : 's'}...",
                             showClearIcon: _searchController.text.isNotEmpty,
                             onClear: () {
                               HapticFeedback.lightImpact();
@@ -399,7 +414,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                                             child: Text(
                                               _isLoading
                                                   ? "Searching..."
-                                                  : "${_doctors.length} Verified Specialists",
+                                                  : "${_doctors.length} Verified ${_doctors.length == 1 ? 'Specialist' : 'Specialists'}",
                                               style: const TextStyle(
                                                 color: AppColors.primaryGreen,
                                                 fontSize: 11,
@@ -422,7 +437,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                           top: safeArea,
                           left: 72,
                           right: 72,
-                          height: kToolbarHeight - 12,
+                          height: kToolbarHeight - 8,
                           child: IgnorePointer(
                             ignoring: miniHeaderOpacity == 0.0,
                             child: Opacity(
@@ -485,20 +500,28 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                             ),
                           ),
                         ),
+                        // THE FIX: Permanently fused to the glass! It will never detach on drag.
+                        if (_isLoading && _doctors.isNotEmpty)
+                          const Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: LinearProgressIndicator(
+                              color: AppColors.primaryGreen,
+                              minHeight: 2.0,
+                              backgroundColor: Colors.transparent,
+                            ),
+                          ),
                       ],
                     );
                   },
                 ),
               ),
 
-              if (_isLoading && _doctors.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryGreen,
-                    ),
-                  ),
+              if (_isLoading && !_hasEverLoaded && _doctors.isEmpty)
+                const DoctorListSkeletonSliver(
+                  padding: EdgeInsets.only(top: 20, bottom: 120),
+                  itemPadding: EdgeInsets.only(left: 24, right: 24, bottom: 16),
                 )
               else if (_doctors.isEmpty)
                 SliverToBoxAdapter(
@@ -506,7 +529,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                     height: 300,
                     child: Center(
                       child: Text(
-                        "No ${widget.specialtyName.toLowerCase()}s found.",
+                        "No ${widget.specialtyName.toLowerCase()}${widget.specialtyName.endsWith('s') ? '' : 's'} found.",
                         style: TextStyle(
                           color: isDark ? Colors.white54 : const Color(0xFF86868B),
                           fontSize: 16,
@@ -520,6 +543,10 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                 SliverPadding(
                   padding: const EdgeInsets.only(top: 20, bottom: 120),
                   sliver: SliverList(
+                    // THE FIX: The Intent Hash!
+                    key: ValueKey(
+                      'specialty_${widget.specialtyId}_${_selectedFilter}_${_searchController.text}',
+                    ),
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final doctor = _doctors[index];
                       final docId = int.tryParse(doctor['id'].toString()) ?? index;
@@ -527,18 +554,33 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                           doctor['specialties']?['name'] ??
                           widget.specialtyName;
 
-                      return Padding(
-                        padding: const EdgeInsets.only(
-                          left: 24,
-                          right: 24,
-                          bottom: 16,
-                        ),
-                        child: _SquishableDoctorCard(
-                          doctor: doctor,
-                          docId: docId,
-                          specialtyName: specialtyName,
-                          favNotifier: _favNotifier,
-                          heroTagPrefix: 'specialty-$docId-$index-',
+                      return PremiumListAnimator(
+                        index: index,
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            left: 24,
+                            right: 24,
+                            bottom: 16,
+                          ),
+                          child: DoctorListCard(
+                            id: docId,
+                            name: doctor['full_name'] ?? 'Unknown',
+                            specialty: " $specialtyName",
+                            rating: doctor['rating']?.toString() ?? '0.0',
+                            views: (doctor['views_count'] ?? 0).toString(),
+                            imageUrl: doctor['profile_picture_url'],
+                            isFavorite: _favNotifier.isFavorite(docId),
+                            heroTagPrefix: 'specialty-$docId-$index-',
+                            onFavoriteTap: () {
+                              _favNotifier.toggle(doctor);
+                            },
+                            onCardTap: () {
+                              context.push(
+                                AppRoutes.doctorDetailsById('$docId'),
+                                extra: doctor,
+                              );
+                            },
+                          ),
                         ),
                       );
                     }, childCount: _doctors.length),
@@ -547,64 +589,6 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SquishableDoctorCard extends StatefulWidget {
-  final Map<String, dynamic> doctor;
-  final int docId;
-  final String specialtyName;
-  final FavoritesNotifier favNotifier;
-  final String heroTagPrefix;
-
-  const _SquishableDoctorCard({
-    required this.doctor,
-    required this.docId,
-    required this.specialtyName,
-    required this.favNotifier,
-    required this.heroTagPrefix,
-  });
-
-  @override
-  State<_SquishableDoctorCard> createState() => _SquishableDoctorCardState();
-}
-
-class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
-  bool _isPressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) => setState(() => _isPressed = true),
-      onPointerUp: (_) => setState(() => _isPressed = false),
-      onPointerCancel: (_) => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOutCubic,
-        child: DoctorListCard(
-          id: widget.docId,
-          name: widget.doctor['full_name'] ?? 'Unknown',
-          specialty: " ${widget.specialtyName}",
-          rating: widget.doctor['rating']?.toString() ?? '0.0',
-          views: (widget.doctor['views_count'] ?? 0).toString(),
-          imageUrl: widget.doctor['profile_picture_url'],
-          isFavorite: widget.favNotifier.isFavorite(widget.docId),
-          heroTagPrefix: widget.heroTagPrefix,
-          onFavoriteTap: () {
-            HapticFeedback.selectionClick();
-            widget.favNotifier.toggle(widget.doctor);
-          },
-          onCardTap: () {
-            HapticFeedback.lightImpact();
-            context.push(
-              AppRoutes.doctorDetailsById('${widget.docId}'),
-              extra: widget.doctor,
-            );
-          },
-        ),
       ),
     );
   }

@@ -29,6 +29,11 @@ _Appointment _$AppointmentFromJson(Map<String, dynamic> json) => _Appointment(
       json['deleted_at'] == null
           ? null
           : DateTime.parse(json['deleted_at'] as String),
+  attachedRecordIds:
+      (json['attached_record_ids'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList() ??
+      const [],
 );
 
 Map<String, dynamic> _$AppointmentToJson(_Appointment instance) =>
@@ -46,4 +51,5 @@ Map<String, dynamic> _$AppointmentToJson(_Appointment instance) =>
       'doctors': instance.doctor?.toJson(),
       'clinics': instance.clinic?.toJson(),
       'deleted_at': instance.deletedAt?.toIso8601String(),
+      'attached_record_ids': instance.attachedRecordIds,
     };

@@ -3,6 +3,7 @@ import 'dart:ui'; // PRO FIX: Required for Frosted Glass ImageFilter
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pinput/pinput.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -400,7 +401,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
         final authenticated = await _biometricAuthService.authenticate(
           localizedReason:
-              "Verify your identity to link this device to your DaktarPai account",
+              "Verify your identity to link this device to your AeviaPulse account",
         );
 
         if (authenticated) {
@@ -587,9 +588,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                         }
 
                         final response = await _settingsRepository.enrollTotp(
-                          issuer: 'DaktarPai',
+                          issuer: 'AeviaPulse',
                           friendlyName:
-                              'DaktarPai (${_settingsRepository.currentUserEmail})',
+                              'AeviaPulse (${_settingsRepository.currentUserEmail})',
                         );
 
                         factorId = response.id;
@@ -1151,6 +1152,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               title: "Change Password",
               isUpdating: isDialogLoading,
               content: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   AppTextField(
                     controller: newPassController,
@@ -1342,46 +1344,17 @@ class _SettingsScreenState extends State<SettingsScreen>
     return Stack(
       children: [
         Scaffold(
+          extendBodyBehindAppBar: true,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          appBar: const CustomAppBar(title: "Settings"),
           // --- 📌 PRO FIX: Liquid Scroll & Frosted Glass Utility Header ---
           body: CustomScrollView(
             slivers: [
-              SliverAppBar(
-                pinned: true,
-                elevation: 0,
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85),
-                surfaceTintColor: Colors.transparent,
-                flexibleSpace: ClipRRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: Container(color: Colors.transparent),
-                  ),
-                ),
-                leadingWidth: 64,
-                leading: Center(
-                  child: InkWell(
-                    onTap: () => context.pop(),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.arrow_back_ios_new_rounded, color: context.colorTextDark, size: 18),
-                    ),
-                  ),
-                ),
-                centerTitle: true,
-                title: Text(
-                  "Settings",
-                  style: AppTextStyles.h3(context).copyWith(
-                    fontSize: 18,
-                    letterSpacing: 0.3,
-                  ),
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top + kToolbarHeight,
                 ),
               ),
-              
               // --- 📌 PRO FIX: Wrapped your perfectly built sections in a SliverPadding ---
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),

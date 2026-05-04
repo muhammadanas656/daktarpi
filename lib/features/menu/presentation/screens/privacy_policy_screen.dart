@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -8,22 +9,16 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(
-          "Privacy Policy",
-          style: TextStyle(
-            color: context.colorTextDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: BackButton(color: context.colorTextDark),
-      ),
+      appBar: const CustomAppBar(title: "Privacy Policy"),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+          20,
+          20,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -68,7 +63,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             _buildSection(
               context,
               "6. Contact Us",
-              "If you have any questions about this Privacy Policy, please contact us at privacy@daktarpai.com.",
+              "If you have any questions about this Privacy Policy, please contact us at privacy@aeviapulse.com.",
             ),
 
             SizedBox(height: 40),

@@ -29,6 +29,7 @@ import '../models/booking_route_args.dart';
 import '../../../../presentation/widgets/complaint_dialog.dart';
 import '../../../menu/presentation/widgets/review_dialog.dart';
 import '../../../../core/network/network_notifier.dart';
+import '../../../../features/medical_records/data/medical_record_repository.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
   final bool isBackgroundLayer;
@@ -43,6 +44,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   final Uuid _uuid = const Uuid();
   final _appointmentNotifier = AppointmentNotifier.instance;
   AppointmentsRouteArgs? _lastProcessedArgs;
+  bool _hasEverLoaded = false;
 
   @override
   void initState() {
@@ -77,7 +79,16 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   }
 
   void _onNotifierChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      // PRO FIX: Mark as loaded once any data arrives
+      if (!_hasEverLoaded && _appointmentNotifier.appointments.isNotEmpty) {
+        _hasEverLoaded = true;
+      }
+      if (!_hasEverLoaded && !_appointmentNotifier.isLoading) {
+        _hasEverLoaded = true; // Even empty result = loaded
+      }
+      setState(() {});
+    }
   }
 
   @override
@@ -96,20 +107,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   }
 
   // --- CARD ACTION LOGIC ---
-  Future<void> _completeAppointment(int id) async {
-    try {
-      await _appointmentNotifier.completeAppointment(id);
-      await AppointmentNotificationService.instance.cancelReminder(id);
-      if (mounted) {
-        CustomSnackbar.showSuccess(context, "Appointment marked as completed");
-      }
-    } catch (e) {
-      if (mounted) {
-        CustomSnackbar.showError(context, "Could not complete appointment.");
-      }
-    }
-  }
-
   Future<void> _handleReschedule(Map<String, dynamic> appointment) async {
     final doctor = appointment['doctors'];
     final clinic = appointment['clinics'];
@@ -142,22 +139,124 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
   void _confirmCancellation(Map<String, dynamic> appointment) {
     HapticFeedback.mediumImpact();
+
+    final List<String> reasons = [
+      "Schedule conflict",
+      "Found earlier appointment",
+      "Feeling better",
+      "Cost / Financial reasons",
+      "Other",
+    ];
+    final otherController = TextEditingController();
+
     showDialog(
       context: context,
       useRootNavigator: true,
       barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (dialogCtx) {
         bool isCancelling = false;
+        String? selectedReason;
+
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final isOther = selectedReason == "Other";
+
             return AppFloatingDialog(
               headerIcon: Icons.event_busy_rounded,
               iconColor: AppColors.dangerRed,
               title: "Cancel Appointment?",
-              description:
-                  "Are you sure you want to cancel? This action cannot be undone.",
+              description: "Please let us know why you are canceling.",
               isUpdating: isCancelling,
-              content: const SizedBox.shrink(),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...reasons.map(
+                    (reason) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: InkWell(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setDialogState(() => selectedReason = reason);
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selectedReason == reason
+                                ? AppColors.primaryGreen.withOpacity(0.1)
+                                : (isDark
+                                    ? Colors.white12
+                                    : Colors.black.withOpacity(0.04)),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: selectedReason == reason
+                                  ? AppColors.primaryGreen
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selectedReason == reason
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_off,
+                                color: selectedReason == reason
+                                    ? AppColors.primaryGreen
+                                    : Colors.grey,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  reason,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDark
+                                        ? Colors.white
+                                        : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (isOther) ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: otherController,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: "Briefly explain...",
+                        hintStyle: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                        filled: true,
+                        fillColor: isDark ? Colors.black26 : Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               actions: Row(
                 children: [
                   Expanded(
@@ -176,41 +275,50 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: PrimaryButton(
-                      label: "Yes, Cancel",
-                      backgroundColor: AppColors.dangerRed,
-                      onTap:
-                          isCancelling
-                              ? () {}
-                              : () async {
-                                setDialogState(() => isCancelling = true);
-                                try {
-                                  await _appointmentNotifier.cancelAppointment(
-                                    appointment['id'],
-                                  );
-                                  await AppointmentNotificationService.instance
-                                      .cancelReminder(appointment['id']);
-                                  if (dialogCtx.mounted) {
-                                    Navigator.pop(dialogCtx);
-                                  }
-                                  if (mounted) {
-                                    CustomSnackbar.showSuccess(
-                                      context,
-                                      "Appointment Cancelled",
-                                    );
-                                  }
-                                } catch (e) {
-                                  if (mounted) {
-                                    CustomSnackbar.showError(
-                                      context,
-                                      "Failed to cancel.",
-                                    );
-                                  }
-                                } finally {
-                                  if (ctx.mounted) {
-                                    setDialogState(() => isCancelling = false);
-                                  }
+                      label: "Confirm",
+                      backgroundColor: selectedReason == null
+                          ? Colors.grey
+                          : AppColors.dangerRed,
+                      onTap: isCancelling || selectedReason == null
+                          ? () {}
+                          : () async {
+                              final finalReason = isOther
+                                  ? otherController.text.trim()
+                                  : selectedReason!;
+                              final reasonToSend = finalReason.isEmpty
+                                  ? "Other"
+                                  : finalReason;
+
+                              setDialogState(() => isCancelling = true);
+                              try {
+                                await _appointmentNotifier.cancelAppointment(
+                                  appointment['id'],
+                                  reasonToSend,
+                                );
+                                await AppointmentNotificationService.instance
+                                    .cancelReminder(appointment['id']);
+                                if (dialogCtx.mounted) {
+                                  Navigator.pop(dialogCtx);
                                 }
-                              },
+                                if (mounted) {
+                                  CustomSnackbar.showSuccess(
+                                    context,
+                                    "Appointment Cancelled",
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  CustomSnackbar.showError(
+                                    context,
+                                    "Failed to cancel.",
+                                  );
+                                }
+                              } finally {
+                                if (ctx.mounted) {
+                                  setDialogState(() => isCancelling = false);
+                                }
+                              }
+                            },
                     ),
                   ),
                 ],
@@ -219,7 +327,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           },
         );
       },
-    );
+    ).whenComplete(otherController.dispose);
   }
 
   void _addToCalendar(Map<String, dynamic> appointment) {
@@ -234,7 +342,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
       final event = Event(
         title: 'Appointment with $doctorName',
-        description: 'Medical appointment booked via DaktarPai.',
+        description: 'Medical appointment booked via AeviaPulse.',
         location: appointment['clinics']?['name'] ?? 'Clinic',
         startDate: startDateTime,
         endDate: endDateTime,
@@ -251,19 +359,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
       final startTimeStr = appointment['start_time'].toString();
       final startDateTime = DateTime.parse('$dateStr $startTimeStr');
       return startDateTime.difference(DateTime.now()).inHours >= 4;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  bool _canComplete(Map<String, dynamic> appointment) {
-    try {
-      final dateStr = appointment['schedule_date'].toString().split('T')[0];
-      final startTimeStr = appointment['start_time'].toString();
-      final startDateTime = DateTime.parse('$dateStr $startTimeStr');
-      return DateTime.now().isAfter(
-        startDateTime.add(const Duration(minutes: 30)),
-      );
     } catch (e) {
       return false;
     }
@@ -630,7 +725,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                                                   await getTemporaryDirectory();
                                               final file =
                                                   await File(
-                                                    '${directory.path}/DaktarPai_$bookingId.png',
+                                                    '${directory.path}/AeviaPulse_$bookingId.png',
                                                   ).create();
                                               await file.writeAsBytes(pngBytes);
                                               await SharePlus.instance.share(
@@ -907,6 +1002,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               child: ClipRect(
                 child:
                     (_appointmentNotifier.isLoading &&
+                            !_hasEverLoaded &&
                             _appointmentNotifier.appointments.isEmpty)
                         ? const Center(
                           child: AppLoader(color: AppColors.primaryGreen),
@@ -1023,7 +1119,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       startTime: apt['start_time'],
                       maxWaitTime: waitTime,
                       canCancel: _canCancel(apt),
-                      canComplete: _canComplete(apt),
                       onReceiptTap: () => _showReceiptDialog(apt),
                       onCalendarTap: () => _addToCalendar(apt),
                       onRescheduleTap: () => _handleReschedule(apt),
@@ -1037,7 +1132,15 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           );
                         }
                       },
-                      onCompleteTap: () => _completeAppointment(apt['id']),
+                      onLocationTap: () {
+                        final docId = doctor['id'];
+                        if (docId != null) {
+                          context.push(
+                            AppRoutes.doctorDetailsById('$docId') + '?scrollToMap=true',
+                            extra: doctor,
+                          );
+                        }
+                      },
                     ),
                   );
                 },

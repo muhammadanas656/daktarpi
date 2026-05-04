@@ -29,6 +29,7 @@ class AppTextField extends StatelessWidget {
   final TextCapitalization textCapitalization;
   final TextAlign textAlign;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
 
   // PRO FIX: Styling overrides to allow seamless blending in Search Bars
   final Color? fillColor;
@@ -61,6 +62,7 @@ class AppTextField extends StatelessWidget {
     this.textCapitalization = TextCapitalization.none,
     this.textAlign = TextAlign.start,
     this.onChanged,
+    this.focusNode,
   });
 
   @override
@@ -73,8 +75,8 @@ class AppTextField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label != null) ...[
-          RichText(
-            text: TextSpan(
+          Text.rich(
+            TextSpan(
               text: label!.replaceAll('*', ''),
               style: TextStyle(
                 fontSize: 15,
@@ -114,6 +116,7 @@ class AppTextField extends StatelessWidget {
           child: Center(
             child: TextField(
               controller: controller,
+              focusNode: focusNode,
               keyboardType:
                   keyboardType ??
                   (isPhone
@@ -136,6 +139,7 @@ class AppTextField extends StatelessWidget {
                   singleLine ? TextAlignVertical.center : TextAlignVertical.top,
               cursorColor: AppColors.primaryGreen,
               style: TextStyle(
+                fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
                 // PRO FIX: Adaptive text contrast inside the field
@@ -145,6 +149,8 @@ class AppTextField extends StatelessWidget {
               decoration: InputDecoration(
                 hintText: hintText,
                 hintStyle: TextStyle(
+                  fontFamily:
+                      Theme.of(context).textTheme.bodyMedium?.fontFamily,
                   fontSize: 15,
                   fontWeight: FontWeight.w400,
                   color: isDark ? Colors.white54 : context.colorTextGrey,

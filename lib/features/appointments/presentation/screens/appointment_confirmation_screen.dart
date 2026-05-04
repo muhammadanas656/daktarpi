@@ -11,6 +11,9 @@ import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import 'package:intl/intl.dart';
 import '../models/booking_route_args.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
+import '../../../../core/router/app_router.dart';
+import '../../../../presentation/widgets/app_bottom_tray.dart';
 
 class AppointmentConfirmationScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
@@ -67,6 +70,7 @@ class _AppointmentConfirmationScreenState
     super.initState();
     _focusedDate = widget.initialDate;
     _selectedDate = widget.initialDate;
+
     _fetchSchedulesAndBookings();
     _setupRealtimeSubscription(); // PRO FIX: Boot up the live listener!
   }
@@ -288,44 +292,84 @@ class _AppointmentConfirmationScreenState
     final isReschedule = widget.appointmentId != null;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      backgroundColor: context.colorBg,
+      appBar: CustomAppBar(
+        title: isReschedule ? "Reschedule" : "Appointment",
+      ),
       body: Container(
         decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(isReschedule),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!isReschedule) ...[
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+                  24,
+                  120 + MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!isReschedule) ...[
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.center, // PRO FIX: Synced alignment
                           children: [
                             Text(
                               "Step 2/2",
                               style: TextStyle(
                                 fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700, // PRO FIX: Synced from w600 to w700
                                 color: textDark,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 16), // PRO FIX: Synced from 12px to 16px
                             Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: 1.0,
-                                  backgroundColor: primaryGreen.withValues(alpha: 0.1),
-                                  valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
-                                  minHeight: 6,
+                              child: Container(
+                                height: 6, 
+                                decoration: BoxDecoration(
+                                  color: primaryGreen.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Builder(
+                                  builder: (context) {
+                                    // PRO FIX: Slave to the page transition!
+                                    final route = ModalRoute.of(context);
+                                    final animation = route?.animation ?? const AlwaysStoppedAnimation(1.0);
+                                    
+                                    return AnimatedBuilder(
+                                      animation: animation,
+                                      builder: (context, child) {
+                                        final curve = Curves.fastOutSlowIn.transform(animation.value);
+                                        return FractionallySizedBox(
+                                          alignment: Alignment.centerLeft,
+                                          // As the page slides in, it goes 0.5 -> 1.0. As it slides out, it shrinks 1.0 -> 0.5!
+                                          widthFactor: 0.5 + (0.5 * curve), 
+                                          child: child,
+                                        );
+                                      },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: primaryGreen,
+                                          borderRadius: BorderRadius.circular(4),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: primaryGreen.withValues(alpha: 0.3),
+                                              blurRadius: 4, 
+                                              offset: const Offset(0, 2),
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 32),
                       ],
                       _buildCalendar(),
                       const SizedBox(height: 24),
@@ -352,51 +396,63 @@ class _AppointmentConfirmationScreenState
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-      bottomNavigationBar: _buildBottomButton(),
-    );
-  }
-
-  Widget _buildAppBar(bool isReschedule) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          InkWell(
-            onTap: () => context.pop(),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(12)),
-              child: Icon(Icons.arrow_back_ios_new, size: 18, color: textDark),
-            ),
-          ),
-          Text(
-            isReschedule ? "Reschedule" : "Appointment",
-            style: AppTextStyles.h3(context).copyWith(fontSize: 20),
-          ),
-          const SizedBox(width: 44),
-        ],
+      bottomNavigationBar: AppBottomTray(
+        child: PrimaryButton(
+          label: widget.appointmentId != null ? "Update Appointment" : "Confirm",
+          onTap: _handleConfirm,
+          isLoading: _isLoading,
+          borderRadius: 16,
+          height: 54,
+        ),
       ),
     );
   }
 
   Widget _buildCalendar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // 1. Clean, precise Calendar Math (Monday = 1, Sunday = 7)
+    final firstDayOffset = DateTime(_focusedDate.year, _focusedDate.month, 1).weekday - 1;
+    final daysInMonth = DateUtils.getDaysInMonth(_focusedDate.year, _focusedDate.month);
+    final totalCells = firstDayOffset + daysInMonth;
+
     return Container(
-      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
-      child: Column(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 32,
+            offset: const Offset(0, 12),
+          ),
+        ],
+        border: Border.all(
+          color: isDark
+              ? AppColors.darkBorder
+              : Colors.black.withValues(alpha: 0.08),
+          width: 1.5,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30.5),
+        child: Column(
+        mainAxisSize: MainAxisSize.min, // THE FIX: Prevents the container from ballooning vertically
         children: [
+          // --- MONTH & YEAR HEADER ---
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
               color: primaryGreen,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -415,7 +471,7 @@ class _AppointmentConfirmationScreenState
                       onTap: () => setState(() => _focusedDate = DateTime(_focusedDate.year, _focusedDate.month - 1)),
                       child: const Icon(Icons.chevron_left, color: Colors.white),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 24),
                     InkWell(
                       onTap: () => setState(() => _focusedDate = DateTime(_focusedDate.year, _focusedDate.month + 1)),
                       child: const Icon(Icons.chevron_right, color: Colors.white),
@@ -425,28 +481,66 @@ class _AppointmentConfirmationScreenState
               ],
             ),
           ),
+          
+          // --- THE FIX: PREMIUM WEEKDAY HEADERS (Removes the illusion of a gap) ---
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.only(top: 20, left: 16, right: 16, bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) {
+                return Expanded(
+                  child: Center(
+                    child: Text(
+                      day,
+                      style: TextStyle(
+                        color: textGrey,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          // --- PERFECTLY ALIGNED DATE GRID ---
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20), // THE FIX: Zero top padding to pull the grid flush
             child: GridView.builder(
               shrinkWrap: true,
+              padding: EdgeInsets.zero,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 7,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
+                childAspectRatio: 1.0, // Ensures perfect circular hitboxes
               ),
-              itemCount: DateUtils.getDaysInMonth(_focusedDate.year, _focusedDate.month) +
-                  DateTime(_focusedDate.year, _focusedDate.month, 1).weekday - 1,
+              itemCount: totalCells,
               itemBuilder: (context, index) {
-                if (index < DateTime(_focusedDate.year, _focusedDate.month, 1).weekday - 1) {
-                  return const SizedBox();
+                
+                // Render the empty gaps before the 1st of the month
+                if (index < firstDayOffset) {
+                  return const SizedBox.shrink(); // Safer than an empty SizedBox
                 }
 
-                final day = index - (DateTime(_focusedDate.year, _focusedDate.month, 1).weekday - 1) + 1;
+                // Render the actual days
+                final day = index - firstDayOffset + 1;
                 final date = DateTime(_focusedDate.year, _focusedDate.month, day);
                 final isSelected = DateUtils.isSameDay(date, _selectedDate);
                 final today = DateUtils.dateOnly(DateTime.now());
                 final isPastDate = date.isBefore(today);
+
+                // THE FIX: True Context-Aware Dimming
+                // Instead of a static grey, we use a hyper-dimmed version of the surface text
+                final dimColor = isDark 
+                    ? Colors.white.withValues(alpha: 0.15) 
+                    : Colors.black.withValues(alpha: 0.15);
+                
+                final textColor = isPastDate 
+                    ? dimColor 
+                    : (isSelected ? Colors.white : textDark);
 
                 return InkWell(
                   onTap: isPastDate ? null : () {
@@ -454,7 +548,8 @@ class _AppointmentConfirmationScreenState
                     _fetchSchedulesAndBookings();
                   },
                   borderRadius: BorderRadius.circular(20),
-                  child: Container(
+                  child: AnimatedContainer( 
+                    duration: const Duration(milliseconds: 200),
                     decoration: BoxDecoration(
                       color: isSelected ? primaryGreen : Colors.transparent,
                       shape: BoxShape.circle,
@@ -463,8 +558,9 @@ class _AppointmentConfirmationScreenState
                       child: Text(
                         "$day",
                         style: TextStyle(
-                          color: isPastDate ? Colors.grey[300] : (isSelected ? Colors.white : textDark),
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: textColor,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -475,6 +571,7 @@ class _AppointmentConfirmationScreenState
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -483,88 +580,98 @@ class _AppointmentConfirmationScreenState
     int selectedIndex,
     Function(int) onTap,
   ) {
-    return SingleChildScrollView(
-      clipBehavior: Clip.none, 
-      padding: const EdgeInsets.only(bottom: 15), 
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(slots.length, (index) {
-          final slotData = slots[index];
-          final isSelected = selectedIndex == index;
-          final isFull = slotData['isFull'] == true;
-          final spotsLeft = slotData['spotsLeft'] as int;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-          return Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Opacity(
-              opacity: isFull ? 0.5 : 1.0,
-              child: GestureDetector(
-                onTap: isFull ? null : () => onTap(index),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 90, 
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: isSelected ? primaryGreen : Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: isSelected ? null : Border.all(color: borderColor),
-                    boxShadow: isSelected
-                        ? AppStyles.primaryShadow(context, primaryGreen)
-                        : (isFull ? null : AppStyles.cardShadow(context)),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _formatSlotDisplay(slotData['time']),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : (isFull ? textGrey : primaryGreen),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+    return SizedBox(
+      height: 96,
+      
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          // Removed the deep internal padding so the chips utilize the full width
+          padding: const EdgeInsets.only(bottom: 16), 
+          itemCount: slots.length,
+          itemBuilder: (context, index) {
+            final slotData = slots[index];
+            final isSelected = selectedIndex == index;
+            final isFull = slotData['isFull'] == true;
+            final spotsLeft = slotData['spotsLeft'] as int;
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Opacity(
+                opacity: isFull ? 0.5 : 1.0,
+                child: GestureDetector(
+                  onTap: isFull ? null : () => onTap(index),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.fastOutSlowIn,
+                    width: 90,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? primaryGreen
+                          : (isDark
+                              ? Colors.white10
+                              : const Color(0xFFF5F6F8)),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: primaryGreen.withValues(alpha: 0.3),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
+                              ),
+                            ]
+                          : [],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _formatSlotDisplay(slotData['time']),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.body(context).fontFamily,
+                            color: isSelected
+                                ? Colors.white
+                                : (isFull ? textGrey : primaryGreen),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isFull ? "Full" : "$spotsLeft spot${spotsLeft > 1 ? 's' : ''}",
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: isSelected || isFull ? FontWeight.w600 : FontWeight.w500,
-                          color: isSelected 
-                              ? Colors.white.withValues(alpha: 0.9) 
-                              : (isFull ? AppColors.dangerRed : textLight),
+                        const SizedBox(height: 4),
+                        Text(
+                          isFull
+                              ? "Full"
+                              : "$spotsLeft spot${spotsLeft > 1 ? 's' : ''}",
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.body(context).fontFamily,
+                            fontSize: 10,
+                            fontWeight:
+                                isSelected || isFull
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                            color: isSelected
+                                ? Colors.white.withValues(alpha: 0.9)
+                                : (isFull
+                                    ? AppColors.dangerRed
+                                    : textLight),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }),
-      ),
+            );
+          },
+        ),
+      
     );
   }
 
-  Widget _buildBottomButton() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(top: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkBorder : const Color(0xFFF0F0F0))),
-      ),
-      child: SafeArea(
-        top: false,
-        child: PrimaryButton(
-          label: widget.appointmentId != null ? "Update Appointment" : "Confirm",
-          onTap: _handleConfirm,
-          isLoading: _isLoading,
-          height: 54,
-          borderRadius: 16,
-        ),
-      ),
-    );
-  }
+
 
   TimeOfDay _parseTime(String s) {
     final p = s.split(':');

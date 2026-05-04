@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/constants/legal_text.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 
 class TermsOfServiceScreen extends StatelessWidget {
   const TermsOfServiceScreen({super.key});
@@ -12,23 +13,17 @@ class TermsOfServiceScreen extends StatelessWidget {
     final List<String> sections = LegalText.termsOfService.split('## ');
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(
-          "Terms of Service",
-          style: TextStyle(
-            color: context.colorTextDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: BackButton(color: context.colorTextDark),
-      ),
+      appBar: const CustomAppBar(title: "Terms of Service"),
       body: Scrollbar(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(20),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+            20,
+            20,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children:

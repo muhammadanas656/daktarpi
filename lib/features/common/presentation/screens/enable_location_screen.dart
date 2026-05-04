@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 
 class EnableLocationScreen extends StatefulWidget {
   const EnableLocationScreen({super.key});
@@ -57,41 +58,15 @@ class _EnableLocationScreenState extends State<EnableLocationScreen>
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Scaffold(
+        extendBodyBehindAppBar: true,
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: InkWell(
-            onTap: () {
-              if (context.canPop()) {
-                context.pop(false); // Return false if user cancelled
-              }
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              margin: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: isDark ? Colors.white12 : Colors.grey.shade200),
-              ),
-              child: Icon(
-                Icons.arrow_back_ios_new,
-                size: 18,
-                color: context.colorTextDark,
-              ),
-            ),
-          ),
-          title: Text(
-            "Enable Location Services",
-            style: TextStyle(
-              color: context.colorTextDark,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          centerTitle: true,
+        appBar: CustomAppBar(
+          title: "Enable Location Services",
+          onBackPressed: () {
+            if (context.canPop()) {
+              context.pop(false);
+            }
+          },
         ),
         body: SafeArea(
           child: Padding(

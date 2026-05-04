@@ -12,12 +12,12 @@ It is intended to answer both of these questions in one place:
 1. Where does this code live right now?
 2. Which part of the app currently owns this behavior?
 
-Last reconciled: April 16, 2026.
+Last reconciled: April 28, 2026.
 
 Ground rules for this file:
 - The structure snapshot is based on the current on-disk workspace, not only git-tracked files.
 - Empty placeholder directories are included when they currently exist in the repo, such as `assets/fonts/`, `lib/services/`, `supabase/functions/delete-user/`, and `supabase/snippets/`.
-- Transient local/build artifacts are intentionally excluded: `.git/`, `.dart_tool/`, `build/`, `.idea/`, `.env`, `.flutter-plugins*`, `*.iml`, `local.properties`, and Flutter crash/analyzer log files.
+- Transient local/build artifacts are intentionally excluded: `.git/`, `.dart_tool/`, `build/`, `.idea/`, `.env`, `.flutter-plugins*`, `*.iml`, `local.properties`, Android Gradle/CMake intermediates such as `android/.gradle/` and `android/app/.cxx/`, platform `Flutter/ephemeral/` folders, Flutter crash/analyzer log files, and generated Flutter screenshot dumps.
 - Generated platform files currently present under Flutter runner folders are included when they participate in the current build surface.
 - Root-level helper, patch, recovery, and diagnostic artifacts currently kept in the workspace are included because they are part of the practical codebase context today.
 
@@ -285,12 +285,17 @@ Current ownership:
 - banner/header composition
 - specialties row
 - curated doctor highlights
+- declarative entrance/stagger animation orchestration for the home surface
 
 User-facing surfaces:
 - home banners
 - specialties carousel/row
 - featured doctors preview
 - popular doctors preview
+
+Current implementation notes:
+- `presentation/screens/home_screen.dart` now uses `flutter_animate` for the header entrance instead of screen-owned ticker controllers.
+- Staggered arrival for home preview items is owned by `home_specialties_row.dart`, `home_popular_doctor_card.dart`, and `home_featured_doctor_card.dart` via widget-level `index` delays.
 
 Directory contents:
 - `data/home_repository.dart`
@@ -445,8 +450,8 @@ This directory owns app-wide infrastructure:
 - `security/`: biometrics, device integrity, inactivity lock, and step-up auth
 - `services/`: notifications, FCM, and error telemetry
 - `theme/`: colors, typography, dimensions, shapes, styles, motion, and themes
-- `utils/`: route/security formatting helpers and small shared utilities
-- `widgets/`: app-wide UI helpers such as loaders, cards, route-error screens, and error fallbacks
+- `utils/`: route/security formatting helpers, list fingerprinting helpers, and small shared utilities
+- `widgets/`: app-wide UI helpers such as loaders, background-sync indicators, cards, route-error screens, and error fallbacks
 
 ### 5.2 `lib/presentation/widgets/`
 
@@ -454,6 +459,7 @@ This is the shared UI primitive layer used across features.
 
 Tracked shared widgets and sublayers:
 - `animations/dynamic_glass_shelf_delegate.dart`
+- `animations/premium_list_animator.dart`
 - `physics/app_scroll_behavior.dart`
 - `app_floating_dialog.dart`
 - `app_network_image.dart`
@@ -465,6 +471,7 @@ Tracked shared widgets and sublayers:
 - `custom_snackbar.dart`
 - `custom_text_field.dart`
 - `doctor_list_card.dart`
+- `doctor_list_card_skeleton.dart`
 - `featured_doctor_card.dart`
 - `home_featured_doctor_card.dart`
 - `home_popular_doctor_card.dart`
@@ -575,8 +582,9 @@ These contain the expected runner/config/generated-plugin files for each platfor
 ### 6.7 Workspace Helper / Diagnostic Artifacts
 
 Current root-level helper and investigation surface includes:
-- Patch/fix scripts: `fix_dock.dart`, `fix_dock2.dart`, `fix_home.dart`, `patch_approute_fix.dart`, `patch_doctors_decoding.dart`, `patch_encode.dart`, `patch_facility_sort.dart`, `patch_filter_location.dart`, `patch_home_decoding.dart`, `patch_main_precache.dart`, `patch_network_stagger.dart`, `patch_splash_handoff.dart`, `patch_splash_lottie.dart`, `patch_sync.dart`
+- Patch/fix scripts: `fix_add_record.py`, `fix_appbar.dart`, `fix_dock.dart`, `fix_dock2.dart`, `fix_home.dart`, `fix_medical.py`, `fix_notifications.py`, `fix_settings.py`, `patch_approute_fix.dart`, `patch_compilation.py`, `patch_discovery.py`, `patch_doctors_decoding.dart`, `patch_encode.dart`, `patch_facility_sort.dart`, `patch_filter_location.dart`, `patch_home.py`, `patch_home_decoding.dart`, `patch_main_precache.dart`, `patch_network_stagger.dart`, `patch_specialty.py`, `patch_splash_handoff.dart`, `patch_splash_lottie.dart`, `patch_sync.dart`, `replace_all_appbars.dart`, `replace_appbars.py`
 - Temporary helpers: `tmp_resize.dart`, `tmp_wrapper.dart`, `tmp/update_clinic.py`, `tmp/update_specialty.py`
+- Local scratch harnesses: `test_cropper.dart`, `test_cropper2.dart`
 - Diagnostics/recovery artifacts: `.gemini_diff_left.txt`, `.gemini_git_status.txt`, `.gemini_utf8.txt`, `analyze.txt`, `analyze_out.txt`, `analyze_utf8.txt`, `errors.txt`, `missing_methods.dart`, `restored_doctor_repo.dart`, `temp_diff.txt`, `wrapper_diff.txt`, `wrapper_diff_history.txt`, `wrapper_log.txt`
 
 These are part of the current workspace snapshot and therefore intentionally appear in the tree below.
@@ -803,15 +811,16 @@ daktarpi/
 |   |   |   \-- app_theme.dart
 |   |   |-- utils/
 |   |   |   |-- backup_code_formatter.dart
+|   |   |   |-- list_fingerprint_ext.dart
 |   |   |   |-- navigation_helper.dart
 |   |   |   \-- security_formatters.dart
 |   |   \-- widgets/
 |   |       |-- app_error_fallback.dart
 |   |       |-- app_loader.dart
+|   |       |-- background_sync_indicator.dart
 |   |       |-- custom_app_bar.dart
 |   |       |-- custom_card.dart
 |   |       |-- empty_state_widget.dart
-|   |       |-- premium_app_loader.dart
 |   |       \-- route_error_screen.dart
 |   |-- data/
 |   |   \-- services/
@@ -968,7 +977,8 @@ daktarpi/
 |   |-- presentation/
 |   |   \-- widgets/
 |   |       |-- animations/
-|   |       |   \-- dynamic_glass_shelf_delegate.dart
+|   |       |   |-- dynamic_glass_shelf_delegate.dart
+|   |       |   \-- premium_list_animator.dart
 |   |       |-- physics/
 |   |       |   \-- app_scroll_behavior.dart
 |   |       |-- app_floating_dialog.dart
@@ -981,6 +991,7 @@ daktarpi/
 |   |       |-- custom_snackbar.dart
 |   |       |-- custom_text_field.dart
 |   |       |-- doctor_list_card.dart
+|   |       |-- doctor_list_card_skeleton.dart
 |   |       |-- featured_doctor_card.dart
 |   |       |-- home_featured_doctor_card.dart
 |   |       |-- home_popular_doctor_card.dart
@@ -1150,27 +1161,40 @@ daktarpi/
 |-- analyze_utf8.txt
 |-- errors.txt
 |-- firebase.json
+|-- fix_add_record.py
+|-- fix_appbar.dart
 |-- fix_dock.dart
 |-- fix_dock2.dart
 |-- fix_home.dart
+|-- fix_medical.py
+|-- fix_notifications.py
+|-- fix_settings.py
 |-- missing_methods.dart
 |-- patch_approute_fix.dart
+|-- patch_compilation.py
+|-- patch_discovery.py
 |-- patch_doctors_decoding.dart
 |-- patch_encode.dart
 |-- patch_facility_sort.dart
 |-- patch_filter_location.dart
+|-- patch_home.py
 |-- patch_home_decoding.dart
 |-- patch_main_precache.dart
 |-- patch_network_stagger.dart
+|-- patch_specialty.py
 |-- patch_splash_handoff.dart
 |-- patch_splash_lottie.dart
 |-- patch_sync.dart
 |-- pubspec.lock
 |-- pubspec.yaml
 |-- README.md
+|-- replace_all_appbars.dart
+|-- replace_appbars.py
 |-- restored_doctor_repo.dart
 |-- supabase_add_country_iso.sql
 |-- temp_diff.txt
+|-- test_cropper.dart
+|-- test_cropper2.dart
 |-- tmp_resize.dart
 |-- tmp_wrapper.dart
 |-- wrapper_diff.txt

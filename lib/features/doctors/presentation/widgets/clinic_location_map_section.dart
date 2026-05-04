@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:map_launcher/map_launcher.dart' as map_launcher;
 
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -11,6 +12,7 @@ import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/widgets/app_loader.dart';
 import '../../../../core/utils/navigation_helper.dart';
+import '../../../../presentation/widgets/app_floating_dialog.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../data/route_repository.dart';
 
@@ -297,6 +299,51 @@ class _ClinicLocationMapSectionState extends State<ClinicLocationMapSection> {
       title: title,
     );
   }
+
+  Future<void> _openPreferredMap({
+    required map_launcher.MapType mapType,
+    required LatLng clinicPoint,
+    required String title,
+  }) async {
+    try {
+      final availableMaps = await map_launcher.MapLauncher.installedMaps;
+      map_launcher.AvailableMap? selectedMap;
+
+      for (final map in availableMaps) {
+        if (map.mapType == mapType) {
+          selectedMap = map;
+          break;
+        }
+      }
+
+      if (selectedMap != null) {
+        await selectedMap.showDirections(
+          destination: map_launcher.Coords(
+            clinicPoint.latitude,
+            clinicPoint.longitude,
+          ),
+          destinationTitle: title,
+          directionsMode: map_launcher.DirectionsMode.driving,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+
+      await NavigationHelper.showMapOptions(
+        context: context,
+        latitude: clinicPoint.latitude,
+        longitude: clinicPoint.longitude,
+        title: title,
+      );
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showError(context, "Error launching maps: $e");
+      }
+    }
+  }
+
+  
 
   Future<void> _launchInAppDirection() async {
     _closeMenu();

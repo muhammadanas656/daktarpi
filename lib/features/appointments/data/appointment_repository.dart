@@ -24,6 +24,22 @@ class AppointmentRepository {
     return await Hive.openBox(_cacheBoxName);
   }
 
+  Future<void> _invalidateCaches(String userId) async {
+    final box = await _getCacheBox();
+    await box.delete('appointments_$userId');
+    
+    // --- PRO FIX: Invalidate Medical Records Cache ---
+    // Attached records are locked/unlocked, so we must force a fetch!
+    if (Hive.isBoxOpen('medical_cache')) {
+      await Hive.box('medical_cache').delete('medical_records_$userId');
+      await Hive.box('medical_cache').delete('medical_records_${userId}_time');
+    } else {
+      final mrBox = await Hive.openBox('medical_cache');
+      await mrBox.delete('medical_records_$userId');
+      await mrBox.delete('medical_records_${userId}_time');
+    }
+  }
+
   bool _isCacheValid(DateTime? lastFetch) {
     if (lastFetch == null) return false;
     return DateTime.now().difference(lastFetch) < _cacheDuration;
@@ -102,7 +118,7 @@ class AppointmentRepository {
           final action = item['action'];
           final payload = jsonDecode(item['payload']);
 
-          switch (action) {
+            switch (action) {
             case 'create_appointment':
               // Sync offline bookings using the new RPC too!
               await _client.rpc('book_appointment_safe', params: {
@@ -124,7 +140,10 @@ class AppointmentRepository {
               });
               break;
             case 'cancel_appointment':
-              await _client.from('appointments').update({'status': 'canceled'}).eq('id', payload['id']);
+              await _client.from('appointments').update({
+                'status': 'canceled',
+                'cancel_reason': payload['reason'],
+              }).eq('id', payload['id']);
               break;
             case 'complete_appointment':
               await _client.from('appointments').update({'status': 'completed'}).eq('id', payload['id']);
@@ -158,7 +177,7 @@ class AppointmentRepository {
               .select('''
                 id, schedule_date, start_time, end_time, status, patient_name,
                 patient_phone, patient_email, patient_gender, patient_dob,
-                doctor_id, clinic_id,
+                doctor_id, clinic_id, attached_record_ids,
                 doctors ( id, full_name, profile_picture_url, specialties ( name ), doctor_clinics ( clinic_id, max_wait_time ) ),
                 clinics ( id, name, address )
               ''')
@@ -179,20 +198,29 @@ class AppointmentRepository {
     }
   }
 
-  Future<void> cancelAppointment(int appointmentId) async {
+  Future<void> cancelAppointment(int appointmentId, String reason) async {
     if (NetworkNotifier.instance.isOffline) {
-      await _queueAction('cancel_appointment', {'id': appointmentId});
+      await _queueAction('cancel_appointment', {
+        'id': appointmentId,
+        'reason': reason,
+      });
       return;
     }
     await NetworkNotifier.instance.waitForSync();
 
     try {
-      final response = await _client.from('appointments').update({'status': 'canceled'}).eq('id', appointmentId).select();
+      final response = await _client
+          .from('appointments')
+          .update({
+            'status': 'canceled',
+            'cancel_reason': reason,
+          })
+          .eq('id', appointmentId)
+          .select();
 
       final userId = currentUserId;
       if (userId != null) {
-        final box = await _getCacheBox();
-        await box.delete('appointments_$userId');
+        await _invalidateCaches(userId);
       }
 
       if (response.isEmpty) {
@@ -204,7 +232,11 @@ class AppointmentRepository {
         );
       }
     } catch (error) {
-      throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to cancel this appointment right now. Please try again.');
+      throw AppFailure.fromError(
+        error,
+        fallbackUserMessage:
+            'Unable to cancel this appointment right now. Please try again.',
+      );
     }
   }
 
@@ -219,8 +251,7 @@ class AppointmentRepository {
       await _client.from('appointments').update({'status': 'completed'}).eq('id', appointmentId);
       final userId = currentUserId;
       if (userId != null) {
-        final box = await _getCacheBox();
-        await box.delete('appointments_$userId');
+        await _invalidateCaches(userId);
       }
     } catch (error) {
       throw AppFailure.fromError(error, fallbackUserMessage: 'Unable to update appointment status right now.');
@@ -336,8 +367,7 @@ class AppointmentRepository {
 
       final userId = currentUserId;
       if (userId != null) {
-        final box = await _getCacheBox();
-        await box.delete('appointments_$userId');
+        await _invalidateCaches(userId);
       }
 
       return int.parse(insertedId.toString());

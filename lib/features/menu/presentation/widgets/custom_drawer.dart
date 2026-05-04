@@ -250,7 +250,13 @@ class _CustomDrawerState extends State<CustomDrawer> {
                   textColor: textColor,
                   onTap: () {
                     widget.onClose();
-                    context.push(AppRoutes.medicalRecords);
+                    final routeUri = Uri(
+                      path: AppRoutes.medicalRecords,
+                      queryParameters: {
+                        'nonce': DateTime.now().microsecondsSinceEpoch.toString(),
+                      },
+                    ).toString();
+                    context.push(routeUri);
                   },
                 ),
                 2,

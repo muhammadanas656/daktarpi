@@ -222,6 +222,55 @@ class DoctorRepository {
     }
   }
 
+  // --- Reviews ---
+
+  Future<List<Map<String, dynamic>>> fetchDoctorReviews(String doctorId) async {
+    try {
+      final idParam = int.tryParse(doctorId);
+      if (idParam == null) return [];
+
+      final reviewsResponse = await _client
+          .from('reviews')
+          .select('user_id, rating, comment, created_at')
+          .eq('doctor_id', idParam)
+          .order('created_at', ascending: false)
+          .limit(20);
+
+      if (reviewsResponse.isEmpty) return [];
+      final reviews = List<Map<String, dynamic>>.from(reviewsResponse);
+
+      final userIds =
+          reviews
+              .map((review) => review['user_id'])
+              .where((userId) => userId != null)
+              .toSet()
+              .toList();
+      if (userIds.isEmpty) return reviews;
+
+      final profilesResponse = await _client
+          .from('profiles')
+          .select('id, full_name')
+          .inFilter('id', userIds);
+
+      final profiles = List<Map<String, dynamic>>.from(profilesResponse);
+      final profilesMap = {
+        for (final profile in profiles) profile['id']: profile['full_name'],
+      };
+
+      for (final review in reviews) {
+        final userId = review['user_id'];
+        review['profiles'] = {
+          'full_name': profilesMap[userId] ?? 'Anonymous',
+        };
+      }
+
+      return reviews;
+    } catch (e) {
+      debugPrint("Error fetching doctor reviews: $e");
+      return [];
+    }
+  }
+
   Future<void> incrementDoctorViewCount(String doctorId) async {
     if (NetworkNotifier.instance.isOffline) return;
     final userId = currentUserId;
@@ -294,6 +343,8 @@ class DoctorRepository {
             'explore_popular_limit',
             'home_featured_limit',
             'explore_featured_limit',
+            'regional_scarcity_threshold',
+            'regional_scarcity_radius_km',
           ]);
           
       _cachedSettings = {};
@@ -353,6 +404,16 @@ class DoctorRepository {
   Future<int> fetchExploreFeaturedLimit() async {
     await _preloadSettings();
     return (_cachedSettings?['explore_featured_limit'] ?? 50).toInt();
+  }
+
+  Future<int> fetchRegionalScarcityThreshold() async {
+    await _preloadSettings();
+    return (_cachedSettings?['regional_scarcity_threshold'] ?? 5).toInt();
+  }
+
+  Future<int> fetchRegionalScarcityRadius() async {
+    await _preloadSettings();
+    return (_cachedSettings?['regional_scarcity_radius_km'] ?? 100).toInt();
   }
 
   /// The unified RPC gateway. All doctor fetching flows through here.

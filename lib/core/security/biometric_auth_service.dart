@@ -22,7 +22,7 @@ class BiometricAuthService {
   }
 
   Future<bool> authenticate({
-    String localizedReason = 'Unlock DaktarPai to continue',
+    String localizedReason = 'Unlock AeviaPulse to continue',
   }) async {
     try {
       return await _localAuth.authenticate(

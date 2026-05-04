@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/constants/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:go_router/go_router.dart';
 import 'app_network_image.dart';
 
 class HomePopularDoctorCard extends StatelessWidget {
+  final int index;
   final int id;
   final String name;
   final String specialty;
@@ -16,6 +18,7 @@ class HomePopularDoctorCard extends StatelessWidget {
 
   const HomePopularDoctorCard({
     super.key,
+    required this.index,
     required this.id,
     required this.name,
     required this.specialty,
@@ -96,6 +99,7 @@ class HomePopularDoctorCard extends StatelessWidget {
                 'specialties': {'name': specialty},
                 'rating': rating,
                 'profile_picture_url': imageUrl,
+                'hero_tag': 'popular-hero-$id',
               },
             ),
             child: Stack(
@@ -107,7 +111,7 @@ class HomePopularDoctorCard extends StatelessWidget {
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
                         child: Hero(
-                          tag: 'doctor-hero-$id',
+                          tag: 'popular-hero-$id',
                           child: AppNetworkImage(
                             imageUrl: imageUrl,
                             width: double.infinity,
@@ -241,6 +245,14 @@ class HomePopularDoctorCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    )
+        .animate(delay: (300 + (index * 60)).ms)
+        .fade(duration: 500.ms, curve: Curves.easeOut)
+        .slideX(
+          begin: 0.15,
+          end: 0,
+          duration: 500.ms,
+          curve: Curves.easeOutCubic,
+        );
   }
 }

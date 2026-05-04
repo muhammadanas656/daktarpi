@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$MedicalRecord {
 
- int get id;@JsonKey(name: 'user_id') String get userId;@JsonKey(name: 'record_for') String get recordFor;@JsonKey(name: 'record_type') String get recordType;@JsonKey(name: 'record_date') DateTime get recordDate;@JsonKey(name: 'file_urls', fromJson: _stringListFromJson) List<String> get fileUrls;@JsonKey(name: 'created_at') DateTime get createdAt;@JsonKey(name: 'deleted_at') DateTime? get deletedAt;
+ int get id;@JsonKey(name: 'user_id') String get userId;@JsonKey(name: 'record_for') String get recordFor;@JsonKey(name: 'record_type') String get recordType;@JsonKey(name: 'record_date') DateTime get recordDate;@JsonKey(name: 'file_urls', fromJson: _stringListFromJson) List<String> get fileUrls;@JsonKey(name: 'created_at') DateTime get createdAt;@JsonKey(name: 'deleted_at') DateTime? get deletedAt;@JsonKey(name: 'locked_until') DateTime? get lockedUntil;
 /// Create a copy of MedicalRecord
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $MedicalRecordCopyWith<MedicalRecord> get copyWith => _$MedicalRecordCopyWithImp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MedicalRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.recordFor, recordFor) || other.recordFor == recordFor)&&(identical(other.recordType, recordType) || other.recordType == recordType)&&(identical(other.recordDate, recordDate) || other.recordDate == recordDate)&&const DeepCollectionEquality().equals(other.fileUrls, fileUrls)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MedicalRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.recordFor, recordFor) || other.recordFor == recordFor)&&(identical(other.recordType, recordType) || other.recordType == recordType)&&(identical(other.recordDate, recordDate) || other.recordDate == recordDate)&&const DeepCollectionEquality().equals(other.fileUrls, fileUrls)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt)&&(identical(other.lockedUntil, lockedUntil) || other.lockedUntil == lockedUntil));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,userId,recordFor,recordType,recordDate,const DeepCollectionEquality().hash(fileUrls),createdAt,deletedAt);
+int get hashCode => Object.hash(runtimeType,id,userId,recordFor,recordType,recordDate,const DeepCollectionEquality().hash(fileUrls),createdAt,deletedAt,lockedUntil);
 
 @override
 String toString() {
-  return 'MedicalRecord(id: $id, userId: $userId, recordFor: $recordFor, recordType: $recordType, recordDate: $recordDate, fileUrls: $fileUrls, createdAt: $createdAt, deletedAt: $deletedAt)';
+  return 'MedicalRecord(id: $id, userId: $userId, recordFor: $recordFor, recordType: $recordType, recordDate: $recordDate, fileUrls: $fileUrls, createdAt: $createdAt, deletedAt: $deletedAt, lockedUntil: $lockedUntil)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $MedicalRecordCopyWith<$Res>  {
   factory $MedicalRecordCopyWith(MedicalRecord value, $Res Function(MedicalRecord) _then) = _$MedicalRecordCopyWithImpl;
 @useResult
 $Res call({
- int id,@JsonKey(name: 'user_id') String userId,@JsonKey(name: 'record_for') String recordFor,@JsonKey(name: 'record_type') String recordType,@JsonKey(name: 'record_date') DateTime recordDate,@JsonKey(name: 'file_urls', fromJson: _stringListFromJson) List<String> fileUrls,@JsonKey(name: 'created_at') DateTime createdAt,@JsonKey(name: 'deleted_at') DateTime? deletedAt
+ int id,@JsonKey(name: 'user_id') String userId,@JsonKey(name: 'record_for') String recordFor,@JsonKey(name: 'record_type') String recordType,@JsonKey(name: 'record_date') DateTime recordDate,@JsonKey(name: 'file_urls', fromJson: _stringListFromJson) List<String> fileUrls,@JsonKey(name: 'created_at') DateTime createdAt,@JsonKey(name: 'deleted_at') DateTime? deletedAt,@JsonKey(name: 'locked_until') DateTime? lockedUntil
 });
 
 
@@ -65,7 +65,7 @@ class _$MedicalRecordCopyWithImpl<$Res>
 
 /// Create a copy of MedicalRecord
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? userId = null,Object? recordFor = null,Object? recordType = null,Object? recordDate = null,Object? fileUrls = null,Object? createdAt = null,Object? deletedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? userId = null,Object? recordFor = null,Object? recordType = null,Object? recordDate = null,Object? fileUrls = null,Object? createdAt = null,Object? deletedAt = freezed,Object? lockedUntil = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
@@ -75,6 +75,7 @@ as String,recordDate: null == recordDate ? _self.recordDate : recordDate // igno
 as DateTime,fileUrls: null == fileUrls ? _self.fileUrls : fileUrls // ignore: cast_nullable_to_non_nullable
 as List<String>,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,deletedAt: freezed == deletedAt ? _self.deletedAt : deletedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,lockedUntil: freezed == lockedUntil ? _self.lockedUntil : lockedUntil // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }
@@ -160,10 +161,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'user_id')  String userId, @JsonKey(name: 'record_for')  String recordFor, @JsonKey(name: 'record_type')  String recordType, @JsonKey(name: 'record_date')  DateTime recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson)  List<String> fileUrls, @JsonKey(name: 'created_at')  DateTime createdAt, @JsonKey(name: 'deleted_at')  DateTime? deletedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'user_id')  String userId, @JsonKey(name: 'record_for')  String recordFor, @JsonKey(name: 'record_type')  String recordType, @JsonKey(name: 'record_date')  DateTime recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson)  List<String> fileUrls, @JsonKey(name: 'created_at')  DateTime createdAt, @JsonKey(name: 'deleted_at')  DateTime? deletedAt, @JsonKey(name: 'locked_until')  DateTime? lockedUntil)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MedicalRecord() when $default != null:
-return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.recordDate,_that.fileUrls,_that.createdAt,_that.deletedAt);case _:
+return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.recordDate,_that.fileUrls,_that.createdAt,_that.deletedAt,_that.lockedUntil);case _:
   return orElse();
 
 }
@@ -181,10 +182,10 @@ return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.rec
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'user_id')  String userId, @JsonKey(name: 'record_for')  String recordFor, @JsonKey(name: 'record_type')  String recordType, @JsonKey(name: 'record_date')  DateTime recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson)  List<String> fileUrls, @JsonKey(name: 'created_at')  DateTime createdAt, @JsonKey(name: 'deleted_at')  DateTime? deletedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id, @JsonKey(name: 'user_id')  String userId, @JsonKey(name: 'record_for')  String recordFor, @JsonKey(name: 'record_type')  String recordType, @JsonKey(name: 'record_date')  DateTime recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson)  List<String> fileUrls, @JsonKey(name: 'created_at')  DateTime createdAt, @JsonKey(name: 'deleted_at')  DateTime? deletedAt, @JsonKey(name: 'locked_until')  DateTime? lockedUntil)  $default,) {final _that = this;
 switch (_that) {
 case _MedicalRecord():
-return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.recordDate,_that.fileUrls,_that.createdAt,_that.deletedAt);case _:
+return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.recordDate,_that.fileUrls,_that.createdAt,_that.deletedAt,_that.lockedUntil);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -201,10 +202,10 @@ return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.rec
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id, @JsonKey(name: 'user_id')  String userId, @JsonKey(name: 'record_for')  String recordFor, @JsonKey(name: 'record_type')  String recordType, @JsonKey(name: 'record_date')  DateTime recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson)  List<String> fileUrls, @JsonKey(name: 'created_at')  DateTime createdAt, @JsonKey(name: 'deleted_at')  DateTime? deletedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id, @JsonKey(name: 'user_id')  String userId, @JsonKey(name: 'record_for')  String recordFor, @JsonKey(name: 'record_type')  String recordType, @JsonKey(name: 'record_date')  DateTime recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson)  List<String> fileUrls, @JsonKey(name: 'created_at')  DateTime createdAt, @JsonKey(name: 'deleted_at')  DateTime? deletedAt, @JsonKey(name: 'locked_until')  DateTime? lockedUntil)?  $default,) {final _that = this;
 switch (_that) {
 case _MedicalRecord() when $default != null:
-return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.recordDate,_that.fileUrls,_that.createdAt,_that.deletedAt);case _:
+return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.recordDate,_that.fileUrls,_that.createdAt,_that.deletedAt,_that.lockedUntil);case _:
   return null;
 
 }
@@ -216,7 +217,7 @@ return $default(_that.id,_that.userId,_that.recordFor,_that.recordType,_that.rec
 @JsonSerializable()
 
 class _MedicalRecord implements MedicalRecord {
-  const _MedicalRecord({required this.id, @JsonKey(name: 'user_id') required this.userId, @JsonKey(name: 'record_for') required this.recordFor, @JsonKey(name: 'record_type') required this.recordType, @JsonKey(name: 'record_date') required this.recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson) final  List<String> fileUrls = const <String>[], @JsonKey(name: 'created_at') required this.createdAt, @JsonKey(name: 'deleted_at') this.deletedAt}): _fileUrls = fileUrls;
+  const _MedicalRecord({required this.id, @JsonKey(name: 'user_id') required this.userId, @JsonKey(name: 'record_for') required this.recordFor, @JsonKey(name: 'record_type') required this.recordType, @JsonKey(name: 'record_date') required this.recordDate, @JsonKey(name: 'file_urls', fromJson: _stringListFromJson) final  List<String> fileUrls = const <String>[], @JsonKey(name: 'created_at') required this.createdAt, @JsonKey(name: 'deleted_at') this.deletedAt, @JsonKey(name: 'locked_until') this.lockedUntil}): _fileUrls = fileUrls;
   factory _MedicalRecord.fromJson(Map<String, dynamic> json) => _$MedicalRecordFromJson(json);
 
 @override final  int id;
@@ -233,6 +234,7 @@ class _MedicalRecord implements MedicalRecord {
 
 @override@JsonKey(name: 'created_at') final  DateTime createdAt;
 @override@JsonKey(name: 'deleted_at') final  DateTime? deletedAt;
+@override@JsonKey(name: 'locked_until') final  DateTime? lockedUntil;
 
 /// Create a copy of MedicalRecord
 /// with the given fields replaced by the non-null parameter values.
@@ -247,16 +249,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MedicalRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.recordFor, recordFor) || other.recordFor == recordFor)&&(identical(other.recordType, recordType) || other.recordType == recordType)&&(identical(other.recordDate, recordDate) || other.recordDate == recordDate)&&const DeepCollectionEquality().equals(other._fileUrls, _fileUrls)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _MedicalRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.recordFor, recordFor) || other.recordFor == recordFor)&&(identical(other.recordType, recordType) || other.recordType == recordType)&&(identical(other.recordDate, recordDate) || other.recordDate == recordDate)&&const DeepCollectionEquality().equals(other._fileUrls, _fileUrls)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.deletedAt, deletedAt) || other.deletedAt == deletedAt)&&(identical(other.lockedUntil, lockedUntil) || other.lockedUntil == lockedUntil));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,userId,recordFor,recordType,recordDate,const DeepCollectionEquality().hash(_fileUrls),createdAt,deletedAt);
+int get hashCode => Object.hash(runtimeType,id,userId,recordFor,recordType,recordDate,const DeepCollectionEquality().hash(_fileUrls),createdAt,deletedAt,lockedUntil);
 
 @override
 String toString() {
-  return 'MedicalRecord(id: $id, userId: $userId, recordFor: $recordFor, recordType: $recordType, recordDate: $recordDate, fileUrls: $fileUrls, createdAt: $createdAt, deletedAt: $deletedAt)';
+  return 'MedicalRecord(id: $id, userId: $userId, recordFor: $recordFor, recordType: $recordType, recordDate: $recordDate, fileUrls: $fileUrls, createdAt: $createdAt, deletedAt: $deletedAt, lockedUntil: $lockedUntil)';
 }
 
 
@@ -267,7 +269,7 @@ abstract mixin class _$MedicalRecordCopyWith<$Res> implements $MedicalRecordCopy
   factory _$MedicalRecordCopyWith(_MedicalRecord value, $Res Function(_MedicalRecord) _then) = __$MedicalRecordCopyWithImpl;
 @override @useResult
 $Res call({
- int id,@JsonKey(name: 'user_id') String userId,@JsonKey(name: 'record_for') String recordFor,@JsonKey(name: 'record_type') String recordType,@JsonKey(name: 'record_date') DateTime recordDate,@JsonKey(name: 'file_urls', fromJson: _stringListFromJson) List<String> fileUrls,@JsonKey(name: 'created_at') DateTime createdAt,@JsonKey(name: 'deleted_at') DateTime? deletedAt
+ int id,@JsonKey(name: 'user_id') String userId,@JsonKey(name: 'record_for') String recordFor,@JsonKey(name: 'record_type') String recordType,@JsonKey(name: 'record_date') DateTime recordDate,@JsonKey(name: 'file_urls', fromJson: _stringListFromJson) List<String> fileUrls,@JsonKey(name: 'created_at') DateTime createdAt,@JsonKey(name: 'deleted_at') DateTime? deletedAt,@JsonKey(name: 'locked_until') DateTime? lockedUntil
 });
 
 
@@ -284,7 +286,7 @@ class __$MedicalRecordCopyWithImpl<$Res>
 
 /// Create a copy of MedicalRecord
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? userId = null,Object? recordFor = null,Object? recordType = null,Object? recordDate = null,Object? fileUrls = null,Object? createdAt = null,Object? deletedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? userId = null,Object? recordFor = null,Object? recordType = null,Object? recordDate = null,Object? fileUrls = null,Object? createdAt = null,Object? deletedAt = freezed,Object? lockedUntil = freezed,}) {
   return _then(_MedicalRecord(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
@@ -294,6 +296,7 @@ as String,recordDate: null == recordDate ? _self.recordDate : recordDate // igno
 as DateTime,fileUrls: null == fileUrls ? _self._fileUrls : fileUrls // ignore: cast_nullable_to_non_nullable
 as List<String>,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,deletedAt: freezed == deletedAt ? _self.deletedAt : deletedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,lockedUntil: freezed == lockedUntil ? _self.lockedUntil : lockedUntil // ignore: cast_nullable_to_non_nullable
 as DateTime?,
   ));
 }

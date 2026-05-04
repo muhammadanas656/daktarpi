@@ -5,6 +5,7 @@ import '../data/appointment.dart';
 import '../data/appointment_repository.dart';
 import '../data/appointment_secure_cache_repository.dart';
 import '../../../core/services/appointment_notification_service.dart';
+import '../../medical_records/data/medical_record_repository.dart';
 
 class AppointmentNotifier extends ChangeNotifier {
   AppointmentNotifier._();
@@ -13,6 +14,7 @@ class AppointmentNotifier extends ChangeNotifier {
   final _appointmentRepo = AppointmentRepository();
   final _cacheRepo = AppointmentSecureCacheRepository();
   final _notificationService = AppointmentNotificationService.instance;
+  final _medicalRecordRepo = MedicalRecordRepository();
   RealtimeChannel? _appointmentsSubscription;
   StreamSubscription<AuthState>? _authStateSub;
   String? _subscribedUserId;
@@ -172,6 +174,11 @@ class AppointmentNotifier extends ChangeNotifier {
             preserveMissedStatusUpdate: preserveMissedStatusUpdate,
           ),
         );
+
+        // PRO FIX: Unlock attached medical records when appointment is removed (canceled/missed)
+        if (removedAppointment != null && removedAppointment.attachedRecordIds.isNotEmpty) {
+          unawaited(_medicalRecordRepo.unlockRecords(removedAppointment.attachedRecordIds));
+        }
       }
 
       _appointments = freshAppointments;
@@ -248,10 +255,20 @@ class AppointmentNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> cancelAppointment(int appointmentId) async {
+  Future<void> cancelAppointment(int appointmentId, String reason) async {
     try {
-      await _appointmentRepo.cancelAppointment(appointmentId);
+      // PRO FIX: Extract attached record IDs BEFORE removing from list
+      final canceledAppointment = _appointments.where((app) => app.id == appointmentId).firstOrNull;
+      final attachedRecordIds = canceledAppointment?.attachedRecordIds ?? [];
+
+      await _appointmentRepo.cancelAppointment(appointmentId, reason);
       await _notificationService.cancelReminder(appointmentId);
+
+      // PRO FIX: Unlock attached medical records immediately on cancellation
+      if (attachedRecordIds.isNotEmpty) {
+        unawaited(_medicalRecordRepo.unlockRecords(attachedRecordIds));
+      }
+
       _appointments.removeWhere((app) => app.id == appointmentId);
       await _cacheRepo.saveAppointments(_appointments);
       notifyListeners();

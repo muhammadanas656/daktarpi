@@ -1,16 +1,17 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../presentation/widgets/animations/premium_list_animator.dart';
 import '../favorites_notifier.dart';
 import '../doctors_notifier.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
-import '../../data/doctor_repository.dart';
+import '../../../../presentation/widgets/doctor_list_card_skeleton.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 
 class ClinicDoctorsScreen extends StatefulWidget {
@@ -35,12 +36,12 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
   bool get wantKeepAlive => true;
 
   final _searchController = TextEditingController();
-  final _doctorRepo = DoctorRepository();
   final _favNotifier = FavoritesNotifier.instance;
   Timer? _debounce;
 
   List<Map<String, dynamic>> _doctors = [];
   bool _isLoading = true;
+  bool _hasEverLoaded = false;
   String? _clinicLogoUrl;
   String _selectedFilter = 'All';
 
@@ -48,16 +49,20 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
   void initState() {
     super.initState();
     _clinicLogoUrl = widget.logoUrl;
+
+    if (_clinicLogoUrl == null &&
+        DoctorsNotifier.instance.hasClinicLogoCached(widget.clinicId)) {
+      _clinicLogoUrl =
+          DoctorsNotifier.instance.getCachedClinicLogo(widget.clinicId);
+    } else if (_clinicLogoUrl == null) {
+      _fetchClinicMedia();
+    }
+
     _favNotifier.addListener(_onStateChanged);
-    if (_clinicLogoUrl == null) _fetchClinicMedia();
     _searchController.addListener(_onSearchChanged);
 
-    // THE FIX: Because the SmartFilterBar is silent on this specific screen,
-    // we MUST manually trigger the initial data fetch here.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _fetchData(forceRefresh: true);
-      }
+      if (mounted) _fetchData(forceRefresh: false);
     });
   }
 
@@ -98,66 +103,53 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
   }
 
   Future<void> _fetchClinicMedia() async {
-    try {
-      final response = await Supabase.instance.client
-          .from('clinics')
-          .select('logo_url, image_url')
-          .eq('id', widget.clinicId)
-          .maybeSingle();
-      if (response != null && mounted) {
-        final logoUrl = response['logo_url']?.toString().trim();
-        final imageUrl = response['image_url']?.toString().trim();
-        
-        // ─── INTERCHANGEABLE IMAGE MATRIX ───
-        final String? resolvedPrimary = (logoUrl != null && logoUrl.isNotEmpty) ? logoUrl : ((imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : null);
-        
-        setState(() {
-          _clinicLogoUrl = resolvedPrimary;
-        });
-      }
-    } catch (e) {
-      debugPrint('Failed to fetch clinic logo: $e');
-    }
+    final logo = await DoctorsNotifier.instance.getClinicLogo(widget.clinicId);
+    if (mounted) setState(() => _clinicLogoUrl = logo);
   }
 
   Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
-    if (mounted) setState(() => _isLoading = true);
-    if (!_favNotifier.isLoaded) await _favNotifier.loadFavorites();
-    try {
-      double? userLat;
-      double? userLng;
+    final cacheKey = '${widget.clinicId}_${_selectedFilter}_${query ?? ""}';
 
-      // Only fetch GPS for filters that actually need it
-      if (_selectedFilter == 'Nearest' ||
-          _selectedFilter == 'Available Today') {
-        try {
-          final pos = await DoctorsNotifier.instance.getUserPosition();
-          if (pos != null) {
-            userLat = pos.latitude;
-            userLng = pos.longitude;
-          }
-        } catch (e) {
-          debugPrint('Location fetch failed: $e');
-        }
+    if (!forceRefresh &&
+        DoctorsNotifier.instance.hasClinicDoctorsCached(cacheKey)) {
+      setState(() {
+        _doctors = _applySortOverlay(
+          DoctorsNotifier.instance.getCachedClinicDoctors(cacheKey)!,
+          _selectedFilter,
+        );
+        _isLoading = false;
+        _hasEverLoaded = true;
+      });
+      return;
+    }
+
+    if (mounted) setState(() => _isLoading = true);
+    List<Map<String, dynamic>>? nextDoctors;
+
+    try {
+      if (!_favNotifier.isLoaded) {
+        await _favNotifier.loadFavorites();
       }
 
-      final doctors = await _doctorRepo.fetchDoctorsByClinic(
-        widget.clinicId,
+      final docs = await DoctorsNotifier.instance.fetchClinicDoctorsCached(
+        clinicId: widget.clinicId,
         query: query,
         filterType: _selectedFilter,
-        userLat: userLat,
-        userLng: userLng,
         forceRefresh: forceRefresh,
       );
-      if (mounted) {
-        setState(() {
-          _doctors = _applySortOverlay(doctors, _selectedFilter);
-          _isLoading = false;
-        });
-      }
+      nextDoctors = _applySortOverlay(docs, _selectedFilter);
     } catch (e) {
       debugPrint('Clinic fetch error: $e');
-      if (mounted) setState(() => _isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (nextDoctors != null) {
+            _doctors = nextDoctors!;
+          }
+          _isLoading = false;
+          _hasEverLoaded = true;
+        });
+      }
     }
   }
 
@@ -327,6 +319,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                                                       : Colors.black.withOpacity(0.03),
                                                 ),
                                               ),
+                                              // THE FIX: Removed the Icon placeholder and applied Circular Shimmer
                                               child: hasLogo
                                                   ? SizedBox(
                                                       width: 72,
@@ -339,10 +332,21 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                                                         ),
                                                       ),
                                                     )
-                                                  : const Icon(
-                                                      Icons.domain_rounded,
-                                                      color: AppColors.primaryGreen,
-                                                      size: 32,
+                                                  : Shimmer.fromColors(
+                                                      baseColor: isDark
+                                                          ? Colors.white12
+                                                          : Colors.black.withOpacity(0.05),
+                                                      highlightColor: isDark
+                                                          ? Colors.white24
+                                                          : Colors.black.withOpacity(0.1),
+                                                      child: Container(
+                                                        width: 72,
+                                                        height: 72,
+                                                        decoration: const BoxDecoration(
+                                                          color: Colors.white,
+                                                          shape: BoxShape.circle,
+                                                        ),
+                                                      ),
                                                     ),
                                             ),
                                           ),
@@ -379,9 +383,10 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                                                     borderRadius:
                                                         BorderRadius.circular(6),
                                                   ),
+                                                  // THE FIX: Removed Shimmer and replaced with clean "Searching..." text
                                                   child: Text(
                                                     _isLoading
-                                                        ? 'Searching...'
+                                                        ? "Searching..."
                                                         : '${_doctors.length} Specialist${_doctors.length == 1 ? '' : 's'}',
                                                     style: const TextStyle(
                                                       color: AppColors.primaryGreen,
@@ -430,6 +435,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                                               ),
                                               shape: BoxShape.circle,
                                             ),
+                                            // THE FIX: Removed the Icon placeholder and applied Shimmer to the mini badge
                                             child: hasLogo
                                                 ? AppNetworkImage(
                                                     imageUrl: _clinicLogoUrl,
@@ -438,10 +444,18 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                                                     circular: false,
                                                     fit: BoxFit.cover,
                                                   )
-                                                : const Icon(
-                                                    Icons.domain_rounded,
-                                                    color: AppColors.primaryGreen,
-                                                    size: 16,
+                                                : Shimmer.fromColors(
+                                                    baseColor: isDark
+                                                        ? Colors.white12
+                                                        : Colors.black.withOpacity(0.05),
+                                                    highlightColor: isDark
+                                                        ? Colors.white24
+                                                        : Colors.black.withOpacity(0.1),
+                                                    child: Container(
+                                                      width: double.infinity,
+                                                      height: double.infinity,
+                                                      color: Colors.white,
+                                                    ),
                                                   ),
                                           ),
                                           const SizedBox(width: 8),
@@ -469,6 +483,18 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                                   ),
                                 ),
                               ),
+                              // THE FIX: Permanently fused to the glass! It will never detach on drag.
+                              if (_isLoading && _doctors.isNotEmpty)
+                                const Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: LinearProgressIndicator(
+                                    color: AppColors.primaryGreen,
+                                    minHeight: 2.0,
+                                    backgroundColor: Colors.transparent,
+                                  ),
+                                ),
                             ],
                           );
                         },
@@ -478,14 +504,12 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                 ),
               ),
 
-              if (_isLoading && _doctors.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryGreen,
-                    ),
-                  ),
+              // --- END OF SLIVER APP BAR ---
+              // 2. THE MAJOR LOAD (Circular Spinner): Shows exactly in the center on cold start only
+              if (_isLoading && !_hasEverLoaded && _doctors.isEmpty)
+                const DoctorListSkeletonSliver(
+                  padding: EdgeInsets.only(top: 20, bottom: 120),
+                  itemPadding: EdgeInsets.only(left: 24, right: 24, bottom: 16),
                 )
               else if (_doctors.isEmpty && !_isLoading)
                 SliverToBoxAdapter(
@@ -506,9 +530,14 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                   ),
                 )
               else
+                // --- EXISTING DOCTORS LIST ---
                 SliverPadding(
                   padding: const EdgeInsets.only(top: 20, bottom: 120),
                   sliver: SliverList(
+                    // THE FIX: The Intent Hash!
+                    key: ValueKey(
+                      'clinic_${widget.clinicId}_${_selectedFilter}_${_searchController.text}',
+                    ),
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final doctor = _doctors[index];
                       final docId =
@@ -516,18 +545,33 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                       final specialtyName =
                           doctor['specialties']?['name'] ?? 'Specialist';
 
-                      return Padding(
-                        padding: const EdgeInsets.only(
-                          left: 24,
-                          right: 24,
-                          bottom: 16,
-                        ),
-                        child: _SquishableDoctorCard(
-                          doctor: doctor,
-                          docId: docId,
-                          specialtyName: specialtyName,
-                          favNotifier: _favNotifier,
-                          heroTagPrefix: 'clinic-$docId-$index-',
+                      return PremiumListAnimator(
+                        index: index,
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            left: 24,
+                            right: 24,
+                            bottom: 16,
+                          ),
+                          child: DoctorListCard(
+                            id: docId,
+                            name: doctor['full_name'] ?? 'Unknown',
+                            specialty: ' $specialtyName',
+                            rating: doctor['rating']?.toString() ?? '0.0',
+                            views: (doctor['views_count'] ?? 0).toString(),
+                            imageUrl: doctor['profile_picture_url'],
+                            isFavorite: _favNotifier.isFavorite(docId),
+                            heroTagPrefix: 'clinic-$docId-$index-',
+                            onFavoriteTap: () {
+                              _favNotifier.toggle(doctor);
+                            },
+                            onCardTap: () {
+                              context.push(
+                                AppRoutes.doctorDetailsById('$docId'),
+                                extra: doctor,
+                              );
+                            },
+                          ),
                         ),
                       );
                     }, childCount: _doctors.length),
@@ -540,65 +584,3 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
     );
   }
 }
-
-// ─── Squishable Card (identical pattern to Specialty screen) ──────────────────
-
-class _SquishableDoctorCard extends StatefulWidget {
-  final Map<String, dynamic> doctor;
-  final int docId;
-  final String specialtyName;
-  final FavoritesNotifier favNotifier;
-  final String heroTagPrefix;
-
-  const _SquishableDoctorCard({
-    required this.doctor,
-    required this.docId,
-    required this.specialtyName,
-    required this.favNotifier,
-    required this.heroTagPrefix,
-  });
-
-  @override
-  State<_SquishableDoctorCard> createState() => _SquishableDoctorCardState();
-}
-
-class _SquishableDoctorCardState extends State<_SquishableDoctorCard> {
-  bool _isPressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) => setState(() => _isPressed = true),
-      onPointerUp: (_) => setState(() => _isPressed = false),
-      onPointerCancel: (_) => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOutCubic,
-        child: DoctorListCard(
-          id: widget.docId,
-          name: widget.doctor['full_name'] ?? 'Unknown',
-          specialty: ' ${widget.specialtyName}',
-          rating: widget.doctor['rating']?.toString() ?? '0.0',
-          views: (widget.doctor['views_count'] ?? 0).toString(),
-          imageUrl: widget.doctor['profile_picture_url'],
-          isFavorite: widget.favNotifier.isFavorite(widget.docId),
-          heroTagPrefix: widget.heroTagPrefix,
-          onFavoriteTap: () {
-            HapticFeedback.selectionClick();
-            widget.favNotifier.toggle(widget.doctor);
-          },
-          onCardTap: () {
-            HapticFeedback.lightImpact();
-            context.push(
-              AppRoutes.doctorDetailsById('${widget.docId}'),
-              extra: widget.doctor,
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Glass Capsule Delegate (identical to Specialty screen) ───────────────────

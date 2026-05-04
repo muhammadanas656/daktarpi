@@ -8,9 +8,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
-import '../../../../core/widgets/background_sync_indicator.dart';
+import '../../../../presentation/widgets/animations/premium_list_animator.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../../../presentation/widgets/doctor_list_card_skeleton.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../doctors_notifier.dart';
 import '../favorites_notifier.dart';
@@ -31,6 +32,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
   Timer? _debounce;
 
   bool _isLoading = true;
+  bool _hasEverLoaded = false;
   bool _showClearIcon = false;
   String _selectedFilter = 'All';
   double? _activeRadiusKm;
@@ -44,7 +46,6 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
     super.initState();
     _favNotifier.addListener(_onStateChanged);
     _profileNotifier.addListener(_onStateChanged);
-    _fetchData();
 
     _searchController.addListener(() {
       setState(() {
@@ -53,10 +54,13 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
       _onSearchChanged();
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    Future.delayed(const Duration(milliseconds: 300), () async {
+      if (!mounted) return;
+
       final rangeThreshold = await _docsNotifier.fetchPopularHighlightRange();
       final thresholdLimit = await _docsNotifier.fetchPopularThreshold();
       final pos = await _docsNotifier.getUserPosition();
+
       if (mounted) {
         setState(() {
           _popularHighlightRangeKm = rangeThreshold;
@@ -67,6 +71,8 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
           }
         });
       }
+
+      if (mounted) _fetchData();
     });
   }
 
@@ -152,7 +158,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
 
   Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
     if (mounted) setState(() => _isLoading = true);
-    
+
     try {
       if (!_favNotifier.isLoaded) {
         await _favNotifier.loadFavorites();
@@ -166,14 +172,15 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
         limit: await _docsNotifier.fetchExplorePopularLimit(),
       );
 
+    } catch (e) {
+      debugPrint('Error fetching data: $e');
+    } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _hasEverLoaded = true;
         });
       }
-    } catch (e) {
-      debugPrint('Error fetching data: $e');
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -220,7 +227,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                   edgeOffset:
                       MediaQuery.paddingOf(context).top +
                       kToolbarHeight +
-                      100.0,
+                      125.0,
                   child: CustomScrollView(
                     physics: const BouncingScrollPhysics(
                       parent: AlwaysScrollableScrollPhysics(),
@@ -292,33 +299,43 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                             ),
                           ),
                         ),
-                        // 2. The Unified Glass Pane (Covers the toolbar AND the bottom widget)
-                        flexibleSpace: ClipRRect(
-                          child: BackdropFilter(
-                            filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.70),
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
-                                    width: 1,
+                        // THE FIX: Wrapped in a Stack to permanently fuse the loader
+                        flexibleSpace: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              child: BackdropFilter(
+                                filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.70),
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                                        width: 1,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
+                            if (_isLoading && sortedDisplayList.isNotEmpty)
+                              const Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: LinearProgressIndicator(
+                                  color: AppColors.primaryGreen,
+                                  minHeight: 2.0,
+                                  backgroundColor: Colors.transparent,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      if (_isLoading && sortedDisplayList.isEmpty)
-                        const SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.primaryGreen,
-                            ),
-                          ),
-                        )
+
+                      if (_isLoading && !_hasEverLoaded && sortedDisplayList.isEmpty)
+                        const DoctorListSkeletonSliver()
                       else if (sortedDisplayList.isEmpty)
                         const SliverFillRemaining(
                           hasScrollBody: false,
@@ -328,6 +345,12 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
                           sliver: SliverList(
+                            // THE FIX: The Intent Hash!
+                            // It only remounts the list if the user changes the filter or search text.
+                            // GPS updates will now just silently slide the cards around!
+                            key: ValueKey(
+                              'popular_${_selectedFilter}_${_searchController.text}',
+                            ),
                             delegate: SliverChildBuilderDelegate((context, index) {
                               final doctor = sortedDisplayList[index];
                               final docId = doctor['id'] as int;
@@ -368,37 +391,38 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                                 smartIcon = Icons.star_rounded;
                               }
 
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: DoctorListCard(
-                                  id: docId,
-                                  name: doctor['full_name'] ?? 'Unknown',
-                                  specialty: " $specialtyName",
-                                  rating: doctor['rating']?.toString() ?? '0.0',
-                                  views: views,
-                                  imageUrl: doctor['profile_picture_url'],
-                                  isFavorite: isFavorite,
-                                  heroTagPrefix: 'popular-$docId-$index-',
-                                  onFavoriteTap: () {
-                                    HapticFeedback.selectionClick();
-                                    _favNotifier.toggle(doctor);
-                                  },
-                                  onCardTap: () {
-                                    HapticFeedback.lightImpact();
-                                    _navigateToDoctorDetails(docId, doctor);
-                                  },
-                                  customBorderColor:
-                                      shouldHighlight
-                                          ? AppColors.primaryGreen
-                                          : null,
-                                  customBadgeOverlay:
-                                      shouldHighlight
-                                          ? _buildTopRatedBadge(
-                                            isDark,
-                                            tagText: smartTag,
-                                            icon: smartIcon,
-                                          )
-                                          : null,
+                              return PremiumListAnimator(
+                                index: index,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: DoctorListCard(
+                                    id: docId,
+                                    name: doctor['full_name'] ?? 'Unknown',
+                                    specialty: " $specialtyName",
+                                    rating: doctor['rating']?.toString() ?? '0.0',
+                                    views: views,
+                                    imageUrl: doctor['profile_picture_url'],
+                                    isFavorite: isFavorite,
+                                    heroTagPrefix: 'popular-$docId-$index-',
+                                    onFavoriteTap: () {
+                                      _favNotifier.toggle(doctor);
+                                    },
+                                    onCardTap: () {
+                                      _navigateToDoctorDetails(docId, doctor);
+                                    },
+                                    customBorderColor:
+                                        shouldHighlight
+                                            ? AppColors.primaryGreen
+                                            : null,
+                                    customBadgeOverlay:
+                                        shouldHighlight
+                                            ? _buildTopRatedBadge(
+                                              isDark,
+                                              tagText: smartTag,
+                                              icon: smartIcon,
+                                            )
+                                            : null,
+                                  ),
                                 ),
                               );
                             }, childCount: sortedDisplayList.length),
@@ -406,12 +430,6 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
                         ),
                     ],
                   ),
-                ),
-                Positioned(
-                  top: MediaQuery.paddingOf(context).top,
-                  left: 0,
-                  right: 0,
-                  child: BackgroundSyncIndicator(isSyncing: _isLoading && sortedDisplayList.isNotEmpty),
                 ),
               ],
             );

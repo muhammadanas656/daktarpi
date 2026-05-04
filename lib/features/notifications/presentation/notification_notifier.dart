@@ -16,6 +16,7 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
   List<Map<String, dynamic>> _notifications = [];
   Timer? _autoRefreshTimer;
   bool _hasLoaded = false;
+  bool _isLoading = false;
   Future<void>? _loadFuture;
 
   @override
@@ -33,6 +34,8 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<Map<String, dynamic>> get notifications => _notifications;
+  bool get isLoading => _isLoading;
+  bool get hasLoaded => _hasLoaded;
 
   int get unreadCount {
     final now = DateTime.now();
@@ -57,16 +60,23 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     final future = () async {
+      _isLoading = true;
+      notifyListeners();
       final loadedNotifications = await _repo.getNotifications();
       _sortNotifications(loadedNotifications);
       _notifications = loadedNotifications;
       _hasLoaded = true;
+      _isLoading = false;
       notifyListeners();
     }();
 
     _loadFuture = future;
     try {
       await future;
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
     } finally {
       _loadFuture = null;
     }
@@ -149,6 +159,18 @@ class NotificationNotifier extends ChangeNotifier with WidgetsBindingObserver {
     
     await _repo.saveLocalCache(_notifications);
     await _repo.deleteRemote(id);
+    notifyListeners();
+  }
+
+  Future<void> clearAllRead() async {
+    await load();
+    
+    // 1. Instantly remove from local list for fluid UI
+    _notifications.removeWhere((n) => n['is_read'] == true);
+    
+    // 2. Persist to Hive and Supabase
+    await _repo.saveLocalCache(_notifications);
+    await _repo.deleteAllReadRemote();
     notifyListeners();
   }
 

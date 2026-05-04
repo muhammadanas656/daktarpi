@@ -185,6 +185,14 @@ class ProfileRepository {
           },
         ),
       );
+      
+      // CRITICAL FIX: The profile was updated on the server, but the local Hive cache
+      // was holding the OLD avatar URL. We MUST update the cache here, otherwise
+      // ProfileNotifier will reload the stale cache and display the unedited image!
+      final box = await _getCacheBox();
+      await box.put('profile_${profile.id}', jsonEncode(data));
+      await box.put('profile_${profile.id}_time', DateTime.now().toIso8601String());
+      
     } catch (error) {
       throw AppFailure.fromError(
         error,
@@ -204,7 +212,11 @@ class ProfileRepository {
 
     try {
       final fileExt = imageFile.path.split('.').last;
-      final fileName = '$userId/avatar.$fileExt';
+      // CRITICAL FIX: Append a timestamp to the filename to guarantee a unique path.
+      // This immediately busts the Supabase CDN cache, ensuring the newly edited image
+      // is always served instead of the old unedited one!
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '$userId/avatar_$timestamp.$fileExt';
 
       await _client.storage
           .from('profile_pictures')
@@ -307,6 +319,55 @@ class ProfileRepository {
 
   // ─── Saved Patients ──────────────────────────────────────────────────────
 
+  Future<void> _enforceCategoryLock(String relation) async {
+    final userId = currentUserId;
+    if (userId == null || NetworkNotifier.instance.isOffline) return;
+
+    final patients = await getSavedPatients(userId);
+    final patient = patients.firstWhere(
+      (p) => p['relation'] == relation, 
+      orElse: () => <String, dynamic>{}
+    );
+    final fullName = patient['full_name'] as String?;
+
+    final patientNamesToCheck = [relation];
+    if (fullName != null && fullName.isNotEmpty && fullName != relation) {
+      patientNamesToCheck.add(fullName);
+    }
+
+    final activeAppointments = await _client
+        .from('appointments')
+        .select('id')
+        .eq('user_id', userId)
+        .inFilter('patient_name', patientNamesToCheck)
+        .inFilter('status', ['pending', 'confirmed', 'waiting'])
+        .limit(1);
+
+    if ((activeAppointments as List).isNotEmpty) {
+      throw AppFailure(
+        type: AppFailureType.backend,
+        userMessage:
+            "Cannot modify '$relation'. They are currently tied to an active medical appointment.",
+        technicalMessage: 'locked_by_appointment',
+        code: 'locked_by_appointment',
+      );
+    }
+  }
+
+  /// Public wrapper to check if a category is locked by an active appointment.
+  /// Returns [true] if it IS locked, [false] if it is safe to delete/modify.
+  Future<bool> isCategoryLocked(String relation) async {
+    try {
+      await _enforceCategoryLock(relation);
+      return false;
+    } catch (e) {
+      if (e is AppFailure && e.code == 'locked_by_appointment') {
+        return true;
+      }
+      return true;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getSavedPatients(
     String userId, {
     bool forceRefresh = false,
@@ -360,10 +421,33 @@ class ProfileRepository {
     if (userId == null) {
       return;
     }
+    if (patientData['relation'] != null) {
+      await _enforceCategoryLock(patientData['relation'].toString());
+    }
+
     patientData['user_id'] = userId;
+
+    Future<void> updateLocalCache() async {
+      final cacheKey = 'saved_patients_$userId';
+      final box = await _getCacheBox();
+      final cachedData = box.get(cacheKey);
+      List<dynamic> decoded = cachedData != null ? jsonDecode(cachedData) : [];
+      final index = decoded.indexWhere(
+          (item) => item['relation'] == patientData['relation']);
+      if (index != -1) {
+        decoded[index] = {
+          ...Map<String, dynamic>.from(decoded[index]),
+          ...patientData
+        };
+      } else {
+        decoded.add(patientData);
+      }
+      await box.put(cacheKey, jsonEncode(decoded));
+    }
 
     if (NetworkNotifier.instance.isOffline) {
       await _queueAction('save_patient', patientData);
+      await updateLocalCache();
       return;
     }
 
@@ -374,6 +458,7 @@ class ProfileRepository {
       await _client
           .from('saved_patients')
           .upsert(patientData, onConflict: 'user_id, relation');
+      await updateLocalCache();
     } catch (e) {
       debugPrint("Error saving patient details: $e");
     }
@@ -384,6 +469,8 @@ class ProfileRepository {
     if (userId == null) {
       return;
     }
+
+    await _enforceCategoryLock(relation);
 
     if (NetworkNotifier.instance.isOffline) {
       await _queueAction('remove_patient', {

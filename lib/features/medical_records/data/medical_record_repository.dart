@@ -191,6 +191,50 @@ class MedicalRecordRepository {
     return await Hive.openBox(_queueBoxName);
   }
 
+  Future<void> _invalidateRecordsCache(String userId) async {
+    final cacheKey = 'medical_records_$userId';
+    final box = await _getCacheBox();
+    await box.delete(cacheKey);
+    await box.delete('${cacheKey}_time');
+  }
+
+  /// Public cache invalidation — allows external callers (e.g. the UI) to
+  /// force the next [fetchRecords] call to hit the network.
+  Future<void> invalidateCache() async {
+    final userId = currentUserId;
+    if (userId == null) return;
+    await _invalidateRecordsCache(userId);
+  }
+
+  // --- Real-time subscription for medical_records table ---
+  RealtimeChannel subscribeToRecords({
+    required String userId,
+    required void Function(PostgresChangePayload) onChange,
+  }) {
+    return _client
+        .channel('public:medical_records')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'medical_records',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: onChange,
+        )
+        .subscribe();
+  }
+
+  Future<void> removeChannel(RealtimeChannel channel) async {
+    try {
+      await _client.removeChannel(channel);
+    } catch (e) {
+      debugPrint('❌ Failed to remove medical records channel: $e');
+    }
+  }
+
   bool _isCacheValid(DateTime? lastFetch) {
     if (lastFetch == null) return false;
     return DateTime.now().difference(lastFetch) < _cacheDuration;
@@ -251,11 +295,7 @@ class MedicalRecordRepository {
                   await _client.storage.from('medical_docs').remove(remotePaths);
                 }
               }
-              await _client
-                  .from('medical_records')
-                  .update({'deleted_at': DateTime.now().toIso8601String()})
-                  .eq('id', payload['id'])
-                  .eq('user_id', payload['user_id']);
+              await _client.from('medical_records').delete().eq('id', payload['id']).eq('user_id', payload['user_id']);
               break;
           }
           await box.delete(key);
@@ -386,7 +426,14 @@ class MedicalRecordRepository {
     required List<String> fileUrls,
   }) async {
     final userId = currentUserId;
-    if (userId == null) return;
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing user.',
+        code: 'not_authenticated',
+      );
+    }
 
     final payload = {
       'user_id': userId,
@@ -416,6 +463,7 @@ class MedicalRecordRepository {
 
     try {
       await _client.from('medical_records').insert(payload);
+      await _invalidateRecordsCache(userId);
     } catch (error) {
       throw AppFailure.fromError(
         error,
@@ -424,9 +472,90 @@ class MedicalRecordRepository {
     }
   }
 
-  Future<void> deleteRecord(int id, List<String> filePaths) async {
+  // THE FIX: Upgraded to support Offline Queuing and Optimistic Caching!
+  Future<void> lockRecordForReview(int recordId, {DateTime? unlockDate}) async {
     final userId = currentUserId;
     if (userId == null) return;
+
+    final lockedUntilDate =
+        unlockDate != null
+            ? unlockDate.add(const Duration(days: 1)).toIso8601String()
+            : DateTime.now().add(const Duration(days: 30)).toIso8601String();
+
+    if (NetworkNotifier.instance.isOffline) {
+      await _queueAction('update_record', {
+        'id': recordId,
+        'user_id': userId,
+        'data': {'locked_until': lockedUntilDate},
+      });
+
+      final box = await _getCacheBox();
+      final cacheKey = 'medical_records_$userId';
+      final cachedData = box.get(cacheKey);
+      if (cachedData != null) {
+        final List<dynamic> decoded = jsonDecode(cachedData);
+        final index = decoded.indexWhere((item) => item['id'] == recordId);
+        if (index != -1) {
+          decoded[index]['locked_until'] = lockedUntilDate;
+          await box.put(cacheKey, jsonEncode(decoded));
+        }
+      }
+      return;
+    }
+
+    try {
+      await _client
+          .from('medical_records')
+          .update({'locked_until': lockedUntilDate})
+          .eq('id', recordId)
+          .eq('user_id', userId);
+
+      await _invalidateRecordsCache(userId);
+    } catch (e) {
+      debugPrint('Failed to lock record: $e');
+    }
+  }
+
+  Future<void> unlockRecords(List<int> recordIds) async {
+    final userId = currentUserId;
+    if (userId == null || NetworkNotifier.instance.isOffline || recordIds.isEmpty) return;
+
+    try {
+      await _client
+          .from('medical_records')
+          .update({'locked_until': null})
+          .inFilter('id', recordIds)
+          .eq('user_id', userId);
+      await _invalidateRecordsCache(userId);
+    } catch (e) {
+      debugPrint('❌ Failed to unlock medical records: $e');
+    }
+  }
+
+  Future<void> deleteRecord(MedicalRecord record) async {
+    final lockedUntil = record.lockedUntil;
+    if (lockedUntil != null && lockedUntil.isAfter(DateTime.now())) {
+      final remaining = lockedUntil.difference(DateTime.now());
+      throw AppFailure(
+        type: AppFailureType.validation,
+        userMessage:
+            'Record is locked for medical review. Unlocks in ${remaining.inDays} days, ${remaining.inHours % 24} hours.',
+        technicalMessage: 'Medical record ${record.id} is review locked.',
+        code: 'medical_record_locked',
+      );
+    }
+
+    final id = record.id;
+    final filePaths = record.fileUrls;
+    final userId = currentUserId;
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing user.',
+        code: 'not_authenticated',
+      );
+    }
     if (NetworkNotifier.instance.isOffline) {
       await _queueAction('delete_record', {
         'id': id,
@@ -453,9 +582,10 @@ class MedicalRecordRepository {
       }
       await _client
           .from('medical_records')
-          .update({'deleted_at': DateTime.now().toIso8601String()})
+          .delete()
           .eq('id', id)
           .eq('user_id', userId);
+      await _invalidateRecordsCache(userId);
     } catch (error) {
       throw AppFailure.fromError(
         error,
@@ -472,7 +602,14 @@ class MedicalRecordRepository {
     required List<String> fileUrls,
   }) async {
     final userId = currentUserId;
-    if (userId == null) return;
+    if (userId == null) {
+      throw const AppFailure(
+        type: AppFailureType.auth,
+        userMessage: 'Please sign in to continue.',
+        technicalMessage: 'Missing user.',
+        code: 'not_authenticated',
+      );
+    }
 
     final payload = {
       'record_for': recordFor,
@@ -512,6 +649,7 @@ class MedicalRecordRepository {
           .update(payload)
           .eq('id', id)
           .eq('user_id', userId);
+      await _invalidateRecordsCache(userId);
     } catch (error) {
       throw AppFailure.fromError(
         error,
@@ -520,3 +658,6 @@ class MedicalRecordRepository {
     }
   }
 }
+
+
+

@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/list_fingerprint_ext.dart';
 import '../../../../core/widgets/custom_app_bar.dart';
 import '../../data/doctor_repository.dart';
 import '../../presentation/favorites_notifier.dart';
 import '../../../../core/widgets/app_loader.dart'; 
 import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../../../presentation/widgets/animations/premium_list_animator.dart';
 import '../../../../core/theme/app_styles.dart';
 
 class MyDoctorsScreen extends StatefulWidget {
@@ -64,144 +66,10 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     });
   }
 
-  void _showUnlikeConfirmationDialog(
-    BuildContext context,
-    int doctorId,
-    String doctorName,
-  ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
-      context: context,
-      builder:
-          (ctx) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
-            ),
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 24,
-            ),
-            elevation: 0,
-            child: Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: Colors.redAccent.withValues(alpha: isDark ? 0.2 : 0.1),
-                  width: 1.5,
-                ),
-                boxShadow: AppStyles.elevatedShadow(context),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.redAccent.withValues(alpha: 0.25),
-                          blurRadius: 24,
-                          spreadRadius: -4,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.heart_broken_rounded,
-                      color: Colors.redAccent,
-                      size: 34,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    "Remove Favorite?",
-                    style: AppTextStyles.h2(
-                      context,
-                    ).copyWith(letterSpacing: 0.5),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "Are you sure you want to remove $doctorName from your favorites?",
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.body(
-                      context,
-                    ).copyWith(color: context.colorTextLight, height: 1.4),
-                  ),
-                  const SizedBox(height: 32),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: Text(
-                            "Cancel",
-                            style: TextStyle(
-                              color: context.colorTextLight,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            boxShadow: AppStyles.primaryShadow(
-                              context,
-                              Colors.redAccent,
-                              alpha: isDark ? 0.4 : 0.35,
-                            ),
-                          ),
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              // Needs full object for the new Notifier logic!
-                              _favNotifier.toggle({'id': doctorId});
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: const Text(
-                              "Remove",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
   void _handleUnlikeWithUndo(
     int doctorId,
     String doctorName,
-    int currentCount,
   ) {
-    if (currentCount <= 1) {
-      _showUnlikeConfirmationDialog(context, doctorId, doctorName);
-      return;
-    }
-
     HapticFeedback.mediumImpact();
     setState(() => _pendingRemovalIds.add(doctorId));
     ScaffoldMessenger.of(context).clearSnackBars();
@@ -332,6 +200,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
     }
 
     return ListView.builder(
+      key: ValueKey(doctors.dataFingerprint),
       padding: EdgeInsets.fromLTRB(24, dynamicTopPadding, 24, 24),
       itemCount: doctors.length,
       itemBuilder: (context, index) {
@@ -339,36 +208,39 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
         final docId = doctor['id'] as int;
         final isBeingRemoved = _pendingRemovalIds.contains(docId);
 
-        return AnimatedSize(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: isBeingRemoved ? 0.0 : 1.0,
-            child:
-                isBeingRemoved
-                    ? const SizedBox(width: double.infinity)
-                    : Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: DoctorListCard(
-                        id: docId,
-                        name: doctor['full_name'] ?? 'Unknown',
-                        specialty:
-                            doctor['specialties']?['name'] ?? 'Specialist',
-                        rating: (doctor['rating'] as num?)?.toString() ?? '0.0',
-                        views: (doctor['views_count'] ?? 0).toString(),
-                        imageUrl: doctor['profile_picture_url'],
-                        isFavorite: true,
-                        onFavoriteTap:
-                            () => _handleUnlikeWithUndo(
-                              docId,
-                              doctor['full_name'] ?? 'Unknown',
-                              doctors.length,
-                            ),
-                        // PRO FIX: Navigating with the whole object
-                        onCardTap: () => _navigateToDoctorDetails(doctor),
+        return PremiumListAnimator(
+          index: index,
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: isBeingRemoved ? 0.0 : 1.0,
+              child:
+                  isBeingRemoved
+                      ? const SizedBox(width: double.infinity)
+                      : Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: DoctorListCard(
+                          id: docId,
+                          name: doctor['full_name'] ?? 'Unknown',
+                          specialty:
+                              doctor['specialties']?['name'] ?? 'Specialist',
+                          rating:
+                              (doctor['rating'] as num?)?.toString() ?? '0.0',
+                          views: (doctor['views_count'] ?? 0).toString(),
+                          imageUrl: doctor['profile_picture_url'],
+                          isFavorite: true,
+                          onFavoriteTap:
+                              () => _handleUnlikeWithUndo(
+                                docId,
+                                doctor['full_name'] ?? 'Unknown',
+                              ),
+                          // PRO FIX: Navigating with the whole object
+                          onCardTap: () => _navigateToDoctorDetails(doctor),
+                        ),
                       ),
-                    ),
+            ),
           ),
         );
       },
@@ -412,6 +284,7 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
         }
 
         return ListView.builder(
+          key: ValueKey(doctors.dataFingerprint),
           padding: EdgeInsets.fromLTRB(24, dynamicTopPadding, 24, 24),
           itemCount: doctors.length,
           itemBuilder: (context, index) {
@@ -432,20 +305,23 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
               ),
             );
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: DoctorListCard(
-                id: docId,
-                name: doctor['full_name'] ?? 'Unknown',
-                specialty: doctor['specialties']?['name'] ?? 'Specialist',
-                rating: (doctor['rating'] as num?)?.toString() ?? '0.0',
-                views: (doctor['views_count'] ?? 0).toString(),
-                imageUrl: doctor['profile_picture_url'],
-                isFavorite: _favNotifier.isFavorite(docId),
-                onFavoriteTap: () => _favNotifier.toggle(doctor),
-                // PRO FIX: Navigating with the whole object
-                onCardTap: () => _navigateToDoctorDetails(doctor),
-                trailingWidget: trailing,
+            return PremiumListAnimator(
+              index: index,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: DoctorListCard(
+                  id: docId,
+                  name: doctor['full_name'] ?? 'Unknown',
+                  specialty: doctor['specialties']?['name'] ?? 'Specialist',
+                  rating: (doctor['rating'] as num?)?.toString() ?? '0.0',
+                  views: (doctor['views_count'] ?? 0).toString(),
+                  imageUrl: doctor['profile_picture_url'],
+                  isFavorite: _favNotifier.isFavorite(docId),
+                  onFavoriteTap: () => _favNotifier.toggle(doctor),
+                  // PRO FIX: Navigating with the whole object
+                  onCardTap: () => _navigateToDoctorDetails(doctor),
+                  trailingWidget: trailing,
+                ),
               ),
             );
           },

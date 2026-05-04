@@ -216,4 +216,16 @@ class NotificationRepository {
        await _client.from('notifications').delete().eq('id', id);
      } catch (_) {}
   }
+
+  // THE FIX: Bulk Delete for Inbox Zero
+  Future<void> deleteAllReadRemote() async {
+     final userId = _userId;
+     if (userId == null || NetworkNotifier.instance.isOffline) return;
+     try {
+       await _client.from('notifications')
+           .delete()
+           .eq('user_id', userId)
+           .eq('is_read', true);
+     } catch (_) {}
+  }
 }

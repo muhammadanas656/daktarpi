@@ -264,6 +264,7 @@ class AppointmentNotificationService {
     required int reminderMinutes,
     required String doctorName,
     bool includeFiveHourWarning = true,
+    bool includeMorningOfReminder = true,
     bool includeMissedStatusUpdate = true,
   }) async {
     if (!_isSupportedPlatform) return;
@@ -331,10 +332,21 @@ class AppointmentNotificationService {
     );
     final morningOfUtc = morningOfLocal.toUtc();
 
+    // --- PRO FIX: Anti-Spam Detection ---
+    // If the standard reminder OR the 5-hour warning lands within 60 minutes of 8:00 AM,
+    // we suppress this "Morning Of" notification to prevent firing 2 or 3 alerts at breakfast!
+    bool skipMorningOf = !includeMorningOfReminder;
+    if (morningOfUtc.difference(finalReminderTimeUtc).inMinutes.abs() < 60) {
+      skipMorningOf = true;
+    }
+    if (includeFiveHourWarning && morningOfUtc.difference(cancellationWarningUtc).inMinutes.abs() < 60) {
+      skipMorningOf = true;
+    }
+
     // Only schedule if 8:00 AM is in the future AND it is strictly before the actual appointment
-    // (We don't want an 8:00 AM reminder for an 8:00 AM appointment)
     if (morningOfUtc.isAfter(nowUtc) &&
-        morningOfLocal.isBefore(appointmentLocalDateTime)) {
+        morningOfLocal.isBefore(appointmentLocalDateTime) &&
+        !skipMorningOf) {
       await _scheduleWithFallback(
         id: safeId + 100000,
         title: _morningOfReminderTitle,
@@ -343,6 +355,8 @@ class AppointmentNotificationService {
         triggerUtc: morningOfUtc,
         payload: payloadString,
       );
+    } else {
+      await _plugin.cancel(safeId + 100000);
     }
 
     // 3. The Time-Out / Resolution Notification (OS)
@@ -391,7 +405,8 @@ class AppointmentNotificationService {
     }
 
     if (morningOfUtc.isAfter(nowUtc) &&
-        morningOfLocal.isBefore(appointmentLocalDateTime)) {
+        morningOfLocal.isBefore(appointmentLocalDateTime) &&
+        !skipMorningOf) {
       await NotificationNotifier.instance.addNotification(
         title: _morningOfReminderTitle,
         body:

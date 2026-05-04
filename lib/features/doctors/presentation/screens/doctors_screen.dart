@@ -7,8 +7,10 @@ import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../presentation/widgets/animations/premium_list_animator.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../../../presentation/widgets/doctor_list_card_skeleton.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
 
 import '../favorites_notifier.dart';
@@ -35,6 +37,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
   String _selectedFilter = 'All';
   double? _activeRadiusKm;
   Timer? _debounce;
+  bool _hasEverLoaded = false;
 
   @override
   void initState() {
@@ -42,7 +45,13 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
     if (!widget.isBackgroundLayer) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        unawaited(_docsNotifier.fetchDoctors());
+        unawaited(
+          _runDoctorsFetch(
+            query: '',
+            filter: _selectedFilter,
+            maxRadiusKm: _activeRadiusKm,
+          ),
+        );
       });
     }
     _searchController.addListener(_onSearchChanged);
@@ -63,10 +72,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (mounted && !widget.isBackgroundLayer) {
-        _docsNotifier.fetchDoctors(
-          query: _searchController.text.trim(),
-          filter: _selectedFilter,
-          maxRadiusKm: _activeRadiusKm,
+        unawaited(
+          _runDoctorsFetch(
+            query: _searchController.text.trim(),
+            filter: _selectedFilter,
+            maxRadiusKm: _activeRadiusKm,
+          ),
         );
       }
     });
@@ -77,10 +88,29 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
     FocusScope.of(context).unfocus();
   }
 
-  Future<void> _fetchDoctors() async {
+  Future<void> _runDoctorsFetch({
+    required String query,
+    required String filter,
+    required double? maxRadiusKm,
+    bool forceRefresh = false,
+  }) async {
     await _docsNotifier.fetchDoctors(
+      query: query,
+      filter: filter,
+      maxRadiusKm: maxRadiusKm,
+      forceRefresh: forceRefresh,
+    );
+
+    if (mounted && !_hasEverLoaded) {
+      setState(() => _hasEverLoaded = true);
+    }
+  }
+
+  Future<void> _fetchDoctors() async {
+    await _runDoctorsFetch(
       query: _searchController.text.trim(),
       filter: _selectedFilter,
+      maxRadiusKm: _activeRadiusKm,
       forceRefresh: true,
     );
   }
@@ -89,7 +119,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
   Widget build(BuildContext context) {
     super.build(context);
     final topPadding = MediaQuery.paddingOf(context).top;
-
     return Scaffold(
       // THE FIX: Extend body so it slides elegantly under the glass header
       extendBodyBehindAppBar: true,
@@ -121,6 +150,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
                       pinned: true,
                       delegate: _DoctorsGlassCapsuleDelegate(
                         paddingTop: topPadding,
+                        isSyncing: _docsNotifier.isLoading && !isEmpty,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -132,16 +162,16 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
                     ),
 
                     // 2. THE CONTENT (Guaranteed to slide UNDER the header)
-                    if (_docsNotifier.isLoading && isEmpty)
-                      const SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryGreen,
-                          ),
+                    if ((_docsNotifier.isLoading || !_hasEverLoaded) && isEmpty)
+                      DoctorListSkeletonSliver(
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          20,
+                          24,
+                          MediaQuery.paddingOf(context).bottom + 20,
                         ),
                       )
-                    else if (isEmpty)
+                    else if (isEmpty && _hasEverLoaded)
                       SliverToBoxAdapter(
                         child: SizedBox(
                           height: 300,
@@ -196,10 +226,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
           _selectedFilter = filter;
           _activeRadiusKm = radius;
         });
-        _docsNotifier.fetchDoctors(
-          query: _searchController.text.trim(),
-          filter: filter,
-          maxRadiusKm: radius,
+        unawaited(
+          _runDoctorsFetch(
+            query: _searchController.text.trim(),
+            filter: filter,
+            maxRadiusKm: radius,
+          ),
         );
       },
     );
@@ -209,23 +241,28 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
   Widget _buildDoctorList() {
     final doctors = _docsNotifier.doctors;
     return SliverList(
+      // THE FIX: Includes the filter ('All', 'Nearest', etc.) and the search query!
+      key: ValueKey('tab_doctors_${_selectedFilter}_${_searchController.text}'),
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           final doctor = doctors[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16), // Maintains the exact spacing you had before
-            child: DoctorListCard(
-              id: doctor['id'],
-              name: doctor['full_name'] ?? 'Unknown',
-              specialty: doctor['specialties']?['name'] ?? 'Specialist',
-              rating: doctor['rating']?.toString() ?? '0.0',
-              views: (doctor['views_count'] ?? 0).toString(),
-              imageUrl: doctor['profile_picture_url'],
-              isFavorite: _favNotifier.isFavorite(doctor['id']),
-              onFavoriteTap: () => _favNotifier.toggle(doctor),
-              onCardTap: () => context.push(
-                AppRoutes.doctorDetailsById('${doctor['id']}'),
-                extra: doctor,
+          return PremiumListAnimator(
+            index: index,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16), // Maintains the exact spacing you had before
+              child: DoctorListCard(
+                id: doctor['id'],
+                name: doctor['full_name'] ?? 'Unknown',
+                specialty: doctor['specialties']?['name'] ?? 'Specialist',
+                rating: doctor['rating']?.toString() ?? '0.0',
+                views: (doctor['views_count'] ?? 0).toString(),
+                imageUrl: doctor['profile_picture_url'],
+                isFavorite: _favNotifier.isFavorite(doctor['id']),
+                onFavoriteTap: () => _favNotifier.toggle(doctor),
+                onCardTap: () => context.push(
+                  AppRoutes.doctorDetailsById('${doctor['id']}'),
+                  extra: doctor,
+                ),
               ),
             ),
           );
@@ -241,6 +278,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
   // UPGRADED TO SLIVER
   Widget _buildFacilityGrid(List<Map<String, dynamic>> items, {required bool isHospital}) {
     return SliverGrid(
+      // THE FIX: Includes the facility type ('Hospital' vs 'Clinic')
+      key: ValueKey(
+        'tab_facilities_${isHospital ? 'hospital' : 'clinic'}_${_searchController.text}',
+      ),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
@@ -248,7 +289,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
         childAspectRatio: 0.80, 
       ),
       delegate: SliverChildBuilderDelegate(
-        (context, index) => _buildFacilityCard(items[index], isHospital),
+        (context, index) => PremiumListAnimator(
+          index: index,
+          child: _buildFacilityCard(items[index], isHospital),
+        ),
         childCount: items.length,
       ),
     );
@@ -392,8 +436,13 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
 class _DoctorsGlassCapsuleDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   final double paddingTop;
+  final bool isSyncing;
 
-  _DoctorsGlassCapsuleDelegate({required this.child, required this.paddingTop});
+  _DoctorsGlassCapsuleDelegate({
+    required this.child,
+    required this.paddingTop,
+    this.isSyncing = false,
+  });
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
@@ -432,6 +481,17 @@ class _DoctorsGlassCapsuleDelegate extends SliverPersistentHeaderDelegate {
             ),
             child: child,
           ),
+          if (isSyncing)
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: LinearProgressIndicator(
+                color: AppColors.primaryGreen,
+                minHeight: 2.0,
+                backgroundColor: Colors.transparent,
+              ),
+            ),
         ],
       ),
     );

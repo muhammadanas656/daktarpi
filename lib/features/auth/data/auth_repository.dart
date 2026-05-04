@@ -5,6 +5,7 @@ import '../../profile/presentation/profile_notifier.dart';
 import '../../doctors/presentation/doctors_notifier.dart';
 import '../../doctors/presentation/favorites_notifier.dart';
 import '../../appointments/presentation/appointment_notifier.dart';
+import '../../../core/services/fcm_service.dart';
 
 /// Centralised authentication repository.
 ///
@@ -152,6 +153,16 @@ class AuthRepository {
   /// Signs the current user out.
   Future<void> signOut() async {
     try {
+      final user = _client.auth.currentUser;
+      if (user != null) {
+        try {
+          await _client.from('profiles').update({'fcm_token': null}).eq('id', user.id);
+        } catch (e) {
+          debugPrint('AuthRepository: failed to clear fcm_token: $e');
+        }
+      }
+      await FcmService.instance.deleteToken();
+
       ProfileNotifier.instance.clear();
       DoctorsNotifier.instance.clear();
       FavoritesNotifier.instance.clear();

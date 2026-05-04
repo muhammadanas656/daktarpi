@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/router/app_router.dart';
 import '../../features/notifications/presentation/notification_notifier.dart';
+import '../../features/settings/presentation/settings_notifier.dart';
 import 'appointment_notification_service.dart';
 
 class FcmService {
@@ -46,6 +47,8 @@ class FcmService {
 
         // 2. Foreground Messages (App is open)
         FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+          if (!SettingsNotifier.instance.notificationsEnabled) return;
+          
           debugPrint('📩 Got a message whilst in the foreground!');
           unawaited(_saveToInbox(message, message.messageId));
 
@@ -60,6 +63,8 @@ class FcmService {
 
         // 3. Background Messages (User taps notification from background)
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+          if (!SettingsNotifier.instance.notificationsEnabled) return;
+          
           debugPrint('📩 App opened from background via notification!');
           unawaited(_saveToInbox(message, message.messageId));
 
@@ -71,15 +76,17 @@ class FcmService {
         // 4. Terminated Messages (User taps notification to cold-boot the app)
         final initialMessage = await _messaging.getInitialMessage();
         if (initialMessage != null) {
-          debugPrint('📩 App opened from terminated state via notification!');
-          unawaited(_saveToInbox(initialMessage, initialMessage.messageId));
+          if (SettingsNotifier.instance.notificationsEnabled) {
+            debugPrint('📩 App opened from terminated state via notification!');
+            unawaited(_saveToInbox(initialMessage, initialMessage.messageId));
 
-          // --- PRO FIX: Delay routing slightly so the app has time to draw the first frame! ---
-          Future.delayed(const Duration(milliseconds: 500), () {
-            final payloadStr =
-                initialMessage.data['type'] ?? initialMessage.data.toString();
-            handleNotificationTap(payloadStr);
-          });
+            // --- PRO FIX: Delay routing slightly so the app has time to draw the first frame! ---
+            Future.delayed(const Duration(milliseconds: 500), () {
+              final payloadStr =
+                  initialMessage.data['type'] ?? initialMessage.data.toString();
+              handleNotificationTap(payloadStr);
+            });
+          }
         }
         _initialized = true;
       } else {
@@ -92,6 +99,7 @@ class FcmService {
 
   // --- Centralized Inbox Saver with FCM deduplication ---
   Future<void> _saveToInbox(RemoteMessage message, String? messageId) async {
+    if (!SettingsNotifier.instance.notificationsEnabled) return;
     if (message.notification == null) return;
 
     try {
@@ -134,6 +142,16 @@ class FcmService {
       debugPrint('✅ FCM Token securely saved to Supabase');
     } catch (e) {
       debugPrint('❌ Failed to save FCM token: $e');
+    }
+  }
+
+  Future<void> deleteToken() async {
+    try {
+      await _messaging.deleteToken();
+      _initialized = false;
+      debugPrint('✅ FCM Token deleted successfully');
+    } catch (e) {
+      debugPrint('❌ Failed to delete FCM token: $e');
     }
   }
 }

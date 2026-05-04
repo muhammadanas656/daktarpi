@@ -10,6 +10,7 @@ import '../../presentation/widgets/review_dialog.dart';
 import '../../../../core/network/network_notifier.dart';
 import '../../../../features/appointments/presentation/appointment_notifier.dart';
 import '../../../../core/widgets/app_loader.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 
 class AccountActivityScreen extends StatefulWidget {
   const AccountActivityScreen({super.key});
@@ -160,7 +161,9 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> with Sing
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: const CustomAppBar(title: "Past Records"),
       body: RefreshIndicator(
         color: AppColors.primaryGreen,
         displacement: kToolbarHeight + 20,
@@ -169,40 +172,9 @@ class _AccountActivityScreenState extends State<AccountActivityScreen> with Sing
           physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
           clipBehavior: Clip.none,
           slivers: [
-            // --- 📌 PRO FIX: Liquid Glass App Bar ---
-            SliverAppBar(
-              pinned: true,
-              elevation: 0,
-              backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85),
-              surfaceTintColor: Colors.transparent,
-              flexibleSpace: ClipRRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: Container(color: Colors.transparent),
-                ),
-              ),
-              leadingWidth: 64,
-              leading: Center(
-                child: InkWell(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.arrow_back_ios_new_rounded, color: context.colorTextDark, size: 18),
-                  ),
-                ),
-              ),
-              centerTitle: true,
-              title: Text(
-                "Past Records", // Updated title to match the button they tapped
-                style: AppTextStyles.h3(context).copyWith(fontSize: 18, letterSpacing: 0.3),
+            SliverPadding(
+              padding: EdgeInsets.only(
+                top: MediaQuery.paddingOf(context).top + kToolbarHeight,
               ),
             ),
 

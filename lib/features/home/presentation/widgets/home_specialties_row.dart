@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
@@ -25,21 +26,60 @@ class HomeSpecialtiesRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (specialties.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 24),
-        child: Text("No specialties found"),
+      return Container(
+        height: 80,
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.03)
+              : AppColors.primaryGreen.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : AppColors.primaryGreen.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.category_outlined,
+                color: AppColors.primaryGreen,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              'No specialties available',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     return SizedBox(
-      height: 115, 
+      height: 115,
       child: ListView.separated(
         clipBehavior: Clip.none,
         padding: const EdgeInsets.symmetric(horizontal: 24),
         scrollDirection: Axis.horizontal,
         itemCount: specialties.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 16), 
+        separatorBuilder: (_, __) => const SizedBox(width: 16),
         itemBuilder: (context, index) {
           final item = specialties[index];
           final name = item['name'] ?? '';
@@ -47,7 +87,7 @@ class HomeSpecialtiesRow extends StatelessWidget {
           return GestureDetector(
             onTap: () => onSpecialtyTap(item['id'], name, item['icon_url']?.toString()),
             child: SizedBox(
-              width: 83, 
+              width: 83,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -94,7 +134,15 @@ class HomeSpecialtiesRow extends StatelessWidget {
                 ],
               ),
             ),
-          );
+          )
+              .animate(delay: (200 + (index * 60)).ms)
+              .fade(duration: 500.ms, curve: Curves.easeOut)
+              .slideX(
+                begin: 0.15,
+                end: 0,
+                duration: 500.ms,
+                curve: Curves.easeOutCubic,
+              );
         },
       ),
     );

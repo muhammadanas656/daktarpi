@@ -6,9 +6,11 @@ import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/list_fingerprint_ext.dart';
 import '../favorites_notifier.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../../data/doctor_repository.dart';
+import '../../../../presentation/widgets/animations/premium_list_animator.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../models/doctors_route_args.dart';
@@ -335,9 +337,13 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     final showRecentSearches = !isQueryLongEnough && _recentSearches.isNotEmpty;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: context.colorScaffoldBackground,
       appBar: const CustomAppBar(title: "Global Search"),
       body: Container(
+        padding: EdgeInsets.only(
+          top: MediaQuery.paddingOf(context).top + kToolbarHeight,
+        ),
         decoration: BoxDecoration(
           gradient: AppStyles.pageGradient(context),
         ), // Added context
@@ -447,6 +453,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                         : _doctors.isEmpty
                         ? Center(child: Text("No results found"))
                         : ListView.separated(
+                          key: ValueKey(_doctors.dataFingerprint),
                           padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
                           itemCount: _doctors.length,
                           separatorBuilder:
@@ -463,21 +470,25 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
                             final isFavorite = _favNotifier.isFavorite(docId);
 
-                            return DoctorListCard(
-                              id: docId,
-                              name: doctor['full_name'] ?? 'Unknown',
-                              specialty: " $specialtyName",
-                              rating: doctor['rating']?.toString() ?? '0.0',
-                              views: views,
-                              imageUrl: doctor['profile_picture_url'],
-                              isFavorite: isFavorite,
-                              heroTagPrefix: 'search-',
-                              onFavoriteTap: () => _favNotifier.toggle(doctor),
-                              onCardTap:
-                                  () => context.push(
-                                    AppRoutes.doctorDetailsById('$docId'),
-                                    extra: doctor,
-                                  ),
+                            return PremiumListAnimator(
+                              index: index,
+                              child: DoctorListCard(
+                                id: docId,
+                                name: doctor['full_name'] ?? 'Unknown',
+                                specialty: " $specialtyName",
+                                rating: doctor['rating']?.toString() ?? '0.0',
+                                views: views,
+                                imageUrl: doctor['profile_picture_url'],
+                                isFavorite: isFavorite,
+                                heroTagPrefix: 'search-',
+                                onFavoriteTap:
+                                    () => _favNotifier.toggle(doctor),
+                                onCardTap:
+                                    () => context.push(
+                                      AppRoutes.doctorDetailsById('$docId'),
+                                      extra: doctor,
+                                    ),
+                              ),
                             );
                           },
                         ),

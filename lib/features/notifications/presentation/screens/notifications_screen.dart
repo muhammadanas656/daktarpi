@@ -1,11 +1,13 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../notification_notifier.dart';
+import '../../../../core/widgets/custom_app_bar.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -94,100 +96,140 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }).toList();
 
     final unreadCount = NotificationNotifier.instance.unreadCount;
+    final readCount = notifications.where((n) => n['is_read'] == true).length;
     final groupedNotifications = _groupNotifications(notifications);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+        return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: CustomAppBar(
+        titleWidget: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Notifications",
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF1D1D1F),
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+              ),
+            ),
+            if (unreadCount > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerRed,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  "$unreadCount",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ]
+          ],
+        ),
+        actions: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // --- 1. The Premium Sweep Button (Only shows if read > 0) ---
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.fastOutSlowIn,
+                child: readCount > 0
+                    ? Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.mediumImpact();
+                            NotificationNotifier.instance.clearAllRead();
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.dangerRed.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.delete_sweep_rounded, color: AppColors.dangerRed, size: 20),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+
+              // --- 2. The Mark All Read Button (Only shows if unread > 0) ---
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.fastOutSlowIn,
+                child: unreadCount > 0
+                    ? Padding(
+                        padding: const EdgeInsets.only(right: 16.0),
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            NotificationNotifier.instance.markAllAsRead();
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withValues(alpha: 0.1) : AppColors.primaryGreen.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.done_all_rounded, color: isDark ? Colors.white : AppColors.primaryGreen, size: 18),
+                          ),
+                        ),
+                      )
+                    : const SizedBox(width: 16), // Preserves layout edge spacing
+              ),
+            ],
+          )
+        ],
+      ),
       body: RefreshIndicator(
         color: AppColors.primaryGreen,
-        displacement: kToolbarHeight + 20, // Perfectly clears the frosted app bar
+        displacement: kToolbarHeight + 20,
         onRefresh: () => NotificationNotifier.instance.load(force: true),
         child: CustomScrollView(
-          clipBehavior: Clip.none, // Protects shadows from clipping
+          clipBehavior: Clip.none,
           slivers: [
-            // --- 📌 NEW: Sleek, Minimalist Frosted Glass App Bar ---
-            SliverAppBar(
-              pinned: true,
-              elevation: 0,
-              backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85),
-              surfaceTintColor: Colors.transparent, // Prevents Material 3 color shifting
-              flexibleSpace: ClipRRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: Container(color: Colors.transparent),
-                ),
+            SliverPadding(
+              padding: EdgeInsets.only(
+                top: MediaQuery.paddingOf(context).top + kToolbarHeight,
               ),
-              leadingWidth: 64,
-              leading: Center(
-                child: InkWell(
-                  onTap: () => context.pop(),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.arrow_back_ios_new_rounded, color: context.colorTextDark, size: 18),
-                  ),
-                ),
-              ),
-              centerTitle: true,
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "Notifications",
-                    style: AppTextStyles.h3(context).copyWith(
-                      fontSize: 18,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  if (unreadCount > 0) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.dangerRed,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        "$unreadCount",
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ]
-                ],
-              ),
-              actions: [
-                if (unreadCount > 0)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 16.0),
-                      child: InkWell(
-                        onTap: () => NotificationNotifier.instance.markAllAsRead(),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withValues(alpha: 0.1) : AppColors.primaryGreen.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(Icons.done_all_rounded, color: isDark ? Colors.white : AppColors.primaryGreen, size: 18),
-                        ),
-                      ),
-                    ),
-                  )
-              ],
             ),
 
+            // --- Linear loader for background refreshes ---
+            if (NotificationNotifier.instance.isLoading && notifications.isNotEmpty)
+              const SliverToBoxAdapter(
+                child: LinearProgressIndicator(
+                  color: AppColors.primaryGreen,
+                  minHeight: 2.0,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+
+            // --- Cold start: circular loader when no data has ever loaded ---
+            if (NotificationNotifier.instance.isLoading && !NotificationNotifier.instance.hasLoaded && notifications.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.primaryGreen,
+                  ),
+                ),
+              )
             // --- 📌 Content Area ---
-            if (notifications.isEmpty)
+            else if (notifications.isEmpty)
               SliverFillRemaining(
                 child: _buildPremiumEmptyState(isDark),
               )

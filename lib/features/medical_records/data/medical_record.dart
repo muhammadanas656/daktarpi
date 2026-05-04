@@ -26,6 +26,7 @@ abstract class MedicalRecord with _$MedicalRecord {
     List<String> fileUrls,
     @JsonKey(name: 'created_at') required DateTime createdAt,
     @JsonKey(name: 'deleted_at') DateTime? deletedAt,
+    @JsonKey(name: 'locked_until') DateTime? lockedUntil,
   }) = _MedicalRecord;
 
   factory MedicalRecord.fromJson(Map<String, dynamic> json) =>

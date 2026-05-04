@@ -40,7 +40,7 @@ class DoctorDetailsHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Hero(
-            tag: 'doctor-hero-${doctor['id']}',
+            tag: doctor['hero_tag'] ?? 'doctor-hero-${doctor['id']}',
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: AppNetworkImage(

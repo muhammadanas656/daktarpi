@@ -8,9 +8,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_styles.dart';
-import '../../../../core/widgets/background_sync_indicator.dart';
+import '../../../../presentation/widgets/animations/premium_list_animator.dart';
 import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
+import '../../../../presentation/widgets/doctor_list_card_skeleton.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../doctors_notifier.dart';
 import '../favorites_notifier.dart';
@@ -32,6 +33,7 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
 
   // Data State
   bool _isLoading = true; // Only block UI if the vault is completely empty
+  bool _hasEverLoaded = false;
   bool _showClearIcon = false;
   String _selectedFilter = 'All';
   double? _activeRadiusKm;
@@ -41,13 +43,16 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
     super.initState();
     _favNotifier.addListener(_onStateChanged);
     _profileNotifier.addListener(_onStateChanged);
-    _fetchData();
 
     _searchController.addListener(() {
       setState(() {
         _showClearIcon = _searchController.text.isNotEmpty;
       });
       _onSearchChanged();
+    });
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _fetchData();
     });
   }
 
@@ -94,38 +99,37 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
     FocusScope.of(context).unfocus();
   }
 
-  Future<void> _fetchData({String? query, bool forceRefresh = false}) async {
-    if (mounted) setState(() => _isLoading = true);
-
-    // PRO FIX: Ensure favorites are loaded into RAM before showing the list
-    if (!_favNotifier.isLoaded) {
-      await _favNotifier.loadFavorites();
+  Future<void> _fetchData({String? query, bool forceRefresh = false, bool isPullToRefresh = false}) async {
+    final isEmpty = _docsNotifier.exploreFeaturedDoctors.isEmpty;
+    if (mounted && (isEmpty || (forceRefresh && !isPullToRefresh))) {
+      setState(() => _isLoading = true);
     }
-    
+
     try {
+      if (!_favNotifier.isLoaded) {
+        await _favNotifier.loadFavorites();
+      }
+
       await _docsNotifier.fetchFeaturedDoctors(
         query: query ?? '',
         filter: _selectedFilter,
         maxRadiusKm: _activeRadiusKm,
         forceRefresh: forceRefresh,
       );
-
+    } catch (e) {
+      debugPrint('Error fetching data: $e');
+    } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _hasEverLoaded = true;
         });
       }
-    } catch (e) {
-      debugPrint('Error fetching data: $e');
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _navigateToDoctorDetails(int doctorId, Map<String, dynamic> doctorData) async {
     await context.push(AppRoutes.doctorDetailsById('$doctorId'), extra: doctorData);
-    if (mounted) {
-      _fetchData(query: _searchController.text);
-    }
   }
 
   @override
@@ -144,12 +148,12 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
             return Stack(
               children: [
                 RefreshIndicator(
-                  onRefresh: () => _fetchData(forceRefresh: true),
+                  onRefresh: () => _fetchData(forceRefresh: true, isPullToRefresh: true),
                   color: AppColors.primaryGreen,
                   edgeOffset:
                       MediaQuery.paddingOf(context).top +
                       kToolbarHeight +
-                      138.0,
+                      125.0,
                   child: CustomScrollView(
                     physics: const BouncingScrollPhysics(
                       parent: AlwaysScrollableScrollPhysics(),
@@ -221,33 +225,42 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
                             ),
                           ),
                         ),
-                        // 2. The Unified Glass Pane (Covers the toolbar AND the bottom widget)
-                        flexibleSpace: ClipRRect(
-                          child: BackdropFilter(
-                            filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.70),
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
-                                    width: 1,
+                        // THE FIX: Wrapped in a Stack to permanently fuse the loader
+                        flexibleSpace: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              child: BackdropFilter(
+                                filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.70),
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                                        width: 1,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
+                            if (_isLoading && doctors.isNotEmpty)
+                              const Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: LinearProgressIndicator(
+                                  color: AppColors.primaryGreen,
+                                  minHeight: 2.0,
+                                  backgroundColor: Colors.transparent,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      if (_isLoading && doctors.isEmpty)
-                        const SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.primaryGreen,
-                            ),
-                          ),
-                        )
+                      if (_isLoading && !_hasEverLoaded && doctors.isEmpty)
+                        const DoctorListSkeletonSliver()
                       else if (doctors.isEmpty)
                         const SliverFillRemaining(
                           hasScrollBody: false,
@@ -259,6 +272,10 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
                           sliver: SliverList(
+                            // THE FIX: The Intent Hash!
+                            key: ValueKey(
+                              'featured_${_selectedFilter}_${_searchController.text}',
+                            ),
                             delegate: SliverChildBuilderDelegate((context, index) {
                               final doctor = doctors[index];
                               final docId = doctor['id'] as int;
@@ -268,25 +285,26 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
                                       : 'Specialist';
                               final isFavorite = _favNotifier.isFavorite(docId);
 
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: DoctorListCard(
-                                  id: docId,
-                                  name: doctor['full_name'] ?? 'Unknown',
-                                  specialty: " $specialtyName",
-                                  rating: doctor['rating']?.toString() ?? '0.0',
-                                  views: doctor['views_count']?.toString() ?? '0',
-                                  imageUrl: doctor['profile_picture_url'],
-                                  isFavorite: isFavorite,
-                                  heroTagPrefix: 'featured-',
-                                  onFavoriteTap: () {
-                                    HapticFeedback.selectionClick();
-                                    _favNotifier.toggle(doctor);
-                                  },
-                                  onCardTap: () {
-                                    HapticFeedback.lightImpact();
-                                    _navigateToDoctorDetails(docId, doctor);
-                                  },
+                              return PremiumListAnimator(
+                                index: index,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: DoctorListCard(
+                                    id: docId,
+                                    name: doctor['full_name'] ?? 'Unknown',
+                                    specialty: " $specialtyName",
+                                    rating: doctor['rating']?.toString() ?? '0.0',
+                                    views: doctor['views_count']?.toString() ?? '0',
+                                    imageUrl: doctor['profile_picture_url'],
+                                    isFavorite: isFavorite,
+                                    heroTagPrefix: 'featured-',
+                                    onFavoriteTap: () {
+                                      _favNotifier.toggle(doctor);
+                                    },
+                                    onCardTap: () {
+                                      _navigateToDoctorDetails(docId, doctor);
+                                    },
+                                  ),
                                 ),
                               );
                             }, childCount: doctors.length),
@@ -294,12 +312,6 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
                         ),
                     ],
                   ),
-                ),
-                Positioned(
-                  top: MediaQuery.paddingOf(context).top,
-                  left: 0,
-                  right: 0,
-                  child: BackgroundSyncIndicator(isSyncing: _isLoading && doctors.isNotEmpty),
                 ),
               ],
             );

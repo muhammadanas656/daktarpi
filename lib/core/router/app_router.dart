@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_refresh_stream.dart';
 import '../constants/app_routes.dart';
+import '../widgets/route_error_screen.dart';
 
 
 import '../../features/auth/presentation/screens/login_screen.dart';
@@ -62,9 +63,13 @@ final _shellNavigatorProfileKey = GlobalKey<NavigatorState>(
   debugLabel: 'shellProfile',
 );
 
+// PRO FIX: The Global Route Observer allows screens to detect forward/backward navigation!
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
+
 final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: AppRoutes.splash,
+  observers: [routeObserver], // PRO FIX: Inject the observer into the router!
   refreshListenable: GoRouterRefreshStream(
     Supabase.instance.client.auth.onAuthStateChange,
   ),
@@ -152,12 +157,7 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.accountActivity,
       parentNavigatorKey: _rootNavigatorKey,
-      pageBuilder: (context, state) {
-        return ModernDepthTransitionPage(
-          key: state.pageKey,
-          child: const AccountActivityScreen(),
-        );
-      },
+      builder: (context, state) => const AccountActivityScreen(),
     ),
 
     GoRoute(
@@ -186,10 +186,17 @@ final appRouter = GoRouter(
     GoRoute(
       path: '${AppRoutes.doctorDetails}/:id',
       parentNavigatorKey: _rootNavigatorKey,
+      // THE FIX: Reverted to standard 'builder' to trigger the native OS transition
       builder: (context, state) {
         final doctorId = state.pathParameters['id']!;
         final extra = state.extra as Map<String, dynamic>?;
-        return DoctorDetailsScreen(doctorId: doctorId, doctorData: extra);
+        final scrollToMap = state.uri.queryParameters['scrollToMap'] == 'true';
+
+        return DoctorDetailsScreen(
+          doctorId: doctorId,
+          doctorData: extra,
+          scrollToMap: scrollToMap,
+        );
       },
     ),
 
@@ -197,13 +204,29 @@ final appRouter = GoRouter(
       path: AppRoutes.appointmentBooking,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        final extra = state.extra as AppointmentBookingArgs;
+        final extra = state.extra;
+        final args =
+            extra is AppointmentBookingArgs
+                ? extra
+                : extra is Map
+                ? AppointmentBookingArgs.fromMap(
+                  Map<String, dynamic>.from(extra),
+                )
+                : null;
+
+        if (args == null) {
+          return const RouteErrorScreen(
+            message:
+                'Missing booking details. Please return to the doctor page and try again.',
+          );
+        }
+
         return PatientDetailsScreen(
-          doctor: extra.doctor,
-          clinic: extra.clinic,
-          initialDate: extra.initialDate,
-          timeSlot: extra.timeSlot,
-          idempotencyKey: extra.idempotencyKey,
+          doctor: args.doctor,
+          clinic: args.clinic,
+          initialDate: args.initialDate,
+          timeSlot: args.timeSlot,
+          idempotencyKey: args.idempotencyKey,
         );
       },
     ),
@@ -212,15 +235,29 @@ final appRouter = GoRouter(
       path: AppRoutes.paymentMethod,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        final extra = state.extra as PaymentMethodArgs;
+        final extra = state.extra;
+        final args =
+            extra is PaymentMethodArgs
+                ? extra
+                : extra is Map<String, dynamic>
+                ? PaymentMethodArgs.fromMap(extra)
+                : null;
+
+        if (args == null) {
+          return const RouteErrorScreen(
+            message:
+                'Missing payment details. Please restart the booking flow.',
+          );
+        }
+
         return AppointmentConfirmationScreen(
-          doctor: extra.doctor,
-          clinic: extra.clinic,
-          patientDetails: extra.patientDetails,
-          initialDate: extra.appointmentDate,
-          appointmentId: extra.appointmentId,
-          timeSlot: extra.timeSlot,
-          idempotencyKey: extra.idempotencyKey,
+          doctor: args.doctor,
+          clinic: args.clinic,
+          patientDetails: args.patientDetails,
+          initialDate: args.appointmentDate,
+          appointmentId: args.appointmentId,
+          timeSlot: args.timeSlot,
+          idempotencyKey: args.idempotencyKey,
         );
       },
     ),
@@ -229,8 +266,14 @@ final appRouter = GoRouter(
       path: AppRoutes.dummyPayment,
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        final extra = state.extra as DummyPaymentRouteArgs;
-        return DummyPaymentScreen(args: extra);
+        final args = state.extra as DummyPaymentRouteArgs?;
+        if (args == null) {
+          return const RouteErrorScreen(
+            message:
+                'Missing payment session details. Please restart the booking flow.',
+          );
+        }
+        return DummyPaymentScreen(args: args);
       },
     ),
 
@@ -355,40 +398,6 @@ final appRouter = GoRouter(
     ),
   ],
 );
-
-class ModernDepthTransitionPage<T> extends CustomTransitionPage<T> {
-  ModernDepthTransitionPage({required LocalKey key, required Widget child})
-    : super(
-        key: key,
-        child: child,
-        transitionDuration: const Duration(milliseconds: 400),
-        reverseTransitionDuration: Duration.zero,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final curve = CurvedAnimation(
-            parent: animation,
-            curve: Curves.fastLinearToSlowEaseIn,
-            reverseCurve: Curves.fastOutSlowIn,
-          );
-
-          final scaleAnimation = Tween<double>(
-            begin: 0.96,
-            end: 1.0,
-          ).animate(curve);
-
-          final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-            ),
-          );
-
-          return ScaleTransition(
-            scale: scaleAnimation,
-            child: FadeTransition(opacity: fadeAnimation, child: child),
-          );
-        },
-      );
-}
 
 // --- PRO FIX: Global Notification Router ---
 void handleNotificationTap(String? payload) {

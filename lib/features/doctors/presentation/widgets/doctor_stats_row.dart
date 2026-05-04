@@ -17,42 +17,86 @@ class DoctorStatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      // PRO FIX: Dynamic surface card
-      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
-      child: Row(
-        children: [
+    // 1. Evaluate "Ghost UI" constraints mathematically
+    final bool hasPatients = patients != '0' && patients != '0+' && patients != 'New' && patients.isNotEmpty;
+    final bool hasRating = rating != '0.0' && rating != '0' && rating != 'N/A' && rating.isNotEmpty;
+    final bool isCompletelyNew = !hasPatients && !hasRating;
+
+    // 2. Dynamically build the layout array based on available data
+    List<Widget> columns = [];
+
+    if (isCompletelyNew) {
+      // --- STATE A: Completely Fresh Doctor ---
+      columns.add(
+        Expanded(
+          child: _buildStatItem(
+            context,
+            icon: Icons.work_outline_rounded,
+            iconColor: const Color(0xFF89B2B3),
+            value: "$experience yrs",
+            label: 'Experience',
+          ),
+        ),
+      );
+      columns.add(_buildDivider(context));
+      columns.add(
+        Expanded(
+          child: _buildNewBadge(context),
+        ),
+      );
+    } else {
+      // --- STATE B: Dynamic Combination Layout ---
+      if (hasRating) {
+        columns.add(
           Expanded(
             child: _buildStatItem(
               context,
               icon: Icons.star_rounded,
-              iconColor: Color(0xFFFFB648),
+              iconColor: const Color(0xFFFFB648),
               value: rating,
-              label: 'Rating & Review',
+              label: 'Rating',
             ),
           ),
-          _buildDivider(context),
-          Expanded(
-            child: _buildStatItem(
-              context,
-              icon: Icons.work_outline_rounded,
-              iconColor: Color(0xFF89B2B3),
-              value: experience,
-              label: 'Years of work',
-            ),
+        );
+      }
+
+      if (columns.isNotEmpty) {
+        columns.add(_buildDivider(context));
+      }
+
+      columns.add(
+        Expanded(
+          child: _buildStatItem(
+            context,
+            icon: Icons.work_outline_rounded,
+            iconColor: const Color(0xFF89B2B3),
+            value: "$experience yrs",
+            label: 'Experience',
           ),
-          _buildDivider(context),
+        ),
+      );
+
+      if (hasPatients) {
+        columns.add(_buildDivider(context));
+        columns.add(
           Expanded(
             child: _buildStatItem(
               context,
               icon: Icons.people_alt_outlined,
-              iconColor: Color(0xFF80B59A),
-              value: patients,
-              label: 'No. of patients',
+              iconColor: const Color(0xFF80B59A),
+              value: "$patients+",
+              label: 'Patients',
             ),
           ),
-        ],
+        );
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: AppStyles.surfaceCard(context, borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        children: columns,
       ),
     );
   }
@@ -62,8 +106,37 @@ class DoctorStatsRow extends StatelessWidget {
     return Container(
       width: 1,
       height: 36,
-      // PRO FIX: Dynamic divider color
       color: isDark ? AppColors.darkBorder : const Color(0xFFF0F4F8), 
+    );
+  }
+
+  // --- THE NEW TO PLATFORM BADGE ---
+  Widget _buildNewBadge(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.verified_rounded, color: AppColors.primaryGreen, size: 13),
+            const SizedBox(width: 4),
+            Text(
+              "New",
+              style: AppTextStyles.h3(context).copyWith(fontSize: 15, color: AppColors.primaryGreen),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "To Platform",
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 10.5,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
@@ -80,14 +153,14 @@ class DoctorStatsRow extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: iconColor, size: 13),
-            SizedBox(width: 4),
+            const SizedBox(width: 4),
             Text(
               value,
               style: AppTextStyles.h3(context).copyWith(fontSize: 15),
             ),
           ],
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
           label,
           maxLines: 1,

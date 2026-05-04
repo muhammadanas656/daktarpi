@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:intl/intl.dart';
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:geolocator/geolocator.dart';
@@ -186,28 +187,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- IMAGE PICKER ---
+  // --- PREMIUM "PRO-TOOLS" IMAGE CROPPER ---
   Future<void> _pickImage() async {
+    // 1. Tactile Start: Let the user physically feel the button press
+    HapticFeedback.mediumImpact(); 
+
     try {
       final pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
+        maxWidth: 1500, // Ultra-high resolution for crisp deep zooms
+        maxHeight: 1500,
+        imageQuality: 100, 
       );
 
       if (pickedFile != null) {
-        setState(() {
-          _imageFile = File(pickedFile.path);
-        });
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        
+        // 2. Transition Tactile: Feedback that the image was successfully loaded
+        HapticFeedback.lightImpact(); 
+
+        final croppedFile = await ImageCropper().cropImage(
+          sourcePath: pickedFile.path,
+          compressFormat: ImageCompressFormat.jpg,
+          compressQuality: 90, 
+          uiSettings: [
+            AndroidUiSettings(
+              toolbarTitle: 'Adjust Profile Picture',
+              // BRAND INTEGRATION: Matches your app's exact surface colors
+              toolbarColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F7),
+              toolbarWidgetColor: isDark ? Colors.white : Colors.black87,
+              backgroundColor: isDark ? Colors.black : Colors.white,
+              
+              // THE BALANCE: Bottom controls are visible, but the active tool glows in your signature Green!
+              hideBottomControls: false, 
+              activeControlsWidgetColor: AppColors.primaryGreen, 
+              
+              // IMMERSIVE MODE: Melts the status bar into the background
+              statusBarColor: isDark ? Colors.black : const Color(0xFFF5F5F7),
+              
+              dimmedLayerColor: Colors.black.withOpacity(0.85), // Deep cinematic focus
+              showCropGrid: false, 
+              cropFrameColor: Colors.transparent, 
+              
+              // CRITICAL: We let them rotate, but lock the physical shape to a perfect square/circle!
+              initAspectRatio: CropAspectRatioPreset.square,
+              lockAspectRatio: true,
+              cropStyle: CropStyle.circle, 
+            ),
+            IOSUiSettings(
+              title: 'Adjust Picture',
+              cancelButtonTitle: 'Cancel',
+              doneButtonTitle: 'Save', 
+              
+              // THE BALANCE: Re-enable the rotation and reset buttons for precise control
+              rotateButtonsHidden: false, 
+              rotateClockwiseButtonHidden: false,
+              resetButtonHidden: false,
+              
+              // CRITICAL: Keep aspect ratio locked so they don't accidentally create weird oval avatars
+              aspectRatioPickerButtonHidden: true, 
+              cropStyle: CropStyle.circle, 
+            ),
+          ],
+        );
+
+        if (croppedFile != null) {
+          // 3. Tactile Success: A satisfying physical "click" when they apply the crop
+          HapticFeedback.selectionClick(); 
+          
+          setState(() {
+            _imageFile = File(croppedFile.path); 
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
-        CustomSnackbar.showError(context, "Failed to pick image");
+        CustomSnackbar.showError(context, "Failed to process image.");
       }
     }
   }
-
+  
+  
   // --- DATE PICKER ---
   Future<void> _selectDate() async {
     try {
@@ -267,6 +327,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     }
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future.delayed(const Duration(milliseconds: 150));
 
     setState(() => _isLoading = true);
 

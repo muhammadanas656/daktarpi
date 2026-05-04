@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -13,6 +16,7 @@ import '../../../../core/security/biometric_auth_service.dart';
 import '../../../../features/auth/data/trusted_device_repository.dart';
 import '../../../../features/medical_records/data/medical_record.dart';
 import '../../../../features/medical_records/data/medical_record_repository.dart';
+import '../../../../features/profile/data/profile_repository.dart';
 import '../../../../presentation/widgets/app_floating_dialog.dart';
 import '../models/medical_record_route_args.dart';
 import '../../../../presentation/widgets/primary_button.dart';
@@ -23,6 +27,7 @@ import '../../../../presentation/widgets/app_network_image.dart';
 import '../../../../core/network/network_notifier.dart';
 import '../../../../core/widgets/custom_app_bar.dart';
 import '../../../../core/widgets/app_loader.dart';
+import '../../../../presentation/widgets/app_bottom_tray.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -31,23 +36,105 @@ class MedicalRecordsScreen extends StatefulWidget {
   State<MedicalRecordsScreen> createState() => _MedicalRecordsScreenState();
 }
 
-class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
+class _MedicalRecordsScreenState extends State<MedicalRecordsScreen>
+    with WidgetsBindingObserver {
   final MedicalRecordRepository _repository = MedicalRecordRepository();
   final BiometricAuthService _biometricService = BiometricAuthService();
   final TrustedDeviceRepository _deviceRepo = TrustedDeviceRepository();
+  final ProfileRepository _profileRepo = ProfileRepository();
 
   List<MedicalRecord> _records = [];
   bool _isLoading = true;
+  bool _hasEverLoaded = false;
   String? _errorMessage;
+  String _selectedCategory = "All";
+  List<String> _categories = ["All", "My Self"];
+  final Map<String, String?> _patientAvatars = {};
+  bool _isOpeningRecordEditor = false;
 
   // REMOVED local _isProtected variable to use global SettingsNotifier instead
   bool _hasSecurityConfigured = false;
 
+  // Real-time subscription for live DB updates
+  RealtimeChannel? _realtimeChannel;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkSecurityConfiguration();
     _fetchRecords();
+    _loadCategories();
+    _setupRealtimeSubscription();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _teardownRealtimeSubscription();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      // Force a fresh fetch when the app returns to foreground
+      _fetchRecords(forceRefresh: true);
+    }
+  }
+
+  void _setupRealtimeSubscription() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    _realtimeChannel = _repository.subscribeToRecords(
+      userId: userId,
+      onChange: (_) => _onRealtimeChange(),
+    );
+  }
+
+  void _teardownRealtimeSubscription() {
+    final channel = _realtimeChannel;
+    _realtimeChannel = null;
+    if (channel != null) {
+      _repository.removeChannel(channel);
+    }
+  }
+
+  /// Called by the real-time listener whenever the DB changes.
+  /// Invalidates the cache and re-fetches so the UI always shows truth.
+  Future<void> _onRealtimeChange() async {
+    if (!mounted) return;
+    await _repository.invalidateCache();
+    await _fetchRecords();
+  }
+
+  Future<void> _loadCategories() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final profile = await _profileRepo.getProfile(userId);
+    _patientAvatars["My Self"] = profile?.profilePictureUrl;
+
+    final patients = await _profileRepo.getSavedPatients(userId);
+    final dynamicCategories = ["All", "My Self"];
+
+    for (final patient in patients) {
+      final relation = patient['relation']?.toString();
+      if (relation != null && relation != "My Self") {
+        dynamicCategories.add(relation);
+        _patientAvatars[relation] = patient['image_path']?.toString();
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _categories = dynamicCategories.toSet().toList();
+        if (!_categories.contains(_selectedCategory)) {
+          _selectedCategory = "All";
+        }
+      });
+    }
   }
 
   Future<void> _checkSecurityConfiguration() async {
@@ -56,22 +143,19 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       return;
     }
 
-    final is2faEnabled = user.appMetadata['is_2fa_enabled'] == true;
     final isBiometricEnabled = await _deviceRepo.isBiometricEnabledForDevice(
       userId: user.id,
     );
 
     if (mounted) {
       setState(() {
-        _hasSecurityConfigured = is2faEnabled || isBiometricEnabled;
+        _hasSecurityConfigured = isBiometricEnabled;
       });
     }
   }
 
-  Future<void> _fetchRecords() async {
-    if (!mounted) {
-      return;
-    }
+  Future<void> _fetchRecords({bool forceRefresh = false}) async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
@@ -86,11 +170,18 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         return;
       }
 
+      // Invalidate cache when explicitly requested (realtime event, app resume)
+      if (forceRefresh) {
+        await _repository.invalidateCache();
+      }
+
       final records = await _repository.fetchRecords();
       if (mounted) {
         setState(() {
           _records = records;
           _isLoading = false;
+          _hasEverLoaded = true;
+          _errorMessage = null;
         });
       }
     } catch (e) {
@@ -134,7 +225,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               : "Records unlocked",
         );
         if (!SettingsNotifier.instance.medicalRecordsLocked) {
-          _fetchRecords();
+          _fetchRecords(forceRefresh: true);
         }
       }
     }
@@ -148,6 +239,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   Future<void> _deleteRecord(MedicalRecord record) async {
+    if (_isRecordLocked(record)) {
+      _showLockedRecordMessage(record);
+      return;
+    }
     await showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.6),
@@ -190,10 +285,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                               : () async {
                                 setDialogState(() => isDeleting = true);
                                 try {
-                                  await _repository.deleteRecord(
-                                    record.id,
-                                    record.fileUrls,
-                                  );
+                                  await _repository.deleteRecord(record);
                                   if (dialogCtx.mounted) {
                                     Navigator.pop(dialogCtx);
                                   }
@@ -202,7 +294,17 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                                       context,
                                       "Record deleted successfully",
                                     );
-                                    _fetchRecords();
+                                    _fetchRecords(forceRefresh: true);
+                                  }
+                                } on AppFailure catch (e) {
+                                  if (dialogCtx.mounted) {
+                                    Navigator.pop(dialogCtx);
+                                  }
+                                  if (mounted) {
+                                    CustomSnackbar.showError(
+                                      context,
+                                      e.userMessage,
+                                    );
                                   }
                                 } catch (e) {
                                   if (mounted) {
@@ -238,7 +340,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           iconColor: AppColors.primaryGreen,
           title: "Secure Your Records",
           description:
-              "Protect your medical records for extra security by enabling 2FA or Biometrics in Settings.",
+              "Protect your medical records for extra security by enabling Biometrics in Settings.",
           isUpdating: false,
           content: const SizedBox.shrink(),
           actions: Row(
@@ -272,14 +374,59 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     );
   }
 
-  void _editRecord(MedicalRecord record) async {
-    final result = await context.push(
-      AppRoutes.addMedicalRecord,
-      extra: MedicalRecordRouteArgs(record: record),
-    );
-    if (result == true && mounted) {
-      _fetchRecords();
+  Future<void> _openRecordEditor({MedicalRecord? record}) async {
+    if (_isOpeningRecordEditor || !mounted) return;
+
+    _isOpeningRecordEditor = true;
+    try {
+      final routeUri = Uri(
+        path: AppRoutes.addMedicalRecord,
+        queryParameters: {
+          'mode': record == null ? 'new' : 'edit',
+          'nonce': DateTime.now().microsecondsSinceEpoch.toString(),
+        },
+      ).toString();
+
+      final result = await context.push(
+        routeUri,
+        extra: MedicalRecordRouteArgs(record: record),
+      );
+      if (result == true && mounted) {
+        _fetchRecords();
+        _loadCategories();
+      }
+    } finally {
+      _isOpeningRecordEditor = false;
     }
+  }
+
+  void _editRecord(MedicalRecord record) async {
+    if (_isRecordLocked(record)) {
+      _showLockedRecordMessage(record);
+      return;
+    }
+    await _openRecordEditor(record: record);
+  }
+
+  bool _isRecordLocked(MedicalRecord record) {
+    final lockedUntil = record.lockedUntil;
+    return lockedUntil != null && lockedUntil.isAfter(DateTime.now());
+  }
+
+  void _showLockedRecordMessage(MedicalRecord record) {
+    final remaining = record.lockedUntil!.difference(DateTime.now());
+    final days = remaining.inDays;
+    final hours = remaining.inHours % 24;
+    String timeStr;
+    if (days > 0) {
+      timeStr = '$days day${days > 1 ? 's' : ''}, $hours hour${hours != 1 ? 's' : ''}';
+    } else {
+      timeStr = '$hours hour${hours != 1 ? 's' : ''}';
+    }
+    CustomSnackbar.showError(
+      context,
+      'This record is locked for medical review. Unlocks in $timeStr.',
+    );
   }
 
   Future<void> _viewFile(MedicalRecord record) async {
@@ -317,8 +464,8 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           if (!mounted) return;
           await showDialog(
             context: context,
-            builder: (_) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
+            builder: (dialogCtx) {
+              final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
               return Dialog(
                 backgroundColor: Colors.transparent,
                 elevation: 0,
@@ -333,10 +480,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                     Container(
                       width: double.infinity,
                       constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.7,
+                        maxHeight: MediaQuery.of(dialogCtx).size.height * 0.7,
                       ),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
+                        color: Theme.of(dialogCtx).colorScheme.surface,
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
                           color:
@@ -385,7 +532,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                       top: -12,
                       right: -12,
                       child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
+                        onTap: () => Navigator.pop(dialogCtx),
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -538,101 +685,182 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to SettingsNotifier for persistent protection state
     return AnimatedBuilder(
       animation: SettingsNotifier.instance,
       builder: (context, child) {
         final isLocked = SettingsNotifier.instance.medicalRecordsLocked;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return Scaffold(
           extendBodyBehindAppBar: true,
+          extendBody: true,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: CustomAppBar(
             title: "Medical Records",
-            onBackPressed: () => context.pop(),
             actions: [
               if (_hasSecurityConfigured)
-                IconButton(
-                  icon: Icon(
-                    isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
-                    color: isLocked ? AppColors.primaryGreen : Colors.grey,
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: IconButton(
+                    icon: Icon(
+                      isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                      color: isLocked ? AppColors.primaryGreen : Colors.grey,
+                    ),
+                    onPressed: _toggleProtection,
                   ),
-                  onPressed: _toggleProtection,
                 ),
             ],
           ),
-          body: _buildBody(isLocked),
-          bottomNavigationBar: isLocked ? null : _buildBottomBar(),
+          body: RefreshIndicator(
+            color: AppColors.primaryGreen,
+            onRefresh: () => _fetchRecords(forceRefresh: true),
+            edgeOffset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.paddingOf(context).top + kToolbarHeight + 17,
+                  ),
+                ),
+                _buildSliverBody(isLocked),
+                const SliverToBoxAdapter(child: SizedBox(height: 120)),
+              ],
+            ),
+          ),
+          bottomNavigationBar: isLocked ? null : AppBottomTray(
+            child: PrimaryButton(
+              label: "Add a record",
+              height: 54,
+              borderRadius: 16,
+              onTap: _openRecordEditor,
+            ),
+          ),
         );
       },
     );
   }
 
-  Widget _buildBottomBar() {
-    return Container(
-      padding: const EdgeInsets.only(top: 16, left: 24, right: 24),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: AppStyles.cardShadow(context),
-      ),
-      child: SafeArea(
-        top: false,
-        minimum: const EdgeInsets.only(bottom: 16),
-        child: SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: PrimaryButton(
-            label: "Add a record",
-            onTap: () async {
-              final result = await context.push(AppRoutes.addMedicalRecord);
-              if (result == true && mounted) {
-                _fetchRecords();
-              }
-            },
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildBody(bool isLocked) {
-    if (_isLoading) {
-      return const AppLoader();
+
+  Widget _buildSliverBody(bool isLocked) {
+    if (_isLoading && !_hasEverLoaded) {
+      return const SliverFillRemaining(child: AppLoader(color: AppColors.primaryGreen));
     }
     if (_errorMessage != null) {
-      return Center(child: Text(_errorMessage!));
+      return SliverFillRemaining(child: Center(child: Text(_errorMessage!)));
     }
 
-    // UI reacts to persistent lock state
     if (isLocked) {
-      return _buildProtectedState();
+      return SliverFillRemaining(hasScrollBody: false, child: _buildProtectedState());
     }
 
     if (_records.isEmpty) {
-      return _buildEmptyState();
+      return SliverFillRemaining(hasScrollBody: false, child: _buildEmptyState());
     }
 
-    return ListView.builder(
-      padding: EdgeInsets.only(
-        top: MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
-        left: 24,
-        right: 24,
-        bottom: 24,
-      ),
-      itemCount: _records.length,
-      itemBuilder: (context, index) {
-        final record = _records[index];
-        return Padding(
-          padding: EdgeInsets.only(bottom: 16),
-          child: RecordCard(
-            record: record,
-            onTap: () {},
-            onEdit: () => _editRecord(record),
-            onDelete: () => _deleteRecord(record),
-            onFileTap: () => _viewFile(record),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final filteredRecords =
+        _selectedCategory == "All"
+            ? _records
+            : _records
+                .where((record) => record.recordFor == _selectedCategory)
+                .toList();
+
+    return SliverMainAxisGroup(
+      slivers: [
+        if (_categories.length > 2)
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 48,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                itemCount: _categories.length,
+                itemBuilder: (context, index) {
+                  final category = _categories[index];
+                  final isSelected = _selectedCategory == category;
+                  return GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _selectedCategory = category);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      margin: const EdgeInsets.only(right: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            isSelected
+                                ? AppColors.primaryGreen
+                                : (isDark
+                                    ? Colors.white10
+                                    : Colors.black.withValues(alpha: 0.04)),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color:
+                              isSelected
+                                  ? Colors.transparent
+                                  : context.colorBorder,
+                        ),
+                      ),
+                      child: Text(
+                        category,
+                        style: TextStyle(
+                          color:
+                              isSelected ? Colors.white : context.colorTextLight,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
-        );
-      },
+        if (_categories.length > 2)
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        if (filteredRecords.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 48, 24, 120),
+              child: Center(
+                child: Text(
+                  "No records found for $_selectedCategory.",
+                  style: TextStyle(color: context.colorTextLight, fontSize: 14),
+                ),
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final record = filteredRecords[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: RecordCard(
+                      record: record,
+                      patientAvatarUrl: _patientAvatars[record.recordFor],
+                      onTap: () => _viewFile(record),
+                      onEdit: () => _editRecord(record),
+                      onDelete: () => _deleteRecord(record),
+                      onFileTap: () => _viewFile(record),
+                    ),
+                  );
+                },
+                childCount: filteredRecords.length,
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -646,12 +874,16 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             size: 80,
             color: AppColors.primaryGreen.withValues(alpha: 0.2),
           ),
-          SizedBox(height: 16),
-          Text("Records Protected", style: AppTextStyles.h3(context)),
-          SizedBox(height: 8),
+          const SizedBox(height: 20),
+          // THE FIX: Synchronized typography with h2 and tight tracking
+          Text(
+            "Records Protected", 
+            style: AppTextStyles.h2(context).copyWith(letterSpacing: -0.5),
+          ),
+          const SizedBox(height: 8),
           Text(
             "Verify your identity to view records.",
-            style: TextStyle(color: context.colorTextLight),
+            style: TextStyle(color: context.colorTextLight, fontSize: 14),
           ),
         ],
       ),
@@ -670,21 +902,26 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               color: AppColors.primaryGreen.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
+            child: const Icon(
               Icons.folder_open_rounded,
               size: 60,
               color: AppColors.primaryGreen,
             ),
           ),
-          SizedBox(height: 24),
-          Text("No Records Found", style: AppTextStyles.h3(context)),
-          SizedBox(height: 8),
+          const SizedBox(height: 24),
+          // THE FIX: Synchronized typography with h2 and tight tracking
+          Text(
+            "No Records Found", 
+            style: AppTextStyles.h2(context).copyWith(letterSpacing: -0.5),
+          ),
+          const SizedBox(height: 8),
           Text(
             "Add a medical record to track your health.",
-            style: TextStyle(color: context.colorTextLight),
+            style: TextStyle(color: context.colorTextLight, fontSize: 14),
           ),
         ],
       ),
     );
   }
 }
+

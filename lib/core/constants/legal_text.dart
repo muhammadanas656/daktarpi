@@ -26,6 +26,6 @@ The app is provided on an "AS IS" and "AS AVAILABLE" basis. AeviaPulse makes no 
 To the maximum extent permitted by law, AeviaPulse shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses.
 
 ## 5. Contact Us
-If you have any questions about these Terms, please contact us at support@daktarpai.com.
+If you have any questions about these Terms, please contact us at support@aeviapulse.com.
 """;
 }

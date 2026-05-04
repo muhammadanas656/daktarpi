@@ -23,6 +23,7 @@ abstract class Appointment with _$Appointment {
     @JsonKey(name: 'doctors') Doctor? doctor,
     @JsonKey(name: 'clinics') Clinic? clinic,
     @JsonKey(name: 'deleted_at') DateTime? deletedAt,
+    @JsonKey(name: 'attached_record_ids') @Default([]) List<int> attachedRecordIds,
   }) = _Appointment;
 
   factory Appointment.fromJson(Map<String, dynamic> json) =>

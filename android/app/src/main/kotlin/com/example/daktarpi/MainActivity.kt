@@ -2,7 +2,7 @@ package com.example.daktarpi
 
 import android.os.Build
 import android.os.Bundle
-import android.view.WindowManager
+import android.graphics.Color
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -13,7 +13,13 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applySystemBarStyling()
         // Screenshot blocking removed via USER request
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applySystemBarStyling()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -57,6 +63,14 @@ class MainActivity : FlutterFragmentActivity() {
             process.inputStream.bufferedReader().use { it.readLine() != null }
         } catch (_: Exception) {
             false
+        }
+    }
+
+    private fun applySystemBarStyling() {
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = Color.TRANSPARENT
         }
     }
 }

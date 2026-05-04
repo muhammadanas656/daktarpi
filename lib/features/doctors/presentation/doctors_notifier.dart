@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../profile/presentation/profile_notifier.dart';
 import '../data/doctor_repository.dart';
@@ -24,8 +25,42 @@ class DoctorsNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> _exploreFeaturedDoctors = [];
   List<Map<String, dynamic>> _specialties = [];
 
+  // THE FIX: Hot RAM Caches for Clinic Screens to eradicate Shimmers!
+  final Map<int, String?> _clinicLogoCache = {};
+  final Map<String, List<Map<String, dynamic>>> _clinicDoctorsCache = {};
+
+  bool hasClinicLogoCached(int clinicId) => _clinicLogoCache.containsKey(clinicId);
+  String? getCachedClinicLogo(int clinicId) => _clinicLogoCache[clinicId];
+
+  bool hasClinicDoctorsCached(String cacheKey) =>
+      _clinicDoctorsCache.containsKey(cacheKey) &&
+      _clinicDoctorsCache[cacheKey]!.isNotEmpty;
+
+  List<Map<String, dynamic>>? getCachedClinicDoctors(String cacheKey) =>
+      _clinicDoctorsCache[cacheKey];
+
   bool _isLoading = false;
   int _activeRequests = 0; // Concurrency lock
+
+  // THE FIX: Smart Diff Callback & Engine
+  VoidCallback? onMajorHomeShift;
+
+  void _checkMajorShift(
+    List<Map<String, dynamic>> oldList,
+    List<Map<String, dynamic>> newList,
+  ) {
+    if (oldList.isEmpty || newList.isEmpty) return;
+
+    final oldIds = oldList.map((e) => e['id']).toSet();
+    final newIds = newList.map((e) => e['id']).toSet();
+    if (oldIds.isEmpty) return;
+
+    final overlap = oldIds.intersection(newIds).length;
+    // If less than 40% of the doctors remained the same, it's a massive shift.
+    if (overlap / oldIds.length < 0.4) {
+      onMajorHomeShift?.call();
+    }
+  }
 
   Future<void> prehydrateHomeFeed() async {
     final countryIso = _profileNotifier.profile?.countryIso ?? 'US';
@@ -142,6 +177,8 @@ class DoctorsNotifier extends ChangeNotifier {
   Future<int> fetchExplorePopularLimit() => _doctorRepo.fetchExplorePopularLimit();
   Future<int> fetchHomeFeaturedLimit() => _doctorRepo.fetchHomeFeaturedLimit();
   Future<int> fetchExploreFeaturedLimit() => _doctorRepo.fetchExploreFeaturedLimit();
+  Future<int> fetchRegionalScarcityThreshold() => _doctorRepo.fetchRegionalScarcityThreshold();
+  Future<int> fetchRegionalScarcityRadius() => _doctorRepo.fetchRegionalScarcityRadius();
 
   // THE FIX: Sort utility pushing highlighted local doctors to top of feed
   List<Map<String, dynamic>> sortDoctorsByHighlight(
@@ -151,16 +188,25 @@ class DoctorsNotifier extends ChangeNotifier {
     double highlightRange,
   ) {
     final list = List<Map<String, dynamic>>.from(doctors);
-    list.sort((a, b) {
-      final aRating = double.tryParse(a['rating']?.toString() ?? '0') ?? 0.0;
-      final aPopular = a['is_popular'] == true;
-      final aDist = calculateDoctorDistance(a, userLat, userLng);
-      final aHigh = (aDist <= highlightRange) && (aRating > 0 || aPopular);
+    
+    // O(N) pre-computation to avoid heavy math in O(N log N) sorting
+    final Map<int, double> distCache = {};
+    final Map<int, double> ratingCache = {};
+    final Map<int, bool> popularCache = {};
+    
+    for (var doc in list) {
+      final id = doc['id'] as int;
+      distCache[id] = calculateDoctorDistance(doc, userLat, userLng);
+      ratingCache[id] = double.tryParse(doc['rating']?.toString() ?? '0') ?? 0.0;
+      popularCache[id] = doc['is_popular'] == true;
+    }
 
-      final bRating = double.tryParse(b['rating']?.toString() ?? '0') ?? 0.0;
-      final bPopular = b['is_popular'] == true;
-      final bDist = calculateDoctorDistance(b, userLat, userLng);
-      final bHigh = (bDist <= highlightRange) && (bRating > 0 || bPopular);
+    list.sort((a, b) {
+      final idA = a['id'] as int;
+      final idB = b['id'] as int;
+      
+      final aHigh = (distCache[idA]! <= highlightRange) && (ratingCache[idA]! > 0 || popularCache[idA]!);
+      final bHigh = (distCache[idB]! <= highlightRange) && (ratingCache[idB]! > 0 || popularCache[idB]!);
 
       if (aHigh && !bHigh) return -1;
       if (!aHigh && bHigh) return 1;
@@ -239,6 +285,70 @@ class DoctorsNotifier extends ChangeNotifier {
       debugPrint("Location sorting failed -> $e");
       return null;
     }
+  }
+
+  Future<String?> getClinicLogo(int clinicId) async {
+    if (_clinicLogoCache.containsKey(clinicId)) {
+      return _clinicLogoCache[clinicId];
+    }
+    try {
+      final response = await Supabase.instance.client
+          .from('clinics')
+          .select('logo_url, image_url')
+          .eq('id', clinicId)
+          .maybeSingle();
+      if (response != null) {
+        final logoUrl = response['logo_url']?.toString().trim();
+        final imageUrl = response['image_url']?.toString().trim();
+        final resolved =
+            (logoUrl != null && logoUrl.isNotEmpty)
+                ? logoUrl
+                : ((imageUrl != null && imageUrl.isNotEmpty)
+                    ? imageUrl
+                    : null);
+        _clinicLogoCache[clinicId] = resolved;
+        return resolved;
+      }
+    } catch (_) {}
+    _clinicLogoCache[clinicId] = null;
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchClinicDoctorsCached({
+    required int clinicId,
+    String? query,
+    String filterType = 'All',
+    bool forceRefresh = false,
+  }) async {
+    final cacheKey = '${clinicId}_${filterType}_${query ?? ""}';
+
+    if (!forceRefresh &&
+        _clinicDoctorsCache.containsKey(cacheKey) &&
+        _clinicDoctorsCache[cacheKey]!.isNotEmpty) {
+      return _clinicDoctorsCache[cacheKey]!;
+    }
+
+    double? userLat;
+    double? userLng;
+    if (filterType == 'Nearest' || filterType == 'Available Today') {
+      final pos = await getUserPosition();
+      if (pos != null) {
+        userLat = pos.latitude;
+        userLng = pos.longitude;
+      }
+    }
+
+    final docs = await _doctorRepo.fetchDoctorsByClinic(
+      clinicId,
+      query: query,
+      filterType: filterType,
+      userLat: userLat,
+      userLng: userLng,
+      forceRefresh: forceRefresh,
+    );
+
+    _clinicDoctorsCache[cacheKey] = docs;
+    return docs;
   }
 
   /// Fetch all required data once. Safe to be called by multiple screens.
@@ -369,6 +479,7 @@ class DoctorsNotifier extends ChangeNotifier {
         onFreshData: (fresh) {
           final sorted = _sorted(fresh, filter);
           if (isHomeFeed) {
+            _checkMajorShift(_homePopularDoctors, sorted);
             _homePopularDoctors = sorted;
           } else {
             _explorePopularDoctors = sorted;
@@ -382,6 +493,7 @@ class DoctorsNotifier extends ChangeNotifier {
 
       final sorted = _sorted(fetchedData, filter);
       if (isHomeFeed) {
+        _checkMajorShift(_homePopularDoctors, sorted);
         _homePopularDoctors = sorted;
       } else {
         _explorePopularDoctors = sorted;
@@ -441,6 +553,7 @@ class DoctorsNotifier extends ChangeNotifier {
         onFreshData: (fresh) {
           final sorted = _sorted(fresh, filter);
           if (isHomeFeed) {
+            _checkMajorShift(_homeFeaturedDoctors, sorted);
             _homeFeaturedDoctors = sorted;
           } else {
             _exploreFeaturedDoctors = sorted;
@@ -453,6 +566,7 @@ class DoctorsNotifier extends ChangeNotifier {
 
       final sorted = _sorted(fetchedData, filter);
       if (isHomeFeed) {
+        _checkMajorShift(_homeFeaturedDoctors, sorted);
         _homeFeaturedDoctors = sorted;
       } else {
         _exploreFeaturedDoctors = sorted;
@@ -478,13 +592,16 @@ class DoctorsNotifier extends ChangeNotifier {
     }
     
     try {
-      _specialties = await _doctorRepo.fetchSpecialties(
+      final fetchedData = await _doctorRepo.fetchSpecialties(
         forceRefresh: forceRefresh,
         onFreshData: (fresh) {
+          _checkMajorShift(_specialties, fresh);
           _specialties = fresh;
           notifyListeners();
         },
       );
+      _checkMajorShift(_specialties, fetchedData);
+      _specialties = fetchedData;
     } catch (e) {
       debugPrint("DoctorsNotifier Specialties Fetch Error: $e");
     } finally {
@@ -505,6 +622,8 @@ class DoctorsNotifier extends ChangeNotifier {
     _homeFeaturedDoctors = [];
     _exploreFeaturedDoctors = [];
     _specialties = [];
+    _clinicLogoCache.clear();
+    _clinicDoctorsCache.clear();
     _isLoading = false;
     _lastQuery = '';
     _lastFilter = 'All';

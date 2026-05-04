@@ -20,10 +20,12 @@ class SettingsNotifier extends ChangeNotifier {
   static const String keyBookingAlertsEnabled = 'booking_alerts_enabled';
   static const String keyReminderAlertsEnabled = 'reminder_alerts_enabled';
   static const String keyFiveHourWarningEnabled = 'five_hour_warning_enabled';
+  static const String keyMorningOfReminderEnabled = 'morning_of_reminder_enabled';
   static const String keyMissedAppointmentAlertEnabled =
       'missed_appointment_alert_enabled';
   static const String keyAppUpdatesEnabled = 'app_updates_enabled';
   static const String keyGlobalReminderMinutes = 'global_reminder_minutes';
+  static const String keyHasSeenRegionalWarning = 'has_seen_regional_warning';
 
   bool _isLoaded = false;
   bool _showDrawerHint = true;
@@ -40,9 +42,11 @@ class SettingsNotifier extends ChangeNotifier {
   bool _bookingAlertsEnabled = true;
   bool _reminderAlertsEnabled = true;
   bool _fiveHourWarningEnabled = true;
+  bool _morningOfReminderEnabled = true;
   bool _missedAppointmentAlertEnabled = true;
   bool _appUpdatesEnabled = true;
   int _globalReminderMinutes = 60; // Default: 1 hour before
+  bool _hasSeenRegionalWarning = false;
 
   bool get isLoaded => _isLoaded;
   bool get showDrawerHint => _showDrawerHint;
@@ -58,9 +62,11 @@ class SettingsNotifier extends ChangeNotifier {
   bool get bookingAlertsEnabled => _bookingAlertsEnabled;
   bool get reminderAlertsEnabled => _reminderAlertsEnabled;
   bool get fiveHourWarningEnabled => _fiveHourWarningEnabled;
+  bool get morningOfReminderEnabled => _morningOfReminderEnabled;
   bool get missedAppointmentAlertEnabled => _missedAppointmentAlertEnabled;
   bool get appUpdatesEnabled => _appUpdatesEnabled;
   int get globalReminderMinutes => _globalReminderMinutes;
+  bool get hasSeenRegionalWarning => _hasSeenRegionalWarning;
 
   Future<void> loadSettings() async {
     if (_isLoaded) return;
@@ -84,13 +90,16 @@ class SettingsNotifier extends ChangeNotifier {
       _reminderAlertsEnabled = prefs.getBool(keyReminderAlertsEnabled) ?? true;
       _fiveHourWarningEnabled =
           prefs.getBool(keyFiveHourWarningEnabled) ?? true;
+      _morningOfReminderEnabled =
+          prefs.getBool(keyMorningOfReminderEnabled) ?? true;
       _missedAppointmentAlertEnabled =
           prefs.getBool(keyMissedAppointmentAlertEnabled) ?? true;
       _appUpdatesEnabled = prefs.getBool(keyAppUpdatesEnabled) ?? true;
       _globalReminderMinutes = prefs.getInt(keyGlobalReminderMinutes) ?? 60;
+      _hasSeenRegionalWarning =
+          prefs.getBool(keyHasSeenRegionalWarning) ?? false;
 
-      final hasSecurityConfigured = _is2FAEnabled || _isBiometricEnabled;
-      if (!hasSecurityConfigured) {
+      if (!_isBiometricEnabled) {
         _medicalRecordsLocked = false;
         await prefs.setBool(keyMedicalRecordsLocked, false);
       }
@@ -110,9 +119,7 @@ class SettingsNotifier extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(key2FAEnabled, value);
-      if (!value && !_isBiometricEnabled) {
-        await updateMedicalRecordsLock(false);
-      }
+      
     } catch (e) {
       debugPrint("SettingsNotifier: Failed to save 2FA status: $e");
     }
@@ -126,7 +133,7 @@ class SettingsNotifier extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyHasBiometricHardware, hasHardware);
       await prefs.setBool(keyIsBiometricEnabled, isEnabled);
-      if (!isEnabled && !_is2FAEnabled) {
+      if (!isEnabled) {
         await updateMedicalRecordsLock(false);
       }
     } catch (e) {
@@ -224,6 +231,17 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
+  Future<void> updateMorningOfReminderEnabled(bool enabled) async {
+    _morningOfReminderEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyMorningOfReminderEnabled, enabled);
+    } catch (e) {
+      debugPrint("SettingsNotifier: Failed to save morning-of reminder: $e");
+    }
+  }
+
   Future<void> updateMissedAppointmentAlertEnabled(bool enabled) async {
     _missedAppointmentAlertEnabled = enabled;
     notifyListeners();
@@ -259,6 +277,20 @@ class SettingsNotifier extends ChangeNotifier {
     }
   }
 
+  // --- Geofence Updaters ---
+  Future<void> markRegionalWarningSeen() async {
+    _hasSeenRegionalWarning = true;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyHasSeenRegionalWarning, true);
+    } catch (e) {
+      debugPrint(
+        "SettingsNotifier: Failed to save regional warning state: $e",
+      );
+    }
+  }
+
   ThemeMode _parseThemeMode(String mode) {
     switch (mode) {
       case 'light':
@@ -285,9 +317,11 @@ class SettingsNotifier extends ChangeNotifier {
     _bookingAlertsEnabled = true;
     _reminderAlertsEnabled = true;
     _fiveHourWarningEnabled = true;
+    _morningOfReminderEnabled = true;
     _missedAppointmentAlertEnabled = true;
     _appUpdatesEnabled = true;
     _globalReminderMinutes = 60;
+    _hasSeenRegionalWarning = false;
 
     notifyListeners();
   }

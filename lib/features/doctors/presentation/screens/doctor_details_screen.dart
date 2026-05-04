@@ -2,21 +2,18 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/network/network_notifier.dart'; 
-import '../../../../core/widgets/app_loader.dart';
-import '../../../../core/widgets/premium_app_loader.dart';
-import '../../../../core/widgets/background_sync_indicator.dart';
+import '../../../../core/network/network_notifier.dart';
 import '../../../../core/widgets/custom_app_bar.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../favorites_notifier.dart';
 import '../../../../presentation/widgets/primary_button.dart';
+import '../../../../presentation/widgets/app_bottom_tray.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -30,16 +27,17 @@ import '../widgets/doctor_appointment_card.dart';
 import '../widgets/doctor_timing_list.dart';
 import '../widgets/clinic_location_map_section.dart';
 import 'package:uuid/uuid.dart';
-import '../../../appointments/presentation/models/booking_route_args.dart';
 
 class DoctorDetailsScreen extends StatefulWidget {
   final String doctorId;
   final Map<String, dynamic>? doctorData; 
+  final bool scrollToMap;
 
   const DoctorDetailsScreen({
     super.key,
     required this.doctorId,
     this.doctorData,
+    this.scrollToMap = false,
   });
 
   @override
@@ -63,6 +61,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   final List<Map<String, dynamic>> _clinics = [];
   final List<Map<String, dynamic>> _schedules = [];
   Map<String, dynamic>? _selectedClinic;
+  List<Map<String, dynamic>> _reviews = [];
 
   DateTime _selectedDate = DateTime.now();
   
@@ -160,10 +159,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       final results = await Future.wait([
         _doctorRepo.fetchClinics(widget.doctorId),
         _doctorRepo.fetchSchedules(widget.doctorId),
+        _doctorRepo.fetchDoctorReviews(widget.doctorId),
       ]);
 
       final clinics = List<Map<String, dynamic>>.from(results[0]);
       final schedules = List<Map<String, dynamic>>.from(results[1]);
+      final reviews = List<Map<String, dynamic>>.from(results[2]);
 
       if (!mounted) return;
 
@@ -172,12 +173,12 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         _clinics.addAll(clinics);
         _schedules.clear();
         _schedules.addAll(schedules);
+        _reviews = reviews;
         _selectedClinic = _clinics.isNotEmpty ? _clinics.first : null;
-
-        if (clinics.isEmpty) {
-          _errorMessage =
-              "No clinic location data is available for this doctor.";
-        }
+        _errorMessage =
+            clinics.isEmpty
+                ? "No clinic location data is available for this doctor."
+                : null;
         _isHeavyDataLoading = false;
       });
 
@@ -185,6 +186,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         _fetchBookedSlots();
       }
       _startViewTimer();
+      if (widget.scrollToMap) {
+        _scrollToLocationSection();
+      }
     } catch (e) {
       debugPrint("Error fetching data: $e");
       if (mounted) {
@@ -228,13 +232,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
     context.push(
       AppRoutes.appointmentBooking,
-      extra: AppointmentBookingArgs(
-        doctor: Map<String, dynamic>.from(_doctor ?? const {}),
-        clinic: Map<String, dynamic>.from(_selectedClinic ?? const {}),
-        initialDate: _selectedDate,
-        timeSlot: _selectedTimeSlot,
-        idempotencyKey: _uuid.v4(),
-      ),
+      extra: <String, dynamic>{
+        'doctor': _doctor ?? <String, dynamic>{},
+        'clinic': _selectedClinic ?? <String, dynamic>{},
+        'initialDate': _selectedDate,
+        'timeSlot': _selectedTimeSlot,
+        'idempotencyKey': _uuid.v4(),
+      },
     );
   }
 
@@ -375,6 +379,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     return "$h:$m";
   }
 
+  bool get _hasVisibleReviews {
+    if (_doctor == null) return false;
+    final reviewsCount =
+        int.tryParse(_doctor!['reviews_count']?.toString() ?? '0') ?? 0;
+    return reviewsCount > 0 && _reviews.isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_doctor == null && _isHeavyDataLoading) {
@@ -402,6 +413,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       );
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: bgColor,
@@ -424,7 +437,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         24,
                         MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
                         24,
-                        10,
+                        120 + MediaQuery.viewInsetsOf(context).bottom, // Dynamic bottom clearance
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,7 +453,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                 (_clinics.isNotEmpty && _selectedClinic != null)
                                     ? "${_selectedClinic!['visit_price']}"
                                     : "${_doctor!['hourly_rate'] ?? '0'}",
-                            onBookNowTap: _handleBooking,
+                            // THE FIX: Added this line back so the button works!
+                            onBookNowTap: _handleBooking, 
                           ),
                           const SizedBox(height: 14),
 
@@ -549,62 +563,85 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                       }
                                       final datesToShow = [today, tomorrow, thirdDate];
 
-                                      return DoctorAppointmentCard(
-                                        clinics: _clinics,
-                                        selectedClinic: _selectedClinic,
-                                        selectedDate: _selectedDate,
-                                        datesToShow: datesToShow,
-                                        timeSlots: _getSlotsForSelectedDate(),
-                                        selectedTimeSlot: _selectedTimeSlot,
-                                        onClinicChanged: (clinic) {
-                                          if (clinic != null) {
-                                            setState(() {
-                                              _selectedClinic = clinic;
-                                              _selectedTimeSlot = null;
-                                            });
-                                            _fetchBookedSlots();
-                                          }
-                                        },
-                                        onDateSelected: (date) {
-                                          setState(() {
-                                            _selectedDate = date;
-                                            _selectedTimeSlot = null;
-                                          });
-                                          _fetchBookedSlots();
-                                        },
-                                        onCustomDateTap: _openDatePicker,
-                                        onTimeSlotSelected: (slot) {
-                                          setState(() {
-                                            _selectedTimeSlot = slot;
-                                          });
-                                        },
-                                        onMoreClinicTap: _scrollToLocationSection,
+                                      return Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          DoctorAppointmentCard(
+                                            clinics: _clinics,
+                                            selectedClinic: _selectedClinic,
+                                            selectedDate: _selectedDate,
+                                            datesToShow: datesToShow,
+                                            timeSlots: _getSlotsForSelectedDate(),
+                                            selectedTimeSlot: _selectedTimeSlot,
+                                            onClinicChanged: (clinic) {
+                                              if (clinic != null) {
+                                                setState(() {
+                                                  _selectedClinic = clinic;
+                                                  _selectedTimeSlot = null;
+                                                });
+                                                _fetchBookedSlots();
+                                              }
+                                            },
+                                            onDateSelected: (date) {
+                                              setState(() {
+                                                _selectedDate = date;
+                                                _selectedTimeSlot = null;
+                                              });
+                                              _fetchBookedSlots();
+                                            },
+                                            onCustomDateTap: _openDatePicker,
+                                            onTimeSlotSelected: (slot) {
+                                              setState(() {
+                                                _selectedTimeSlot = slot;
+                                              });
+                                            },
+                                            onMoreClinicTap:
+                                                _scrollToLocationSection,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          Text(
+                                            "Timing",
+                                            style: AppTextStyles.h3(context),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          DoctorTimingList(
+                                            schedules: _schedules,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          Text(
+                                            "Location",
+                                            key: _locationSectionKey,
+                                            style: AppTextStyles.h3(context),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          ClinicLocationMapSection(
+                                            clinics: _clinics,
+                                            selectedClinic: _selectedClinic,
+                                            onClinicSelected: (clinic) {
+                                              setState(() {
+                                                _selectedClinic = clinic;
+                                                _selectedTimeSlot = null;
+                                              });
+                                              _fetchBookedSlots();
+                                            },
+                                            scrollToTop:
+                                                _scrollToLocationSection,
+                                          ),
+                                          const SizedBox(height: 32),
+                                          if (_hasVisibleReviews) ...[
+                                            Text(
+                                              "Patient Reviews",
+                                              style: AppTextStyles.h3(context),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            _buildReviewSection(),
+                                          ],
+                                          const SizedBox(height: 24),
+                                        ],
                                       );
                                     },
                                   ),
-                                  const SizedBox(height: 18),
-                                  Text("Timing", style: AppTextStyles.h3(context)),
-                                  const SizedBox(height: 10),
-                                  DoctorTimingList(schedules: _schedules),
-                                  const SizedBox(height: 18),
-                                  Text(
-                                    "Location",
-                                    key: _locationSectionKey,
-                                    style: AppTextStyles.h3(context),
-                                  ),
-                                  ClinicLocationMapSection(
-                                    clinics: _clinics,
-                                    selectedClinic: _selectedClinic,
-                                    onClinicSelected: (clinic) {
-                                      setState(() {
-                                        _selectedClinic = clinic;
-                                        _selectedTimeSlot = null;
-                                      });
-                                      _fetchBookedSlots();
-                                    },
-                                    scrollToTop: _scrollToLocationSection,
-                                  ),
-                                  const SizedBox(height: 24),
                                 ],
                               ),
                           ),
@@ -614,44 +651,617 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   ),
                 ),
                 if (!_isHeavyDataLoading && !_isOfflineState)
-              Container(
-                // THE FIX: Precise manual padding instead of the unpredictable SafeArea widget.
-                // It dynamically checks for an iOS bottom notch and adapts perfectly.
-                padding: EdgeInsets.fromLTRB(
-                  24, 
-                  16, 
-                  24, 
-                  MediaQuery.paddingOf(context).bottom > 0 
-                      ? MediaQuery.paddingOf(context).bottom + 8 
-                      : 24, // Perfect fallback for Android devices without a notch
-                ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  boxShadow: [
-                    // A soft, premium upward glow so it lifts off the background
-                    BoxShadow(
-                      color: Colors.black.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.05),
-                      blurRadius: 20,
-                      offset: const Offset(0, -4),
+                  AppBottomTray(
+                    child: PrimaryButton(
+                      label: "Book Appointment",
+                      onTap: _handleBooking,
+                      height: 54,
+                      borderRadius: 16,
                     ),
-                  ],
-                ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: PrimaryButton(
-                    label: "Book Now",
-                    onTap: _handleBooking,
-                    height: 48,
-                    borderRadius: 12, // Slightly rounder to match the modern glass UI
                   ),
-                ),
-              ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildReviewSection() {
+    final reviewsCount =
+        int.tryParse(_doctor!['reviews_count']?.toString() ?? '0') ?? 0;
+    if (reviewsCount == 0 || _reviews.isEmpty) return const SizedBox.shrink();
+
+    final aggregatedReviews = _getAggregatedReviews();
+    final previewReviews = aggregatedReviews.take(2).toList();
+
+    return Column(
+      children: [
+        ...previewReviews.map((aggData) {
+          final fullName =
+              aggData['profiles']?['full_name']?.toString() ?? "Anonymous";
+          final initials = _getInitials(fullName);
+          final avgRating = (aggData['avg_rating'] as num?)?.toDouble() ?? 5.0;
+          final visitCount = aggData['visit_count'] as int? ?? 1;
+          final date = _formatReviewDate(aggData['created_at']);
+          final comment =
+              aggData['latest_comment'] as String? ??
+              "Verified consultation completed.";
+          final history = List<Map<String, dynamic>>.from(
+            aggData['history'] ?? const [],
+          );
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildAggregatedReviewCard(
+              initials: initials,
+              avgRating: avgRating,
+              date: date,
+              comment: comment,
+              visitCount: visitCount,
+              history: history,
+              onTap:
+                  visitCount > 1
+                      ? () => _showPatientJourneySheet(
+                        initials,
+                        avgRating,
+                        visitCount,
+                        history,
+                      )
+                      : null,
+            ),
+          );
+        }),
+        if (aggregatedReviews.length > 2)
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: AppColors.primaryGreen.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.05),
+              ),
+              onPressed: _showFullReviewsSheet,
+              child: Text(
+                "Read all ${aggregatedReviews.length} Patient Stories",
+                style: const TextStyle(
+                  color: AppColors.primaryGreen,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAggregatedReviewCard({
+    required String initials,
+    required double avgRating,
+    required String date,
+    required String comment,
+    required int visitCount,
+    required List<Map<String, dynamic>> history,
+    required VoidCallback? onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: AppStyles.surfaceCard(
+          context,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: primaryGreen.withValues(alpha: isDark ? 0.2 : 0.12),
+                  ),
+                  child: Text(
+                    initials,
+                    style: const TextStyle(
+                      color: AppColors.primaryGreen,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.star_rounded,
+                            size: 16,
+                            color: Colors.amber,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            avgRating.toStringAsFixed(1),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: context.colorTextDark,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (visitCount > 1)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.infoBlue.withValues(
+                                  alpha: 0.1,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                "$visitCount Visits",
+                                style: const TextStyle(
+                                  color: AppColors.infoBlue,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        date,
+                        style: TextStyle(
+                          color: isDark ? Colors.white54 : Colors.grey,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (visitCount > 1)
+                  Icon(
+                    Icons.history_rounded,
+                    size: 18,
+                    color: isDark ? Colors.white30 : Colors.black26,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              comment,
+              style: AppTextStyles.bodySmall(
+                context,
+              ).copyWith(color: context.colorTextDark, height: 1.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPatientJourneySheet(
+    String initials,
+    double avgRating,
+    int visitCount,
+    List<Map<String, dynamic>> history,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            maxChildSize: 0.9,
+            minChildSize: 0.4,
+            builder:
+                (context, scrollController) => ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(32),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                    child: Container(
+                      color: Theme.of(
+                        context,
+                      ).scaffoldBackgroundColor.withValues(alpha: 0.95),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 12),
+                          Container(
+                            width: 40,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: AppColors.primaryGreen.withValues(
+                              alpha: 0.15,
+                            ),
+                            child: Text(
+                              initials,
+                              style: const TextStyle(
+                                color: AppColors.primaryGreen,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            "Patient Journey",
+                            style: AppTextStyles.h2(
+                              context,
+                            ).copyWith(letterSpacing: -0.5),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "$visitCount total consultations - ${avgRating.toStringAsFixed(1)} Avg Rating",
+                            style: TextStyle(
+                              color: isDark ? Colors.white54 : Colors.grey,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const Divider(height: 1, color: Colors.black12),
+                          Expanded(
+                            child: ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.all(24),
+                              itemCount: history.length,
+                              itemBuilder: (context, index) {
+                                final entry = history[index];
+                                final reviewDate = _formatReviewDate(
+                                  entry['created_at'],
+                                );
+                                final reviewRating =
+                                    (entry['rating'] as num?)?.toInt() ?? 5;
+                                final reviewComment =
+                                    entry['comment']?.toString().trim().isNotEmpty ==
+                                            true
+                                        ? entry['comment'].toString().trim()
+                                        : "Verified consultation.";
+
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Column(
+                                      children: [
+                                        Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color:
+                                                index == 0
+                                                    ? AppColors.primaryGreen
+                                                    : Colors.grey,
+                                          ),
+                                        ),
+                                        if (index != history.length - 1)
+                                          Container(
+                                            width: 2,
+                                            height: 60,
+                                            color: Colors.grey.withValues(
+                                              alpha: 0.2,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 24,
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    reviewDate,
+                                                    style: TextStyle(
+                                                      color:
+                                                          isDark
+                                                              ? Colors.white
+                                                              : Colors.black87,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Row(
+                                                  children: List.generate(5, (
+                                                    i,
+                                                  ) {
+                                                    return Icon(
+                                                      i < reviewRating
+                                                          ? Icons.star_rounded
+                                                          : Icons
+                                                              .star_border_rounded,
+                                                      size: 12,
+                                                      color: Colors.amber,
+                                                    );
+                                                  }),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              reviewComment,
+                                              style: TextStyle(
+                                                color:
+                                                    isDark
+                                                        ? Colors.white70
+                                                        : Colors.black54,
+                                                fontSize: 12,
+                                                height: 1.4,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+          ),
+    );
+  }
+
+  List<Map<String, dynamic>> _getAggregatedReviews() {
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+
+    for (final review in _reviews) {
+      final userId = review['user_id']?.toString() ?? _uuid.v4();
+      grouped.putIfAbsent(userId, () => []).add(review);
+    }
+
+    final List<Map<String, dynamic>> aggregated = [];
+
+    for (final entry in grouped.entries) {
+      final userReviews = entry.value;
+
+      userReviews.sort((a, b) {
+        final dateA =
+            DateTime.tryParse(a['created_at'].toString()) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB =
+            DateTime.tryParse(b['created_at'].toString()) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return dateB.compareTo(dateA);
+      });
+
+      final latestReview = userReviews.first;
+      double totalRating = 0;
+
+      for (final review in userReviews) {
+        totalRating += (review['rating'] as num?)?.toDouble() ?? 5.0;
+      }
+
+      final avgRating = totalRating / userReviews.length;
+
+      aggregated.add({
+        'user_id': entry.key,
+        'profiles': latestReview['profiles'],
+        'latest_comment':
+            latestReview['comment']?.toString().trim().isNotEmpty == true
+                ? latestReview['comment'].toString().trim()
+                : null,
+        'created_at': latestReview['created_at'],
+        'avg_rating': avgRating,
+        'visit_count': userReviews.length,
+        'history': userReviews,
+      });
+    }
+
+    aggregated.sort((a, b) {
+      final dateA =
+          DateTime.tryParse(a['created_at'].toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final dateB =
+          DateTime.tryParse(b['created_at'].toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return dateB.compareTo(dateA);
+    });
+
+    return aggregated;
+  }
+
+  String _getInitials(String fullName) {
+    if (fullName.trim().isEmpty) return "A.";
+    final names = fullName.trim().split(RegExp(r'\s+'));
+    if (names.length >= 2) {
+      return "${names.first[0].toUpperCase()}. ${names.last[0].toUpperCase()}.";
+    }
+    return "${names.first[0].toUpperCase()}.";
+  }
+
+  String _formatReviewDate(dynamic rawDate) {
+    try {
+      if (rawDate == null) return "";
+      return DateFormat(
+        'MMM dd, yyyy',
+      ).format(DateTime.parse(rawDate.toString()));
+    } catch (e) {
+      return "";
+    }
+  }
+
+  void _showFullReviewsSheet() {
+    if (_doctor == null || _reviews.isEmpty) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final aggregatedReviews = _getAggregatedReviews();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => DraggableScrollableSheet(
+            initialChildSize: 0.85,
+            maxChildSize: 0.95,
+            minChildSize: 0.5,
+            builder:
+                (context, scrollController) => ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(32),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                    child: Container(
+                      color: Theme.of(
+                        context,
+                      ).scaffoldBackgroundColor.withValues(alpha: 0.85),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 12),
+                          Container(
+                            width: 40,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            "Patient Stories",
+                            style: AppTextStyles.h2(
+                              context,
+                            ).copyWith(letterSpacing: -0.5),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.star_rounded,
+                                color: Colors.amber,
+                                size: 28,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "${_doctor!['rating']?.toString() ?? '0.0'}",
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            "Based on ${_doctor!['reviews_count']} verified appointments",
+                            style: TextStyle(
+                              color: isDark ? Colors.white54 : Colors.grey,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const Divider(height: 1, color: Colors.black12),
+                          Expanded(
+                            child: ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.all(24),
+                              itemCount: aggregatedReviews.length,
+                              itemBuilder: (context, index) {
+                                final aggData = aggregatedReviews[index];
+                                final fullName =
+                                    aggData['profiles']?['full_name']?.toString() ??
+                                    "Anonymous";
+                                final initials = _getInitials(fullName);
+                                final avgRating =
+                                    (aggData['avg_rating'] as num?)?.toDouble() ??
+                                    5.0;
+                                final visitCount =
+                                    aggData['visit_count'] as int? ?? 1;
+                                final date = _formatReviewDate(
+                                  aggData['created_at'],
+                                );
+                                final comment =
+                                    aggData['latest_comment'] as String? ??
+                                    "Verified consultation completed.";
+                                final history = List<Map<String, dynamic>>.from(
+                                  aggData['history'] ?? const [],
+                                );
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: _buildAggregatedReviewCard(
+                                    initials: initials,
+                                    avgRating: avgRating,
+                                    date: date,
+                                    comment: comment,
+                                    visitCount: visitCount,
+                                    history: history,
+                                    onTap:
+                                        visitCount > 1
+                                            ? () {
+                                              Navigator.pop(context);
+                                              _showPatientJourneySheet(
+                                                initials,
+                                                avgRating,
+                                                visitCount,
+                                                history,
+                                              );
+                                            }
+                                            : null,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+          ),
     );
   }
 
