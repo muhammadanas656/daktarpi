@@ -44,33 +44,29 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent, 
 
-      flexibleSpace: ClipRRect(
+      flexibleSpace: ClipRect(
         child: Stack(
           children: [
-            // PRO FIX 1: The Z-Index Buffer. 
-            // This solid layer sits BEHIND the blur, eating harsh drop-shadows from 
-            // cards below so they don't get amplified by the blur engine!
+            // 1. The Z-Buffer: Ultra-faint, letting the Aurora bleed through
             Positioned.fill(
               child: Container(
                 color: isDark 
-                    ? Colors.black.withValues(alpha: 0.6) 
-                    : Colors.white.withValues(alpha: 0.8), // Strong enough to mute shadows, light enough to remain translucent
+                    ? const Color(0xFF050608).withValues(alpha: 0.45) 
+                    : const Color(0xFFFFFFFF).withValues(alpha: 0.60),
               ),
             ),
-            
-            // PRO FIX 2: The actual Frost layer
+            // 2. The Lens: Extreme Hyper-Blur (Sigma 48)
             Positioned.fill(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24, tileMode: TileMode.mirror),
+                filter: ImageFilter.blur(sigmaX: 48, sigmaY: 48, tileMode: TileMode.mirror),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.transparent, // Color is now handled by the buffer layer above
+                    color: Colors.transparent,
                     border: Border(
                       bottom: BorderSide(
-                        color: isDark 
-                            ? Colors.white.withValues(alpha: 0.05) 
-                            : Colors.black.withValues(alpha: 0.03),
-                        width: 0.5, 
+                        // The "Edge Light": 0.3px simulates sub-pixel light refraction
+                        color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
+                        width: 0.3, 
                       ),
                     ),
                   ),

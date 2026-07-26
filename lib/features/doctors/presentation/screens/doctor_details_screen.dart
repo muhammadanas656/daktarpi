@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import '../../../../presentation/widgets/custom_snackbar.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -415,33 +416,36 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return VolumetricScaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: bgColor,
+      extendBody: true,
       appBar: _buildAppBar(),
-      body: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-            child: Column(
-              children: [
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _fetchInitialData,
-                    color: AppColors.primaryGreen,
-                    edgeOffset: MediaQuery.paddingOf(context).top + kToolbarHeight,
-                    child: SingleChildScrollView(
-                      controller: _scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: EdgeInsets.fromLTRB(
-                        24,
-                        MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
-                        24,
-                        120 + MediaQuery.viewInsetsOf(context).bottom, // Dynamic bottom clearance
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+      bottomNavigationBar: (!_isHeavyDataLoading && !_isOfflineState) 
+          ? AppBottomTray(
+              child: PrimaryButton(
+                label: "Book Appointment",
+                onTap: _handleBooking,
+                height: 54,
+                borderRadius: 16,
+              ),
+            ) 
+          : null,
+      body: RefreshIndicator(
+        onRefresh: _fetchInitialData,
+        color: AppColors.primaryGreen,
+        edgeOffset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+            24,
+            140 + MediaQuery.viewInsetsOf(context).bottom, // Dynamic bottom clearance
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
                           
                           DoctorDetailsHeader(
                             doctor: _doctor!,
@@ -645,24 +649,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                 ],
                               ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (!_isHeavyDataLoading && !_isOfflineState)
-                  AppBottomTray(
-                    child: PrimaryButton(
-                      label: "Book Appointment",
-                      onTap: _handleBooking,
-                      height: 54,
-                      borderRadius: 16,
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

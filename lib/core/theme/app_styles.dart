@@ -3,7 +3,38 @@ import 'app_colors.dart';
 import 'app_dimens.dart';
 import 'app_shapes.dart';
 
+enum VolumetricTier { 
+  base,     // For root tabs (Home, Doctors, etc.)
+  elevated  // For pushed detail screens (Booking, Settings, etc.)
+}
+
 class AppStyles {
+  static BoxDecoration ambientVolumetricTheme(BuildContext context, {VolumetricTier tier = VolumetricTier.elevated}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = AppColors.primaryGreen;
+    
+    // The secret to 2050 design: A secondary light source to create "Atmosphere"
+    final accent = isDark ? const Color(0xFF00E5FF) : const Color(0xFF00B0FF); // Deep Cyan
+
+    final double baseAlpha = tier == VolumetricTier.elevated ? (isDark ? 0.18 : 0.04) : (isDark ? 0.05 : 0.015);
+    final Color baseCanvas = isDark ? const Color(0xFF050608) : const Color(0xFFFAFAFC); // OLED-friendly deep void or crisp pearl
+
+    return BoxDecoration(
+      color: baseCanvas,
+      gradient: RadialGradient(
+        // An elliptical stretch makes the light wrap around the top of the phone
+        center: const Alignment(-0.5, -1.2), 
+        radius: tier == VolumetricTier.elevated ? 2.8 : 3.5,
+        colors: [
+          primary.withValues(alpha: baseAlpha),               // Core glow
+          accent.withValues(alpha: baseAlpha * 0.4),          // Secondary atmospheric bleed
+          baseCanvas.withValues(alpha: 0.0),                  // Fade into the void
+        ],
+        // The multi-stop transition creates physical light decay
+        stops: const [0.0, 0.45, 1.0], 
+      ),
+    );
+  }
   // PRO FIX: Dynamic Gradient that shifts to deep slate in dark mode
   static LinearGradient pageGradient(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

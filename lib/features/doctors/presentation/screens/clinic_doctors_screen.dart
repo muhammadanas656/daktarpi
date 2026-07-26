@@ -237,7 +237,7 @@ class _ClinicDoctorsScreenState extends State<ClinicDoctorsScreen>
                           HapticFeedback.lightImpact();
                           _searchController.clear();
                           _fetchData();
-                          FocusScope.of(context).unfocus();
+                          FocusManager.instance.primaryFocus?.unfocus();
                         },
                       ),
                     ),

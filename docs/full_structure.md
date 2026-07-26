@@ -12,7 +12,7 @@ It is intended to answer both of these questions in one place:
 1. Where does this code live right now?
 2. Which part of the app currently owns this behavior?
 
-Last reconciled: April 28, 2026.
+Last reconciled: May 4, 2026.
 
 Ground rules for this file:
 - The structure snapshot is based on the current on-disk workspace, not only git-tracked files.
@@ -451,7 +451,7 @@ This directory owns app-wide infrastructure:
 - `services/`: notifications, FCM, and error telemetry
 - `theme/`: colors, typography, dimensions, shapes, styles, motion, and themes
 - `utils/`: route/security formatting helpers, list fingerprinting helpers, and small shared utilities
-- `widgets/`: app-wide UI helpers such as loaders, background-sync indicators, cards, route-error screens, and error fallbacks
+- `widgets/`: app-wide UI helpers such as loaders, background-sync indicators, cards, route-error screens, error fallbacks, and the `VolumetricScaffold` (Z-Axis spatial hierarchy wrapper)
 
 ### 5.2 `lib/presentation/widgets/`
 
@@ -461,6 +461,7 @@ Tracked shared widgets and sublayers:
 - `animations/dynamic_glass_shelf_delegate.dart`
 - `animations/premium_list_animator.dart`
 - `physics/app_scroll_behavior.dart`
+- `app_bottom_tray.dart`
 - `app_floating_dialog.dart`
 - `app_network_image.dart`
 - `app_text_field.dart`
@@ -821,7 +822,8 @@ daktarpi/
 |   |       |-- custom_app_bar.dart
 |   |       |-- custom_card.dart
 |   |       |-- empty_state_widget.dart
-|   |       \-- route_error_screen.dart
+|   |       |-- route_error_screen.dart
+|   |       \-- volumetric_scaffold.dart
 |   |-- data/
 |   |   \-- services/
 |   |       \-- user_service.dart
@@ -981,6 +983,7 @@ daktarpi/
 |   |       |   \-- premium_list_animator.dart
 |   |       |-- physics/
 |   |       |   \-- app_scroll_behavior.dart
+|   |       |-- app_bottom_tray.dart
 |   |       |-- app_floating_dialog.dart
 |   |       |-- app_network_image.dart
 |   |       |-- app_text_field.dart

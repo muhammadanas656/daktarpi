@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:add_2_calendar/add_2_calendar.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -215,22 +216,17 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return Scaffold(
+    return VolumetricScaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: context.colorBg,
+      extendBody: true,
       appBar: const CustomAppBar(title: "Checkout"),
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  24, 
-                  MediaQuery.paddingOf(context).top + kToolbarHeight + 20, 
-                  24, 
-                  120 + MediaQuery.viewInsetsOf(context).bottom // Standardized dynamic clearance
-                ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          24, 
+          MediaQuery.paddingOf(context).top + kToolbarHeight + 20, 
+          24, 
+          140 + MediaQuery.viewInsetsOf(context).bottom // Standardized dynamic clearance
+        ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -347,10 +343,6 @@ class _DummyPaymentScreenState extends State<DummyPaymentScreen> {
                   ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
       // --- FROSTED GLASS CTA ---
       bottomNavigationBar: AppBottomTray(
         child: PrimaryButton(

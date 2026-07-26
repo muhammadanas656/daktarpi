@@ -1,6 +1,7 @@
 import 'dart:io';
 import '../../../../core/constants/app_routes.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -435,13 +436,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_isInitialLoad) return;
         _onBackPress();
       },
-      child: Scaffold(
-        backgroundColor: context.colorScaffoldBackground,
+      child: VolumetricScaffold(
+
         body: AbsorbPointer(
           absorbing: _isInitialLoad,
-          child: Container(
-            decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-            child: ScrollConfiguration(
+
+
+          child: ScrollConfiguration(
               behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
@@ -681,7 +682,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           ),
-          ),
+
         ),
       ),
     );

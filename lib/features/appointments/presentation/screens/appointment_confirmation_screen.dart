@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // PRO FIX: Added for Real-Time
 import '../../../../core/constants/app_routes.dart';
 import 'package:go_router/go_router.dart';
@@ -291,25 +292,20 @@ class _AppointmentConfirmationScreenState
     final slots = _generateSlots();
     final isReschedule = widget.appointmentId != null;
 
-    return Scaffold(
+    return VolumetricScaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: context.colorBg,
+      extendBody: true,
       appBar: CustomAppBar(
         title: isReschedule ? "Reschedule" : "Appointment",
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+          24,
+          140 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
-                  24,
-                  120 + MediaQuery.of(context).viewInsets.bottom,
-                ),
-                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (!isReschedule) ...[
@@ -342,10 +338,12 @@ class _AppointmentConfirmationScreenState
                                       animation: animation,
                                       builder: (context, child) {
                                         final curve = Curves.fastOutSlowIn.transform(animation.value);
+                                        double factor = 0.5 + (0.5 * curve);
+                                        if (factor > 1.0) factor = 1.0;
+                                        if (factor < 0.0) factor = 0.0;
                                         return FractionallySizedBox(
                                           alignment: Alignment.centerLeft,
-                                          // As the page slides in, it goes 0.5 -> 1.0. As it slides out, it shrinks 1.0 -> 0.5!
-                                          widthFactor: 0.5 + (0.5 * curve), 
+                                          widthFactor: factor, 
                                           child: child,
                                         );
                                       },
@@ -394,10 +392,6 @@ class _AppointmentConfirmationScreenState
                         ),
                       const SizedBox(height: 40),
                     ],
-                  ),
-                ),
-            ),
-          ],
         ),
       ),
       bottomNavigationBar: AppBottomTray(

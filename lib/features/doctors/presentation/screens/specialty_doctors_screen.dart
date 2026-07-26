@@ -256,7 +256,7 @@ class _SpecialtyDoctorsScreenState extends State<SpecialtyDoctorsScreen> with Au
                               HapticFeedback.lightImpact();
                               _searchController.clear();
                               _fetchData(forceRefresh: true);
-                              FocusScope.of(context).unfocus();
+                              FocusManager.instance.primaryFocus?.unfocus();
                             },
                           ),
                         ),

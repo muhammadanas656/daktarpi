@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -168,7 +169,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     if (trimmedQuery.isEmpty) return;
 
     // NEW: Force the keyboard to close BEFORE processing navigation
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
 
     // Lock in the search, hide the hints
     setState(() {
@@ -237,7 +238,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   void _clearSearch() {
     _searchController.clear();
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   void _handleHintTap(String query, {bool submit = true}) {
@@ -247,7 +248,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     );
     if (submit) {
       _onSearchSubmitted(query);
-      FocusScope.of(context).unfocus();
+      FocusManager.instance.primaryFocus?.unfocus();
     }
   }
 
@@ -301,7 +302,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   }
 
   void _handleSpecialtyTap(Map<String, dynamic> spec) {
-    FocusScope.of(context).unfocus(); // Force close keyboard
+    FocusManager.instance.primaryFocus?.unfocus(); // Force close keyboard
     _saveRecentSearch(spec['name']); // Cache it for next time
     context.push(
       AppRoutes.specialtyDoctorsById('${spec['id']}'),
@@ -310,13 +311,13 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   }
 
   void _handleDoctorTap(Map<String, dynamic> doc) {
-    FocusScope.of(context).unfocus(); // Force close keyboard
+    FocusManager.instance.primaryFocus?.unfocus(); // Force close keyboard
     _saveRecentSearch(doc['full_name']);
     context.push(AppRoutes.doctorDetailsById('${doc['id']}'), extra: doc);
   }
 
   void _handleClinicTap(Map<String, dynamic> clinic) {
-    FocusScope.of(context).unfocus(); // Force close keyboard
+    FocusManager.instance.primaryFocus?.unfocus(); // Force close keyboard
     _saveRecentSearch(clinic['name']);
     context.push(
       AppRoutes.clinicDoctorsById('${clinic['id']}'),
@@ -336,17 +337,14 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     // Show recent searches if the box is empty OR if they just started typing (1 char)
     final showRecentSearches = !isQueryLongEnough && _recentSearches.isNotEmpty;
 
-    return Scaffold(
+    return VolumetricScaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: context.colorScaffoldBackground,
       appBar: const CustomAppBar(title: "Global Search"),
       body: Container(
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + kToolbarHeight,
         ),
-        decoration: BoxDecoration(
-          gradient: AppStyles.pageGradient(context),
-        ), // Added context
+
         child: Column(
           children: [
             Padding(

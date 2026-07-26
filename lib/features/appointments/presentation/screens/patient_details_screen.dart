@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../profile/data/profile_repository.dart';
@@ -539,7 +540,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   }
 
   Future<void> _deleteCategory(String category) async {
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
 
     if (_managingCategory != null) {
       setState(() => _managingCategory = null);
@@ -1094,27 +1095,21 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        FocusScope.of(context).unfocus();
+        FocusManager.instance.primaryFocus?.unfocus();
       },
-      child: Scaffold(
+      child: VolumetricScaffold(
         resizeToAvoidBottomInset: false, 
         extendBodyBehindAppBar: true,
+        extendBody: true,
         appBar: _buildAppBar(),
-        body: Container(
-          decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      24,
-                      MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
-                      24,
-                      120 + MediaQuery.of(context).viewInsets.bottom,
-                    ),
-                    child: Column(
+        body: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
+            24,
+            140 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // PRO FIX: 100% synchronized with Confirmation layout!
@@ -1141,20 +1136,32 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                   builder: (context) {
                                     // PRO FIX: Slave the physical width to the native page transition!
                                     final route = ModalRoute.of(context);
-                                    final animation = route?.animation ?? const AlwaysStoppedAnimation(1.0);
+                                    final primary = route?.animation ?? const AlwaysStoppedAnimation(1.0);
+                                    final secondary = route?.secondaryAnimation ?? const AlwaysStoppedAnimation(0.0);
                                     
-                                    return AnimatedBuilder(
-                                      animation: animation,
-                                      builder: (context, child) {
-                                        // Premium Apple-style momentum curve
-                                        final curve = Curves.fastOutSlowIn.transform(animation.value);
-                                        return FractionallySizedBox(
-                                          alignment: Alignment.centerLeft,
-                                          // As the page slides in, it goes 0.0 -> 0.5. As it slides out, it goes 0.5 -> 0.0!
-                                          widthFactor: 0.5 * curve, 
-                                          child: child,
-                                        );
-                                      },
+                                     return AnimatedBuilder(
+                                        animation: primary,
+                                        builder: (context, child) {
+                                          return AnimatedBuilder(
+                                            animation: secondary,
+                                            builder: (context, child) {
+                                              // Premium Apple-style momentum curve
+                                              final curvePrimary = Curves.fastOutSlowIn.transform(primary.value);
+                                              final curveSecondary = Curves.fastOutSlowIn.transform(secondary.value);
+                                              
+                                              double factor = (0.5 * curvePrimary) + (0.5 * curveSecondary);
+                                              if (factor < 0.0) factor = 0.0;
+                                              if (factor > 1.0) factor = 1.0;
+
+                                              return FractionallySizedBox(
+                                                alignment: Alignment.centerLeft,
+                                                widthFactor: factor, 
+                                                child: child,
+                                              );
+                                            },
+                                            child: child,
+                                          );
+                                        },
                                       child: Container(
                                         decoration: BoxDecoration(
                                           color: primaryGreen,
@@ -1435,7 +1442,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                                         color: textGrey.withValues(alpha: 0.6),
                                       ),
                                       onTap: () async {
-                                        FocusScope.of(context).unfocus();
+                                        FocusManager.instance.primaryFocus?.unfocus();
 
                                         final initialDate =
                                             (_selectedYear != null &&
@@ -1768,16 +1775,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen>
                             ],
                           ),
                         ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
         bottomNavigationBar: AppBottomTray(
           child: PrimaryButton(
             label: "Continue",

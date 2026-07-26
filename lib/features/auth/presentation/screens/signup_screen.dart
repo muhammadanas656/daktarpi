@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -209,19 +210,13 @@ class _SignUpScreenState extends State<SignUpScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return VolumetricScaffold(
       extendBodyBehindAppBar: true,
       resizeToAvoidBottomInset: false,
       body: Stack(
         clipBehavior: Clip.hardEdge,
         children: [
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: AppStyles.pageGradient(context),
-              ),
-            ),
-          ),
+
           SafeArea(
             bottom: false,
             child: LayoutBuilder(

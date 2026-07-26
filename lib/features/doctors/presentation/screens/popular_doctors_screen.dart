@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
@@ -116,7 +117,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
 
   void _clearSearch() {
     _searchController.clear();
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Widget _buildTopRatedBadge(
@@ -196,11 +197,11 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
             ? 'Popular Doctors'
             : 'Recommended Specialists';
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: ListenableBuilder(
+    return VolumetricScaffold(
+
+
+
+      body: ListenableBuilder(
           listenable: _docsNotifier,
           builder: (context, _) {
             final rawList = _docsNotifier.explorePopularDoctors;
@@ -435,7 +436,7 @@ class _PopularDoctorsScreenState extends State<PopularDoctorsScreen> {
             );
           },
         ),
-      ),
+
     );
   }
 }

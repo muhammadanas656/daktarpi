@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -385,7 +386,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                         const SizedBox(height: 12),
                         GestureDetector(
                           onTap: () async {
-                            FocusScope.of(context).unfocus();
+                            FocusManager.instance.primaryFocus?.unfocus();
                             categoryFocusNode.unfocus();
                             nameFocusNode.unfocus();
                             await Future.delayed(
@@ -1036,7 +1037,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
 
     return GestureDetector(
       onTap: () {
-        FocusScope.of(context).unfocus();
+        FocusManager.instance.primaryFocus?.unfocus();
         if (_managingCategory != null) {
           setState(() => _managingCategory = null);
         }
@@ -1045,14 +1046,11 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
         onFocusChange: (hasFocus) {
           if (hasFocus) _loadPatientProfiles();
         },
-        child: Container(
-          decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-          child: Scaffold(
-            extendBodyBehindAppBar: true,
-            backgroundColor: Colors.transparent,
-            extendBody: true,
-            appBar: CustomAppBar(
-              title: widget.recordToEdit != null ? "Edit Record" : "Add Records",
+        child: VolumetricScaffold(
+          extendBodyBehindAppBar: true,
+          extendBody: true,
+          appBar: CustomAppBar(
+            title: widget.recordToEdit != null ? "Edit Record" : "Add Records",
             ),
             body: CustomScrollView(
               slivers: [
@@ -1062,7 +1060,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
                   ),
                 ),
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 24, 16, 120 + MediaQuery.of(context).viewInsets.bottom),
+                  padding: EdgeInsets.fromLTRB(16, 24, 16, 140 + MediaQuery.of(context).viewInsets.bottom),
                   sliver: SliverToBoxAdapter(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1435,8 +1433,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
 

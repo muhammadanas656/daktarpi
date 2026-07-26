@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../../../../core/constants/app_routes.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
@@ -286,19 +287,13 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return VolumetricScaffold(
       extendBodyBehindAppBar: true,
       resizeToAvoidBottomInset: false,
       body: Stack(
         clipBehavior: Clip.hardEdge,
         children: [
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: AppStyles.pageGradient(context),
-              ),
-            ),
-          ),
+
           SafeArea(
             bottom: false,
             child: LayoutBuilder(

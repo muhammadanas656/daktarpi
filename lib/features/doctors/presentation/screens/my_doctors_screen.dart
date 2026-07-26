@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -137,9 +138,9 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
+      child: VolumetricScaffold(
         extendBodyBehindAppBar: true,
-        backgroundColor: Colors.transparent,
+
         appBar: CustomAppBar(
           title: "My Doctors",
           onBackPressed: () => context.pop(),
@@ -152,15 +153,12 @@ class _MyDoctorsScreenState extends State<MyDoctorsScreen> {
             tabs: const [Tab(text: "Favorites"), Tab(text: "Recent Visits")],
           ),
         ),
-        body: Container(
-          decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-          child: TabBarView(
+        body: TabBarView(
             children: [
               _buildFavoritesList(),
               _buildRecentList(),
             ],
           ),
-        ),
       ),
     );
   }

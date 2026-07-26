@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
@@ -691,10 +692,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen>
         final isLocked = SettingsNotifier.instance.medicalRecordsLocked;
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
-        return Scaffold(
+        return VolumetricScaffold(
           extendBodyBehindAppBar: true,
           extendBody: true,
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+
           appBar: CustomAppBar(
             title: "Medical Records",
             actions: [
@@ -724,7 +725,11 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen>
                   ),
                 ),
                 _buildSliverBody(isLocked),
-                const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 140 + MediaQuery.viewInsetsOf(context).bottom,
+                  ),
+                ),
               ],
             ),
           ),

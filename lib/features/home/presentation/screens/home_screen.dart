@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
+import '../../../../core/theme/app_styles.dart';
 import '../../../../presentation/widgets/app_floating_dialog.dart';
 import '../../../../presentation/widgets/home_featured_doctor_card.dart';
 import '../../../../presentation/widgets/home_popular_doctor_card.dart';
@@ -304,8 +306,8 @@ class _HomeScreenState extends State<HomeScreen>
     final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
     final dynamicBottomPadding = bottomSafeArea + 17;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    return VolumetricScaffold(
+      tier: VolumetricTier.base,
       body: Stack(
         children: [
           RefreshIndicator(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -294,11 +295,10 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
       ),
     );
 
-    return Scaffold(
-      backgroundColor: context.colorScaffoldBackground,
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: Center(
+    return VolumetricScaffold(
+
+
+      body: Center(
           child: SingleChildScrollView(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 24.0),
@@ -524,7 +524,7 @@ class _Verify2FAScreenState extends State<Verify2FAScreen>
             ),
           ),
         ),
-      ),
+
     );
   }
 }

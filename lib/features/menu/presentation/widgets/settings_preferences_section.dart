@@ -25,7 +25,7 @@ class SettingsPreferencesSection extends StatefulWidget {
 
 class _SettingsPreferencesSectionState extends State<SettingsPreferencesSection> {
   Future<void> _openNotificationSettingsDialog() async {
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
     _showNotificationSettingsDialog();

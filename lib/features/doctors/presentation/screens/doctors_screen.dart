@@ -12,6 +12,7 @@ import '../../../../presentation/widgets/custom_search_bar.dart';
 import '../../../../presentation/widgets/doctor_list_card.dart';
 import '../../../../presentation/widgets/doctor_list_card_skeleton.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 
 import '../favorites_notifier.dart';
 import '../doctors_notifier.dart';
@@ -85,7 +86,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
 
   void _clearSearch() {
     _searchController.clear();
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Future<void> _runDoctorsFetch({
@@ -119,10 +120,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> with AutomaticKeepAliveCl
   Widget build(BuildContext context) {
     super.build(context);
     final topPadding = MediaQuery.paddingOf(context).top;
-    return Scaffold(
+    return VolumetricScaffold(
       // THE FIX: Extend body so it slides elegantly under the glass header
       extendBodyBehindAppBar: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      tier: VolumetricTier.base,
       body: ListenableBuilder(
         listenable: _docsNotifier,
         builder: (context, _) {

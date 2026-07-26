@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -987,9 +988,9 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return VolumetricScaffold(
       // THE FIX: A perfectly uniform, solid background color for the entire page. Zero gradients.
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor, 
+      tier: VolumetricTier.base,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

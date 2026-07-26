@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
@@ -96,7 +97,7 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
 
   void _clearSearch() {
     _searchController.clear();
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Future<void> _fetchData({String? query, bool forceRefresh = false, bool isPullToRefresh = false}) async {
@@ -136,11 +137,11 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: ListenableBuilder(
+    return VolumetricScaffold(
+
+
+
+      body: ListenableBuilder(
           listenable: _docsNotifier,
           builder: (context, _) {
             final doctors = _docsNotifier.exploreFeaturedDoctors;
@@ -317,7 +318,7 @@ class _FeaturedDoctorsScreenState extends State<FeaturedDoctorsScreen> {
             );
           },
         ),
-      ),
+
     );
   }
 }

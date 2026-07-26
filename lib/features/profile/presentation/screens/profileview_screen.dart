@@ -9,6 +9,7 @@ import '../../../../core/theme/app_styles.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../presentation/widgets/primary_button.dart';
 import '../../../../presentation/widgets/app_network_image.dart';
+import '../../../../core/widgets/volumetric_scaffold.dart';
 
 class ProfileViewScreen extends StatefulWidget {
   final bool isBackgroundLayer;
@@ -66,11 +67,11 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
       dob = DateFormat('dd MMM yyyy').format(profile!.dateOfBirth!);
     }
 
-    return Scaffold(
-      backgroundColor: context.colorScaffoldBackground,
-      body: Container(
-        decoration: BoxDecoration(gradient: AppStyles.pageGradient(context)),
-        child: ScrollConfiguration(
+    return VolumetricScaffold(
+      tier: VolumetricTier.base,
+
+
+      body: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
@@ -228,7 +229,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
             ],
           ),
         ),
-        ),
+
       ),
     );
   }
